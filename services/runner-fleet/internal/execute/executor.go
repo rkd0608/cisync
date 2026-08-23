@@ -16,40 +16,6 @@ import (
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
 
-// Registry exposes active provider handles so the cancel endpoint can reach
-// the substrate best-effort.
-type Registry struct {
-	mu      sync.Mutex
-	handles map[string]domain.Handle
-}
-
-// NewRegistry returns an empty handle registry.
-func NewRegistry() *Registry {
-	return &Registry{handles: make(map[string]domain.Handle)}
-}
-
-// Register records the handle for a running run_id.
-func (r *Registry) Register(runID string, h domain.Handle) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.handles[runID] = h
-}
-
-// Unregister drops the handle once the job leaves running state.
-func (r *Registry) Unregister(runID string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.handles, runID)
-}
-
-// Lookup returns the active handle for a run_id, if any.
-func (r *Registry) Lookup(runID string) (domain.Handle, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	h, ok := r.handles[runID]
-	return h, ok
-}
-
 // Executor claims and executes jobs from one pool via one provider.
 type Executor struct {
 	store             store.Store
@@ -216,6 +182,10 @@ loop:
 	e.completeInternal(ctx, job, outcome)
 }
 
+// maxLogsExcerptBytes bounds the log prefix carried in result_ref so
+// control-plane can classify failures without fetching artifacts.
+const maxLogsExcerptBytes = 4096
+
 // completeInternal is the executor-side completion path; a fence rejection
 // means the job was cancelled or reclaimed elsewhere and the result MUST be
 // discarded without mutating state (I-11).
@@ -225,6 +195,10 @@ func (e *Executor) completeInternal(ctx context.Context, job domain.Job, outcome
 		digests = append(digests, a.Digest)
 	}
 	logsDigest := providers.DigestOf(outcome.Logs)
+	excerpt := outcome.Logs
+	if len(excerpt) > maxLogsExcerptBytes {
+		excerpt = excerpt[:maxLogsExcerptBytes]
+	}
 	err := e.store.Complete(ctx, job.RunID, store.Completion{
 		FenceToken:           job.FenceToken,
 		Status:               outcome.Status,
@@ -233,6 +207,7 @@ func (e *Executor) completeInternal(ctx context.Context, job domain.Job, outcome
 		DurationMS:           outcome.DurationMS,
 		ActualCostMilliCents: outcome.CostMilliCents,
 		Classification:       outcome.Classification,
+		LogsExcerpt:          string(excerpt),
 	}, e.nowFn())
 	switch {
 	case err == nil:
@@ -251,28 +226,6 @@ func (e *Executor) completeInternal(ctx context.Context, job domain.Job, outcome
 	default:
 		e.metrics.CounterInc("fleet_completions_rejected_total", "Completions rejected by the fence gate", "reason", "already_accepted")
 		e.logger.Warn("completion not accepted", slog.String("run_id", job.RunID), slog.String("err", err.Error()))
-	}
-}
-
-// SweepStale requeues running jobs whose worker stopped heartbeating and
-// purges dead workers; it runs once per tick until ctx ends.
-func (e *Executor) SweepStale(ctx context.Context, threshold time.Duration, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			requeued, err := e.store.RequeueStale(ctx, threshold, e.nowFn())
-			if err != nil {
-				e.logger.Error("stale sweep failed", slog.String("err", err.Error()))
-				continue
-			}
-			for _, runID := range requeued {
-				e.logger.Warn("requeued stale job", slog.String("run_id", runID))
-			}
-		}
 	}
 }
 

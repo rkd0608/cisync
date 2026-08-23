@@ -15,6 +15,12 @@ import (
 	"sauron.dev/sauron/control-plane/internal/domain"
 )
 
+// Queryer is the common surface of pgxpool.Pool and pgx.Tx so helpers work
+// both standalone and inside a transaction.
+type Queryer interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // Store owns every ctrl-schema persistence access for this process.
 type Store struct {
 	Pool   *pgxpool.Pool

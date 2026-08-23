@@ -62,6 +62,18 @@ func TestDefaultRegistryServesActiveDefault(t *testing.T) {
 		DefaultRegistry(),
 	)
 	require.NoError(t, err)
-	require.Equal(t, "pol_payments_high_risk", got.PolicyID)
+	require.Equal(t, "pol_payments_high_risk", got.PolicyID,
+		"the specific payments pack must win when its selectors match")
 	require.Equal(t, 4, got.Version)
+}
+
+// The wildcard fallback keeps every API-accepted risk class resolvable
+// (I-09 fail-closed otherwise blocks low/medium intents outright).
+func TestDefaultRegistryWildcardFallback(t *testing.T) {
+	for _, risk := range []string{"low", "medium", "high"} {
+		got, err := Resolve(Subject{Repo: "other/repo", RiskClass: risk}, DefaultRegistry())
+		require.NoError(t, err, "risk %s", risk)
+		require.Equal(t, "pol_sauron_default", got.PolicyID)
+		require.Equal(t, 1, got.Version)
+	}
 }

@@ -11,4 +11,7 @@ var (
 	// ErrAlreadyAccepted indicates a result was already accepted for this run
 	// and attempt (at-most-once acceptance).
 	ErrAlreadyAccepted = errors.New("result already accepted")
+	// ErrDuplicateRun indicates an enqueue attempt for a run_id that is
+	// already registered (idempotent replay).
+	ErrDuplicateRun = errors.New("duplicate run_id")
 )

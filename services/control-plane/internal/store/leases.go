@@ -64,9 +64,21 @@ func (s *Store) RenewLease(ctx context.Context, l *domain.Lease) error {
 	})
 }
 
-// ReleaseLease marks a granted lease released (idempotent) and appends
-// lease.revoked with the release reason plus budget conservation bookkeeping.
+// ReleaseLease marks a granted lease released (idempotent); standalone form
+// used by the reconciler. Callers inside an open effect tx must use
+// ReleaseLeaseTx — a nested transaction self-deadlocks on the append lock.
 func (s *Store) ReleaseLease(ctx context.Context, l *domain.Lease, reason string) error {
+	return s.withTx(ctx, func(tx pgx.Tx) error {
+		return releaseLeaseTx(ctx, s, tx, l, reason)
+	})
+}
+
+// ReleaseLeaseTx is ReleaseLease within a caller-supplied transaction.
+func (s *Store) ReleaseLeaseTx(ctx context.Context, tx pgx.Tx, l *domain.Lease, reason string) error {
+	return releaseLeaseTx(ctx, s, tx, l, reason)
+}
+
+func releaseLeaseTx(ctx context.Context, s *Store, tx pgx.Tx, l *domain.Lease, reason string) error {
 	eventType := "lease.revoked"
 	if reason == "ttl" {
 		eventType = "lease.expired"
@@ -83,19 +95,17 @@ func (s *Store) ReleaseLease(ctx context.Context, l *domain.Lease, reason string
 	if err != nil {
 		return err
 	}
-	return s.withTx(ctx, func(tx pgx.Tx) error {
-		if err := s.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
-			return err
-		}
-		tag, err := tx.Exec(ctx,
-			`UPDATE ctrl.leases SET state=$3, seq=$4, released_at=now() WHERE id=$1 AND tenant_id=$2 AND state='granted'`,
-			l.ID, l.TenantID, string(l.State), ev.Seq)
-		if err != nil {
-			return err
-		}
-		_ = tag
-		return nil
-	})
+	if err := s.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx,
+		`UPDATE ctrl.leases SET state=$3, seq=$4, released_at=now() WHERE id=$1 AND tenant_id=$2 AND state='granted'`,
+		l.ID, l.TenantID, string(l.State), ev.Seq)
+	if err != nil {
+		return err
+	}
+	_ = tag
+	return nil
 }
 
 // LeaseForIntent returns active change-scope leases for an intent.

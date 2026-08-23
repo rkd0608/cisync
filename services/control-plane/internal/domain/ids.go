@@ -25,6 +25,7 @@ const (
 	PrefixPolicy    = "pol_"
 	PrefixDecision  = "dec_"
 	PrefixCorr      = "corr_"
+	PrefixDelivery  = "dlv_"
 )
 
 var ulidMu sync.Mutex

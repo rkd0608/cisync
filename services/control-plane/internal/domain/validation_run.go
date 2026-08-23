@@ -74,11 +74,15 @@ func NewValidationRun(id, tenantID, planID, candidateID string, tier int, spec J
 var runTransitions = map[string]transitionRule{
 	"run.dispatched": {from: []string{string(RunQueued)}, to: string(RunDispatched)},
 	"run.claimed":    {from: []string{string(RunDispatched)}, to: string(RunRunning)},
-	"run.succeeded":  {from: []string{string(RunRunning)}, to: string(RunSucceeded)},
-	"run.failed":     {from: []string{string(RunRunning)}, to: string(RunFailed)},
-	"run.timed_out":  {from: []string{string(RunRunning), string(RunDispatched)}, to: string(RunTimedOut)},
-	"run.retry":      {from: []string{string(RunFailed)}, to: string(RunQueued)},
-	"run.cancelled":  {from: []string{string(RunQueued), string(RunDispatched), string(RunRunning)}, to: string(RunCancelled)},
+	// WHY dispatched is accepted here: the completion feed is pull-based,
+	// so control-plane may observe the terminal result without having seen
+	// the intermediate claimed transition. Fencing still gates acceptance
+	// (I-11); only non-terminal states may advance.
+	"run.succeeded": {from: []string{string(RunRunning), string(RunDispatched)}, to: string(RunSucceeded)},
+	"run.failed":    {from: []string{string(RunRunning), string(RunDispatched)}, to: string(RunFailed)},
+	"run.timed_out": {from: []string{string(RunRunning), string(RunDispatched)}, to: string(RunTimedOut)},
+	"run.retry":     {from: []string{string(RunFailed)}, to: string(RunQueued)},
+	"run.cancelled": {from: []string{string(RunQueued), string(RunDispatched), string(RunRunning)}, to: string(RunCancelled)},
 }
 
 // Apply advances the run's state machine on the named trigger.

@@ -45,6 +45,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+	if err := st.Migrate(context.Background(), pgstore.MigrationsDir()); err != nil {
+		logger.Error("migrate failed", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

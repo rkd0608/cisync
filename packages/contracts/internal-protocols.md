@@ -57,3 +57,41 @@ Base: `SAURON_CTRL_FLEET_URL`. Fleet NEVER reads the ledger; control-plane drive
 `sim` provider executes nothing; it deterministically simulates duration/outcome from
 `sim_profile` (seeded by run_id hash) — the CI-default provider. `docker` provider runs
 real containers (`--network none --read-only`, resource-capped, NOT-FOR-PRODUCTION).
+
+## 4. control-plane → github-connector (decision push, W2)
+
+Base: `SAURON_CTRL_CONNECTOR_URL`. The connector is idle-until-fed; control-plane
+pushes one envelope per rendered decision via its outbox relay.
+
+- `GET /internal/fleet/jobs/completed?limit=N` (control-plane → fleet, feed)
+  `{"jobs": [{"run_id","attempt","fence_token","tier","pool","status",
+   "logs_digest","logs_excerpt?","artifact_digests[]","duration_ms",
+   "actual_cost_millicents","classification?"}]}` — accepted terminal jobs,
+   newest first. Consumers dedupe by `(run_id, fence_token)` inside their
+   effect tx (I-12), so replays are harmless.
+- `POST /internal/connector/decisions` (control-plane → connector)
+  Headers: `Idempotency-Key: <decision_id>`,
+  `X-Sauron-Signature: sha256=<hex hmac of raw body with SAURON_CONN_WEBHOOK_SECRET>`,
+  `Content-Type: application/json`.
+
+```json
+{
+  "decision_id": "dec_01J…",
+  "candidate_id": "cand_01J…",
+  "repo": "acme/payments",
+  "head_sha": "…40 hex…",
+  "verb": "eligible_for_merge_train|rejected|deferred",
+  "confidence": 0.94,
+  "policy": {"policy_id": "pol_…", "policy_version": 4},
+  "summary": "explanation summary",
+  "rendered_at": "RFC3339"
+}
+```
+
+Responses: `202 accepted` · `200 replay (idempotent by decision_id)` ·
+`400 validation_failed` · `401 bad signature` · `413 too_large`.
+The connector renders exactly one completed "Agent Verification Gate" check
+run per accepted envelope: verb→conclusion is
+`eligible_for_merge_train→success`, `rejected→failure`, `deferred→neutral`;
+unknown verbs fail closed. Without GitHub App credentials the connector runs
+in dry-run mode, logging the would-be payload instead of calling the API.

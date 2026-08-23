@@ -11,23 +11,32 @@ import (
 	"sauron.dev/sauron/control-plane/internal/domain"
 )
 
-// QueuedRun is a scheduler scan row.
+// QueuedRun is a scheduler scan row. Tier/cost/duration feed the engine
+// admission pass; CreatedSeq is the logical clock (I-13).
 type QueuedRun struct {
-	ID          string
-	TenantID    string
-	CandidateID string
-	Pool        string
-	Priority    float64
-	CreatedAt   time.Time
+	ID                string
+	TenantID          string
+	CandidateID       string
+	Pool              string
+	Tier              int
+	EstDurationMS     int64
+	EstCostMillicents int64
+	Priority          float64
+	CreatedSeq        int64
+	CreatedAt         time.Time
 }
 
 // QueuedRuns returns queued runs in effective-priority order with a
-// deterministic tie-break priority DESC → age → id (I-13).
+// deterministic tie-break priority DESC → age → id (I-13). Runs of candidates
+// parked as blocked_representative stay unqueued until elected or superseded.
 func (s *Store) QueuedRuns(ctx context.Context, limit int) ([]QueuedRun, error) {
 	rows, err := s.Pool.Query(ctx,
-		`SELECT id, tenant_id, candidate_id, pool, priority, created_at
-		 FROM ctrl.validation_runs WHERE state='queued'
-		 ORDER BY priority DESC, created_at ASC, id ASC LIMIT $1`, limit)
+		`SELECT r.id, r.tenant_id, r.candidate_id, r.pool, r.tier,
+		        r.est_duration_ms, r.est_cost_millicents, r.priority, r.seq, r.created_at
+		 FROM ctrl.validation_runs r
+		 JOIN ctrl.candidates c ON c.id = r.candidate_id AND c.tenant_id = r.tenant_id
+		 WHERE r.state='queued' AND c.state NOT IN ('blocked_representative','superseded','cancelled','rejected','eligible')
+		 ORDER BY r.priority DESC, r.created_at ASC, r.id ASC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("queued runs: %w", err)
 	}
@@ -35,12 +44,116 @@ func (s *Store) QueuedRuns(ctx context.Context, limit int) ([]QueuedRun, error) 
 	var out []QueuedRun
 	for rows.Next() {
 		var r QueuedRun
-		if err := rows.Scan(&r.ID, &r.TenantID, &r.CandidateID, &r.Pool, &r.Priority, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.TenantID, &r.CandidateID, &r.Pool, &r.Tier,
+			&r.EstDurationMS, &r.EstCostMillicents, &r.Priority, &r.CreatedSeq, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan queued run: %w", err)
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// InFlightByTier counts dispatched/running runs per tier — the WIP snapshot
+// the admission pass draws against (I-10).
+func (s *Store) InFlightByTier(ctx context.Context) (map[int]int, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT tier, count(*) FROM ctrl.validation_runs
+		 WHERE state IN ('dispatched','running') GROUP BY tier`)
+	if err != nil {
+		return nil, fmt.Errorf("in flight by tier: %w", err)
+	}
+	defer rows.Close()
+	out := map[int]int{}
+	for rows.Next() {
+		var tier int
+		var n int
+		if err := rows.Scan(&tier, &n); err != nil {
+			return nil, fmt.Errorf("scan in-flight row: %w", err)
+		}
+		out[tier] = n
+	}
+	return out, rows.Err()
+}
+
+// GetRunByID loads one run regardless of tenant for internal scheduler paths;
+// the tenant is read from the row itself, never from payloads.
+func (s *Store) GetRunByID(ctx context.Context, runID string) (*domain.ValidationRun, error) {
+	row := s.Pool.QueryRow(ctx,
+		`SELECT id, tenant_id, plan_id, candidate_id, tier, job_spec, attempt, pool,
+		        est_duration_ms, est_cost_millicents, priority, fence_token, timeout_ms,
+		        dispatched_at, finished_at, state, created_at
+		 FROM ctrl.validation_runs WHERE id=$1`, runID)
+	var r domain.ValidationRun
+	var specRaw []byte
+	var state string
+	var dispatchedAt, finishedAt *time.Time
+	err := row.Scan(&r.ID, &r.TenantID, &r.PlanID, &r.CandidateID, &r.Tier, &specRaw,
+		&r.Attempt, &r.Pool, &r.EstDurationMS, &r.EstCostMillicents, &r.Priority,
+		&r.FenceToken, &r.TimeoutMS, &dispatchedAt, &finishedAt, &state, &r.CreatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get run by id: %w", err)
+	}
+	if err := json.Unmarshal(specRaw, &r.JobSpec); err != nil {
+		return nil, fmt.Errorf("unmarshal job spec: %w", err)
+	}
+	r.State = domain.RunState(state)
+	r.DispatchedAt = dispatchedAt
+	r.FinishedAt = finishedAt
+	return &r, nil
+}
+
+// CancelRunsForCandidateTx cancels all queued/dispatched runs of a candidate
+// (supersede propagation) inside the effect tx, appending one
+// validation.cancelled event per run.
+func CancelRunsForCandidateTx(ctx context.Context, tx pgx.Tx, st *Store, tenantID, candidateID, reason string) ([]string, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT id FROM ctrl.validation_runs WHERE tenant_id=$1 AND candidate_id=$2 AND state IN ('queued','dispatched')`,
+		tenantID, candidateID)
+	if err != nil {
+		return nil, fmt.Errorf("runs for candidate: %w", err)
+	}
+	var runIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan run id: %w", err)
+		}
+		runIDs = append(runIDs, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "scheduler"}
+	var cancelled []string
+	for _, runID := range runIDs {
+		ev, err := domain.NewEvent(tenantID,
+			domain.AggregateRef{Type: string(domain.AggRun), ID: runID},
+			"validation.cancelled", "", domain.NewCorrelationID(), actor,
+			map[string]any{"run_ids": toAnySlice([]string{runID}), "reason": reason})
+		if err != nil {
+			return cancelled, err
+		}
+		if err := st.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
+			return cancelled, err
+		}
+		tag, err := tx.Exec(ctx,
+			`UPDATE ctrl.validation_runs SET state='cancelled', finished_at=now(), seq=$3
+			 WHERE id=$1 AND tenant_id=$2 AND state IN ('queued','dispatched')`,
+			runID, tenantID, ev.Seq)
+		if err != nil {
+			return cancelled, fmt.Errorf("cancel run %s: %w", runID, err)
+		}
+		if tag.RowsAffected() == 1 {
+			cancelled = append(cancelled, runID)
+		}
+	}
+	return cancelled, nil
 }
 
 // GetRun loads one run within tenant.
@@ -105,61 +218,4 @@ func DispatchRunTx(ctx context.Context, tx pgx.Tx, s *Store, run *domain.Validat
 		return nil, fmt.Errorf("%w: run %s no longer queued", domain.ErrConflict, run.ID)
 	}
 	return ev, nil
-}
-
-// CancelStaleDispatchedRuns cancels dispatched runs older than maxAge and
-// appends validation.cancelled per run; returns cancelled ids.
-func (s *Store) CancelStaleDispatchedRuns(ctx context.Context, maxAge time.Duration, reason string) ([]string, error) {
-	cutoff := time.Now().UTC().Add(-maxAge)
-	rows, err := s.Pool.Query(ctx,
-		`SELECT id, tenant_id FROM ctrl.validation_runs WHERE state='dispatched' AND dispatched_at < $1 LIMIT 100`,
-		cutoff)
-	if err != nil {
-		return nil, fmt.Errorf("stale runs scan: %w", err)
-	}
-	type stale struct {
-		id, tenant string
-	}
-	var staleRuns []stale
-	for rows.Next() {
-		var st stale
-		if err := rows.Scan(&st.id, &st.tenant); err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("stale runs row: %w", err)
-		}
-		staleRuns = append(staleRuns, st)
-	}
-	rows.Close()
-
-	var cancelled []string
-	for _, st := range staleRuns {
-		err := s.withTx(ctx, func(tx pgx.Tx) error {
-			actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "reconciler"}
-			ev, err := domain.NewEvent(st.tenant,
-				domain.AggregateRef{Type: string(domain.AggRun), ID: st.id},
-				"validation.cancelled", "", domain.NewCorrelationID(), actor,
-				map[string]any{"run_ids": []any{st.id}, "reason": reason})
-			if err != nil {
-				return err
-			}
-			if err := s.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
-				return err
-			}
-			tag, err := tx.Exec(ctx,
-				`UPDATE ctrl.validation_runs SET state='cancelled', finished_at=now(), seq=$3
-				 WHERE id=$1 AND tenant_id=$2 AND state IN ('queued','dispatched')`,
-				st.id, st.tenant, ev.Seq)
-			if err != nil {
-				return err
-			}
-			if tag.RowsAffected() == 1 {
-				cancelled = append(cancelled, st.id)
-			}
-			return nil
-		})
-		if err != nil {
-			return cancelled, err
-		}
-	}
-	return cancelled, nil
 }

@@ -19,6 +19,9 @@ type Completion struct {
 	DurationMS           int64
 	ActualCostMilliCents int64
 	Classification       string
+	// LogsExcerpt carries a bounded prefix of the run log so control-plane
+	// can classify failures without cross-schema reads. Sim-only today.
+	LogsExcerpt string
 }
 
 // FleetJob is a stored execution job including mutable claim state.
@@ -74,4 +77,8 @@ type Store interface {
 	RequeueStale(ctx context.Context, threshold time.Duration, now time.Time) ([]string, error)
 	// QueueDepth counts queued jobs per pool/tier.
 	QueueDepth(ctx context.Context) (map[string]int64, error)
+	// TerminalAccepted returns accepted terminal jobs (succeeded/failed/
+	// timed_out/cancelled) most recent first — the completion feed
+	// control-plane polls; consumers dedupe by (run_id, fence_token).
+	TerminalAccepted(ctx context.Context, limit int) ([]FleetJob, error)
 }

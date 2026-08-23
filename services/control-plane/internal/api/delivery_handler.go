@@ -11,9 +11,11 @@ import (
 )
 
 // buildDeliveryAcceptedEvent constructs the delivery.accepted CORE event.
+// The aggregate id is a platform-minted dlv_ ULID (events.schema.json
+// prefixedUlid); the external GitHub GUID stays only in payload.ext_delivery_id.
 func buildDeliveryAcceptedEvent(tenantID string, body *deliveryBody) (*domain.Event, error) {
 	return domain.NewEvent(tenantID,
-		domain.AggregateRef{Type: string(domain.AggDelivery), ID: body.ExtDeliveryID},
+		domain.AggregateRef{Type: string(domain.AggDelivery), ID: domain.NewID(domain.PrefixDelivery)},
 		"delivery.accepted", "", "", domain.EventActor{Kind: string(domain.ActorGitHub), ID: "github"},
 		map[string]any{
 			"source":          body.Source,

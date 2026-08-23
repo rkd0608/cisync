@@ -1,9 +1,19 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 )
+
+// InputsHash derives the full evidence-reuse key over base SHA, head SHA and
+// patch ref (invariant I-02). The selection planner computes a richer key
+// over lockfiles/flags/toolchain; this variant stays available for doubles.
+func InputsHash(baseSHA, headSHA, patchRef string) string {
+	h := sha256.Sum256([]byte(baseSHA + "\x00" + headSHA + "\x00" + patchRef))
+	return HashPrefix + hex.EncodeToString(h[:])
+}
 
 // PlanState is the lifecycle state of a validation plan.
 type PlanState string

@@ -76,16 +76,6 @@ type PolicyStamp struct {
 	Version  int    `json:"policy_version"`
 }
 
-// Non-fallback rationales per tier.
-const (
-	rationaleAdmission   = "admission_gate"
-	rationaleImpact      = "impact_selection"
-	rationaleContract    = "policy_contract_requirements"
-	rationaleTier3Risk   = "policy_tier3_risk_class"
-	rationaleComposition = "composition_validation"
-	rationaleOverride    = "explicit_override"
-)
-
 // Plan builds the deterministic validation plan for one candidate against a
 // resolved policy.
 //
@@ -102,6 +92,9 @@ const (
 func Plan(in CandidateInput, rp policy.ResolvedPolicy) (ValidationPlan, error) {
 	if err := validateInput(in); err != nil {
 		return ValidationPlan{}, err
+	}
+	if rp.PolicyID == "" || rp.Version <= 0 {
+		return ValidationPlan{}, fmt.Errorf("%w: unresolved policy stamp", ErrInvalidInput)
 	}
 	body := rp.Body
 	required, ok := body.RequiredEvidenceByRisk[in.RiskClass]
@@ -157,55 +150,6 @@ func Plan(in CandidateInput, rp policy.ResolvedPolicy) (ValidationPlan, error) {
 	}, nil
 }
 
-// tier3Rationale explains why tier 3 is present: risk-gated entry gets the
-// clean label; fallback/override entry composes its reasons.
-func tier3Rationale(in CandidateInput, body policy.PolicyBody, triggers []string) string {
-	if containsExact(body.LadderOverrides.Tier3RiskClasses, in.RiskClass) {
-		return rationaleTier3Risk
-	}
-	var parts []string
-	if in.ExplicitFullSuiteOverride {
-		parts = append(parts, rationaleOverride)
-	}
-	if hasTrigger(triggers, FallbackUncertainty) {
-		parts = append(parts, joinFallbackRationale(triggers))
-	}
-	return joinComma(parts)
-}
-
-// tier4Rationale explains tier-4 presence: composition (EC-017) or override,
-// plus the fired fallback triggers.
-func tier4Rationale(in CandidateInput, triggers []string) string {
-	switch {
-	case in.ComposingIntegrationSet && len(triggers) > 0:
-		return joinComma([]string{rationaleComposition, joinFallbackRationale(triggers)})
-	case in.ComposingIntegrationSet:
-		return rationaleComposition
-	default:
-		return rationaleOverride
-	}
-}
-
-func hasTrigger(triggers []string, want string) bool {
-	for _, t := range triggers {
-		if t == want {
-			return true
-		}
-	}
-	return false
-}
-
-func joinComma(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += ","
-		}
-		out += p
-	}
-	return out
-}
-
 func validateInput(in CandidateInput) error {
 	if in.CandidateID == "" {
 		return fmt.Errorf("%w: empty candidate_id", ErrInvalidInput)
@@ -214,117 +158,4 @@ func validateInput(in CandidateInput) error {
 		return fmt.Errorf("%w: head_sha must differ from base_sha", ErrInvalidInput)
 	}
 	return nil
-}
-
-func tierPlan(tier int, jobs []string, rationale string) TierPlan {
-	return TierPlan{Tier: tier, Jobs: jobs, Rationale: rationale}
-}
-
-func specNames(jobs []JobSpec) []string {
-	out := make([]string, len(jobs))
-	for i, j := range jobs {
-		out[i] = j.Name
-	}
-	return out
-}
-
-func effectiveSelectionConfidence(in CandidateInput) float64 {
-	if in.SelectionConfidence == nil {
-		return NoHistorySelectionConfidence
-	}
-	c := *in.SelectionConfidence
-	if c < 0 {
-		return 0
-	}
-	if c > 1 {
-		return 1
-	}
-	return c
-}
-
-func joinFallbackRationale(triggers []string) string {
-	out := ""
-	for i, t := range triggers {
-		if i > 0 {
-			out += ","
-		}
-		out += "fallback:" + t
-	}
-	return out
-}
-
-func composeTier2Jobs(required []string) []JobSpec {
-	jobs := append([]JobSpec(nil), tier2SelectedBase...)
-	for _, k := range required {
-		switch k {
-		case "payment_contract":
-			jobs = append(jobs, tier2PaymentJob)
-		case "idempotency_race":
-			jobs = append(jobs, tier2IdempotencyJob)
-		}
-	}
-	return jobs
-}
-
-func widenTier2(jobs []JobSpec) []JobSpec {
-	out := make([]JobSpec, 0, len(jobs))
-	for _, j := range jobs {
-		if j.Name == "impacted_integration_tests" {
-			out = append(out, tier2FullBase[0])
-			continue
-		}
-		out = append(out, j)
-	}
-	return out
-}
-
-func containsExact(values []string, want string) bool {
-	for _, v := range values {
-		if v == want {
-			return true
-		}
-	}
-	return false
-}
-
-// explicitUncertaintyFallback reports whether trigger 1 or 7 fired — the §3
-// gate note's "explicit uncertainty fallback" for tier-3 entry.
-func explicitUncertaintyFallback(triggers []string) bool {
-	for _, t := range triggers {
-		if t == FallbackUncertainty || t == FallbackExplicitOverride {
-			return true
-		}
-	}
-	return false
-}
-
-// SurfaceClasses derives crude surface classes from changed paths: the first
-// path segment ("_root" for repo-root files). Sorted and deduplicated.
-func SurfaceClasses(paths []string) []string {
-	seen := make(map[string]struct{}, len(paths))
-	var out []string
-	for _, p := range paths {
-		class := "_root"
-		for i := 0; i < len(p); i++ {
-			if p[i] == '/' {
-				class = p[:i]
-				break
-			}
-		}
-		if _, dup := seen[class]; dup {
-			continue
-		}
-		seen[class] = struct{}{}
-		out = append(out, class)
-	}
-	sortStrings(out)
-	return out
-}
-
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }

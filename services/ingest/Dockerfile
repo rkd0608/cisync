@@ -11,7 +11,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --no-create-home sauron
-COPY --from=build /out/ingest /usr/local/bin/ingest
+WORKDIR /app
+COPY --from=build /out/ingest /app/ingest
+COPY migrations/ /app/migrations/
 USER sauron
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/ingest"]
+ENTRYPOINT ["/app/ingest"]

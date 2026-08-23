@@ -12,7 +12,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10002 --no-create-home sauron
-COPY --from=build /out/runner-fleet /usr/local/bin/runner-fleet
+WORKDIR /app
+COPY --from=build /out/runner-fleet /app/runner-fleet
+COPY migrations/ /app/migrations/
 USER sauron
 EXPOSE 8082
-ENTRYPOINT ["/usr/local/bin/runner-fleet"]
+ENTRYPOINT ["/app/runner-fleet"]

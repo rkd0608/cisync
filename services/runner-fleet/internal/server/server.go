@@ -44,9 +44,11 @@ func New(cfg config.Config, st store.Store, p domain.Provider, logger *slog.Logg
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/fleet/jobs/claim", api.NewClaimHandler(st, logger, nowFn))
+	mux.Handle("POST /internal/fleet/jobs", api.NewEnqueueHandler(st, logger, nowFn))
 	mux.Handle("POST /internal/fleet/jobs/{run_id}/heartbeat", api.NewHeartbeatHandler(st, metrics, nowFn))
 	mux.Handle("POST /internal/fleet/jobs/{run_id}/complete", api.NewCompleteHandler(st, metrics, logger, nowFn))
 	mux.Handle("POST /internal/fleet/jobs/{run_id}/cancel", api.NewCancelHandler(st, registry, p, metrics, logger, nowFn))
+	mux.Handle("GET /internal/fleet/jobs/completed", api.NewCompletedHandler(st, logger))
 	mux.Handle("GET /healthz", api.NewHealthzHandler())
 	mux.Handle("GET /metrics", api.NewMetricsHandler(metrics))
 

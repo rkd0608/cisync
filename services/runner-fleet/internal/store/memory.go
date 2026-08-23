@@ -38,7 +38,7 @@ func (m *MemoryStore) Enqueue(_ context.Context, job domain.Job) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.jobs[job.RunID]; ok {
-		return fmt.Errorf("memory store: enqueue: run_id %s already exists", job.RunID)
+		return fmt.Errorf("memory store: enqueue: %w: %s", domain.ErrDuplicateRun, job.RunID)
 	}
 	m.nextID++
 	m.jobs[job.RunID] = &FleetJob{
@@ -148,6 +148,9 @@ func (m *MemoryStore) Complete(_ context.Context, runID string, c Completion, no
 	if len(c.ArtifactDigests) > 0 {
 		ref["artifact_digests"] = append([]string(nil), c.ArtifactDigests...)
 	}
+	if c.LogsExcerpt != "" {
+		ref["logs_excerpt"] = c.LogsExcerpt
+	}
 	j.ResultRef = ref
 	return nil
 }
@@ -219,4 +222,20 @@ func (m *MemoryStore) QueueDepth(_ context.Context) (map[string]int64, error) {
 		}
 	}
 	return depth, nil
+}
+
+// TerminalAccepted implements Store.
+func (m *MemoryStore) TerminalAccepted(_ context.Context, limit int) ([]FleetJob, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []FleetJob
+	// Newest first by finished_at; insertion order is deterministic enough
+	// for the memory store, so walk the order in reverse.
+	for i := len(m.order) - 1; i >= 0 && len(out) < limit; i-- {
+		j := m.jobs[m.order[i]]
+		if j.Accepted && domain.Terminal(j.Status) {
+			out = append(out, *j)
+		}
+	}
+	return out, nil
 }

@@ -28,6 +28,8 @@ Integrator folds accepted changes into frozen docs and marks them folded.
 
 | Date | Agent | Change summary | Folded into frozen docs? |
 |---|---|---|---|
-| 2026-08-23 | integrator | `prefixedUlid` extended with `dlv_`: delivery aggregates are platform-minted ULIDs; external GitHub GUID lives only in `payload.ext_delivery_id`. | ✅ events.schema.json |
+| 2026-08-23 | wave-2-integration | Compiled-in policy registry now serves TWO packs: the §8 payments document plus a wildcard fallback `pol_sauron_default` v1 — without it every low/medium-risk intent (and any non-payments repo) failed closed at planning (I-09). Most-specific-wins resolution unchanged; §8 payments pack byte-identical. | ⬜ proposed for ARCHITECTURE D7 note |
+| 2026-08-23 | wave-2-integration | `delivery.accepted` aggregate ids are now platform-minted `dlv_`-prefixed ULIDs; external GitHub GUID lives only in `payload.ext_delivery_id` (emitters fixed in control-plane). | ✅ (schema already allowed `dlv_`) |
+| 2026-08-23 | wave-2-integration | Added internal-protocols §4: control-plane→github-connector decision push (`POST /internal/connector/decisions`, HMAC via `SAURON_CONN_WEBHOOK_SECRET`) and the fleet completion feed (`GET /internal/fleet/jobs/completed`). | ✅ internal-protocols.md §4 |
 | 2026-08-23 | builder-1e | Invariant suites delivered as `iNN.spec.ts`; INVARIANTS.md test-column renamed to match. | ✅ INVARIANTS.md |
 | 2026-08-23 | integrator | Charter ratified; SPEC index created. | n/a |

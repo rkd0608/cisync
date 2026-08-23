@@ -1,0 +1,5 @@
+BEGIN;
+DROP TABLE IF EXISTS ghconn.check_reports;
+DROP TABLE IF EXISTS ghconn.installations;
+DROP SCHEMA IF EXISTS ghconn CASCADE;
+COMMIT;

@@ -9,12 +9,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"sauron.dev/sauron/control-plane/internal/api"
 	"sauron.dev/sauron/control-plane/internal/config"
 	"sauron.dev/sauron/control-plane/internal/relay"
+	"sauron.dev/sauron/control-plane/internal/scheduler"
 	"sauron.dev/sauron/control-plane/internal/store"
 	"sauron.dev/sauron/control-plane/internal/verify"
 )
@@ -69,10 +73,24 @@ func runServer() {
 	relayCtx, cancelRelay := context.WithCancel(ctx)
 	defer cancelRelay()
 	outbox := relay.New(st, cfg.RelayBatchSize, cfg.RelayPollInterval)
-	dispatcher := relay.NewDispatcher(st, fleet, "sim", 8)
-	outbox.Register("validation.requested", dispatcher.ConsumeRequested)
+
+	// Real engine scheduler: priority ranking + policy-capped admission +
+	// fleet dispatch + completion ingestion (evidence/failure/decisions).
+	engineScheduler := scheduler.NewEngine(st, fleet, "sim", 8)
+
+	outbox.Register("validation.requested", func(ctx context.Context, item store.OutboxItem) error {
+		return st.ExecTx(ctx, func(tx pgx.Tx) error {
+			_, err := store.MarkProcessedTx(ctx, tx, "scheduler", item.EventID)
+			return err
+		})
+	})
+	if connectorURL := envOr("SAURON_CTRL_CONNECTOR_URL", ""); connectorURL != "" {
+		publisher := relay.NewConnectorPublisher(st, connectorURL,
+			cfg.WebhookSecret, envOr("SAURON_CTRL_DETAILS_URL", "http://localhost:3000"))
+		outbox.Register("decision.rendered", publisher.ConsumeRendered)
+	}
 	go outbox.Run(relayCtx)
-	go dispatcher.Run(relayCtx, cfg.TickInterval)
+	go engineScheduler.Run(relayCtx, cfg.TickInterval)
 	go relay.NewReconciler(st, fleet).Run(relayCtx, cfg.ReconcileInterval)
 
 	httpServer := &http.Server{
@@ -91,6 +109,13 @@ func runServer() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+}
+
+func envOr(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
 }
 
 func runVerify() {

@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"sauron.dev/sauron/control-plane/internal/cluster"
 	"sauron.dev/sauron/control-plane/internal/domain"
+	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
 
@@ -18,22 +20,6 @@ type candidateSubmit struct {
 	HeadSHA      string   `json:"head_sha"`
 	BaseSHA      string   `json:"base_sha"`
 	ChangedPaths []string `json:"changed_paths"`
-}
-
-var riskPriority = map[domain.RiskClass]float64{
-	domain.RiskLow: 0.4, domain.RiskMedium: 0.7, domain.RiskHigh: 1.0, domain.RiskCritical: 1.0,
-}
-
-// tierDefaults per DOMAIN_MODEL_DRAFT §3 (duration ms, cost millicents).
-var tierDefaults = map[int]struct {
-	durationMS int64
-	costMC     int64
-}{
-	0: {60000, 5000},
-	1: {900000, 20000},
-	2: {1800000, 150000},
-	3: {3600000, 1200000},
-	4: {5400000, 4000000},
 }
 
 // handleListCandidates implements GET /v1/change-intents/{intentId}/candidates.
@@ -87,34 +73,8 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	intent, err := s.store.GetIntent(r.Context(), tenant, intentID)
-	if err != nil {
-		WriteDomainError(w, err)
-		return
-	}
-	var in candidateSubmit
-	if err := json.Unmarshal(raw, &in); err != nil {
-		WriteError(w, http.StatusBadRequest, "validation_failed", "invalid JSON body", nil, nil, nil)
-		return
-	}
-	if in.PatchRef == "" || len(in.HeadSHA) != 40 || len(in.BaseSHA) != 40 {
-		WriteError(w, http.StatusBadRequest, "validation_failed",
-			"patch_ref required; head_sha/base_sha must be 40 hex chars", nil, nil, nil)
-		return
-	}
-	switch intent.State {
-	case domain.IntentExploring, domain.IntentValidating:
-	default:
-		WriteDomainError(w, fmt.Errorf("%w: intent state %s rejects submissions", domain.ErrLateSubmission, intent.State))
-		return
-	}
-	dup, err := s.store.LiveCandidateExists(r.Context(), tenant, intent.ID, in.HeadSHA)
-	if err != nil {
-		WriteDomainError(w, err)
-		return
-	}
-	if dup {
-		WriteDomainError(w, domain.ErrDuplicateHead)
+	intent, in, ok := s.decodeCandidateSubmit(w, r, intentID, raw)
+	if !ok {
 		return
 	}
 
@@ -151,11 +111,49 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	var runs []*domain.ValidationRun
 	for _, tier := range plan.Tiers {
 		def := tierDefaults[tier.Tier]
-		run := domain.NewValidationRun(domain.NewID(domain.PrefixRun), tenant, plan.ID, cand.ID,
-			tier.Tier, jobSpecFor(intent, cand, plan), "sim", def.durationMS, def.costMC,
-			base*float64(10-tier.Tier)/10, now)
-		runs = append(runs, run)
-		cand.EstCostMillicents += def.costMC
+		// One run per producing job keeps the evidence ledger honest: each
+		// completed run may satisfy exactly its own required kind (I-03).
+		for _, jobName := range tier.Jobs {
+			spec := jobSpecFor(intent, cand, plan)
+			spec.Kind = plannerengine.EvidenceKindForJob(jobName)
+			run := domain.NewValidationRun(domain.NewID(domain.PrefixRun), tenant, plan.ID, cand.ID,
+				tier.Tier, spec, "sim", def.durationMS, def.costMC,
+				base*float64(10-tier.Tier)/10, now)
+			runs = append(runs, run)
+			cand.EstCostMillicents += def.costMC
+		}
+	}
+
+	// Cluster assignment at submission (§2): join iff path-overlap ≥ 0.6 AND
+	// trigram similarity ≥ τ against an active representative; duplicates are
+	// parked as blocked_representative until the representative resolves.
+	assignment, repID := assignCluster(s.store, tenant, intent.Declared.Repo, cand.ID,
+		changedPaths, base)
+	cand.ClusterID = assignment.ClusterID
+	if assignment.RelationToRep != "" {
+		rel := domain.Relation(assignment.RelationToRep)
+		cand.RelationToRep = &rel
+	}
+	if assignment.RelationToRep == cluster.RelationDuplicateOf {
+		cand.State = domain.CandBlockedRepresentative
+	}
+	assignmentData := store.ClusterAssignmentData{
+		Joined:            assignment.Joined,
+		ClusterID:         assignment.ClusterID,
+		Repo:              intent.Declared.Repo,
+		RelationToRep:     assignment.RelationToRep,
+		PathOverlap:       assignment.PathOverlap,
+		TrigramSimilarity: assignment.TrigramSimilarity,
+		SymbolOverlap:     assignment.SymbolOverlap,
+		StrategyVersion:   assignment.StrategyVersion,
+	}
+	if assignment.Joined {
+		assignmentData.RepCandidateID = repID
+	} else {
+		// Unclustered candidate seeds a fresh singleton cluster it represents.
+		assignmentData.ClusterID = domain.NewID(domain.PrefixCluster)
+		assignmentData.RepCandidateID = cand.ID
+		cand.ClusterID = assignmentData.ClusterID
 	}
 	leaseID := ""
 	leases, err := s.store.LeaseForIntent(r.Context(), tenant, intent.ID)
@@ -164,7 +162,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.store.ExecTx(r.Context(), func(tx pgx.Tx) error {
-		events, err := store.SubmitCandidateTx(r.Context(), tx, s.store, cand, plan, runs)
+		events, err := store.SubmitCandidateTx(r.Context(), tx, s.store, cand, plan, runs, &assignmentData)
 		if err != nil {
 			return err
 		}
@@ -191,83 +189,39 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Inc("sauron_ctrl_http_requests_total", "201")
 }
 
-func jobSpecFor(intent *domain.Intent, cand *domain.Candidate, plan *domain.ValidationPlan) domain.JobSpec {
-	return domain.JobSpec{
-		Kind:       "hermetic_build",
-		Repo:       intent.Declared.Repo,
-		BaseSHA:    cand.BaseSHA,
-		HeadSHA:    cand.HeadSHA,
-		PatchRef:   cand.PatchRef,
-		InputsHash: plan.InputsHash,
-		TimeoutMS:  900000,
-		SimProfile: map[string]any{"duration_ms": 800, "outcome_bias": "pass"},
+// decodeCandidateSubmit performs the boundary validation shared by the
+// submit path: idempotent-replay already handled by the caller.
+func (s *Server) decodeCandidateSubmit(w http.ResponseWriter, r *http.Request, intentID string, raw []byte) (*domain.Intent, candidateSubmit, bool) {
+	tenant := TenantFrom(r.Context())
+	var in candidateSubmit
+	if err := json.Unmarshal(raw, &in); err != nil {
+		WriteError(w, http.StatusBadRequest, "validation_failed", "invalid JSON body", nil, nil, nil)
+		return nil, in, false
 	}
-}
-
-// mustMarshal panics nowhere: marshal failures fall back to an empty object.
-func mustMarshal(v any) []byte {
-	b, err := json.Marshal(v)
+	if in.PatchRef == "" || len(in.HeadSHA) != 40 || len(in.BaseSHA) != 40 {
+		WriteError(w, http.StatusBadRequest, "validation_failed",
+			"patch_ref required; head_sha/base_sha must be 40 hex chars", nil, nil, nil)
+		return nil, in, false
+	}
+	intent, err := s.store.GetIntent(r.Context(), tenant, intentID)
 	if err != nil {
-		return []byte("{}")
+		WriteDomainError(w, err)
+		return nil, in, false
 	}
-	return b
-}
-
-// candidateAcceptedJSON matches openapi CandidateAccepted.
-type candidateAcceptedJSON struct {
-	CandidateID string         `json:"candidate_id"`
-	PlanSummary planSummaryOut `json:"plan_summary"`
-	LeaseID     string         `json:"lease_id"`
-}
-
-type tierSummaryJSON struct {
-	Tier                int      `json:"tier"`
-	Jobs                []string `json:"jobs"`
-	Rationale           string   `json:"rationale"`
-	SelectionConfidence *float64 `json:"selection_confidence"`
-}
-
-type planSummaryOut struct {
-	Tiers    []tierSummaryJSON `json:"tiers"`
-	Deferred []string          `json:"deferred"`
-}
-
-func planSummaryJSON(p *domain.ValidationPlan) planSummaryOut {
-	tiers := make([]tierSummaryJSON, 0, len(p.Tiers))
-	for _, t := range p.Tiers {
-		jobs := t.Jobs
-		if jobs == nil {
-			jobs = []string{}
-		}
-		tiers = append(tiers, tierSummaryJSON{Tier: t.Tier, Jobs: jobs, Rationale: t.Rationale, SelectionConfidence: t.SelectionConfidence})
+	switch intent.State {
+	case domain.IntentExploring, domain.IntentValidating:
+	default:
+		WriteDomainError(w, fmt.Errorf("%w: intent state %s rejects submissions", domain.ErrLateSubmission, intent.State))
+		return nil, in, false
 	}
-	return planSummaryOut{Tiers: tiers, Deferred: []string{}}
-}
-
-// candidateSummaryJSON matches openapi CandidateSummary.
-type candidateSummaryJSON struct {
-	CandidateID   string  `json:"candidate_id"`
-	State         string  `json:"state"`
-	HeadSHA       string  `json:"head_sha"`
-	PriorityScore float64 `json:"priority_score"`
-	ClusterID     *string `json:"cluster_id"`
-	RelationToRep *string `json:"relation_to_rep"`
-}
-
-func candidateToSummary(c *domain.Candidate) candidateSummaryJSON {
-	out := candidateSummaryJSON{
-		CandidateID:   c.ID,
-		State:         string(c.State),
-		HeadSHA:       c.HeadSHA,
-		PriorityScore: c.PriorityScore,
+	dup, err := s.store.LiveCandidateExists(r.Context(), tenant, intent.ID, in.HeadSHA)
+	if err != nil {
+		WriteDomainError(w, err)
+		return nil, in, false
 	}
-	if c.ClusterID != "" {
-		id := c.ClusterID
-		out.ClusterID = &id
+	if dup {
+		WriteDomainError(w, domain.ErrDuplicateHead)
+		return nil, in, false
 	}
-	if c.RelationToRep != nil {
-		r := string(*c.RelationToRep)
-		out.RelationToRep = &r
-	}
-	return out
+	return intent, in, true
 }

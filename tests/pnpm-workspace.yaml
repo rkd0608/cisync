@@ -1,7 +1,0 @@
-# Local workspace scope so `cd tests && pnpm install` links this harness's
-# own deps without touching the repo-root workspace file.
-# WHY local: tests/package.json must be installable standalone; if the
-# integrator later adds `tests` to the ROOT pnpm-workspace.yaml this file
-# can be deleted.
-packages:
-  - '.'

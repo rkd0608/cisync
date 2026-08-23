@@ -1,0 +1,62 @@
+package api
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"sauron.dev/sauron/control-plane/internal/domain"
+)
+
+// TestDeliveryAggregateMintsPrefixedUlid pins the events.schema.json
+// prefixedUlid contract: delivery aggregate ids are platform-minted dlv_
+// ULIDs; the external GitHub GUID appears only in payload.ext_delivery_id.
+func TestDeliveryAggregateMintsPrefixedUlid(t *testing.T) {
+	body := &deliveryBody{
+		Source:        "github",
+		ExtDeliveryID: "3f2a1b6c-external-guid",
+		EventKind:     "push",
+		Repo:          "acme/payments",
+	}
+	ev, err := buildDeliveryAcceptedEvent("org_default", body)
+	if err != nil {
+		t.Fatalf("build event: %v", err)
+	}
+	if !strings.HasPrefix(ev.Aggregate.ID, "dlv_") {
+		t.Fatalf("aggregate.id must be a dlv_-prefixed ULID, got %q", ev.Aggregate.ID)
+	}
+	if len(ev.Aggregate.ID) != len("dlv_")+26 {
+		t.Fatalf("aggregate.id must be dlv_ + 26-char ULID, got %q", ev.Aggregate.ID)
+	}
+	if ev.Aggregate.Type != string(domain.AggDelivery) {
+		t.Fatalf("aggregate.type = %q want delivery", ev.Aggregate.Type)
+	}
+	raw, err := json.Marshal(ev.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["ext_delivery_id"] != body.ExtDeliveryID {
+		t.Fatalf("external GUID must live in payload.ext_delivery_id, got %v", payload["ext_delivery_id"])
+	}
+}
+
+// TestDeliveryAggregateIDsUniquePerEvent ensures replays of the same external
+// GUID never collide on the minted aggregate identity.
+func TestDeliveryAggregateIDsUniquePerEvent(t *testing.T) {
+	body := &deliveryBody{Source: "github", ExtDeliveryID: "same-guid", EventKind: "push"}
+	first, err := buildDeliveryAcceptedEvent("org_default", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := buildDeliveryAcceptedEvent("org_default", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Aggregate.ID == second.Aggregate.ID {
+		t.Fatalf("each accepted delivery must mint its own aggregate id, got %q twice", first.Aggregate.ID)
+	}
+}

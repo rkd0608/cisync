@@ -6,6 +6,7 @@ import (
 
 	"sauron.dev/sauron/control-plane/internal/config"
 	"sauron.dev/sauron/control-plane/internal/domain"
+	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
 
@@ -18,11 +19,11 @@ type Server struct {
 	started time.Time
 }
 
-// NewServer constructs the server; planner may be nil to use the built-in
-// static fallback.
+// NewServer constructs the server; planner may be nil to use the real
+// selection engine backed by the compiled-in default policy registry.
 func NewServer(cfg *config.Config, st *store.Store, planner domain.Planner) *Server {
 	if planner == nil {
-		planner = domain.StaticPlanner{}
+		planner = plannerengine.NewEnginePlanner(nil)
 	}
 	return &Server{
 		cfg:     cfg,
