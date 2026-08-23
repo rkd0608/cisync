@@ -57,6 +57,14 @@ func (m *MemoryStore) Enqueue(_ context.Context, job domain.Job) error {
 }
 
 // ClaimJobs implements Store.
+// EnsureWorker implements Store; in-memory workers are just timestamps.
+func (m *MemoryStore) EnsureWorker(_ context.Context, id string, _ string, _ int, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workers[id] = now
+	return nil
+}
+
 func (m *MemoryStore) ClaimJobs(_ context.Context, c Claim, now time.Time) ([]domain.Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

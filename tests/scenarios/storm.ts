@@ -160,7 +160,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const probes = [await probeUniform404(cfg), await probeIdempotentReplay(cfg)];
+  // WHY: probes must never prevent report persistence — the report IS the
+  // evidence artifact of a storm run; a crashing probe loses the whole run.
+  const probes = await Promise.allSettled([probeUniform404(cfg), probeIdempotentReplay(cfg)]);
+  const probeResults = probes.map((r, i) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { name: `probe-${i}`, pass: false, detail: `threw: ${String(r.reason).slice(0, 120)}` },
+  );
   const report: StormReport = {
     startedAt,
     finishedAt: new Date().toISOString(),
@@ -168,7 +175,7 @@ async function main(): Promise<void> {
     totals,
     latencyMs: { create_intent: latency.histogram(), submit_candidate: candidateLatency.histogram() },
     errorClasses: errors,
-    probes,
+    probes: probeResults,
   };
 
   if (cfg.chaos) {
@@ -187,9 +194,9 @@ async function main(): Promise<void> {
   console.log(`intents ok=${totals.intents_ok} candidates ok=${totals.candidates_ok}`);
   console.log(`create_intent p50/p95/p99 ms: ${report.latencyMs['create_intent']?.p50_ms}/${report.latencyMs['create_intent']?.p95_ms}/${report.latencyMs['create_intent']?.p99_ms}`);
   console.log(`errors: ${JSON.stringify(errors)}`);
-  for (const probe of probes) console.log(`${probe.pass ? 'PASS' : 'FAIL'} ${probe.name}: ${probe.detail}`);
+  for (const probe of probeResults) console.log(`${probe.pass ? 'PASS' : 'FAIL'} ${probe.name}: ${probe.detail}`);
   console.log(`report written: ${file}`);
-  if (probes.some((p) => !p.pass)) process.exitCode = 1;
+  if (probeResults.some((p) => !p.pass)) process.exitCode = 1;
 }
 
 main().catch((err: unknown) => {

@@ -57,13 +57,20 @@ func (e *Executor) Run(ctx context.Context) {
 		wg.Add(1)
 		go func(slot int) {
 			defer wg.Done()
-			e.loop(ctx)
+			// Per-slot identity: a shared worker id would serialize claims
+			// and heartbeats on one fleet.workers row (W3 storm finding).
+			slotID := fmt.Sprintf("%s_slot%d", e.workerID, slot)
+			if err := e.store.EnsureWorker(ctx, slotID, e.pool, 1, e.nowFn()); err != nil {
+				e.logger.Error("worker registration failed", slog.String("err", err.Error()))
+				return
+			}
+			e.loop(ctx, slotID)
 		}(i)
 	}
 	wg.Wait()
 }
 
-func (e *Executor) loop(ctx context.Context) {
+func (e *Executor) loop(ctx context.Context, workerID string) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -72,7 +79,7 @@ func (e *Executor) loop(ctx context.Context) {
 			Pool:     e.pool,
 			Provider: e.providerName,
 			Limit:    1,
-			WorkerID: e.workerID,
+			WorkerID: workerID,
 		}, e.nowFn())
 		if err != nil {
 			e.logger.Error("claim failed", slog.String("err", err.Error()))

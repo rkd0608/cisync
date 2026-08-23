@@ -70,20 +70,61 @@ export interface OpOutcome {
   intentId?: string;
 }
 
+import * as http from 'node:http';
+
+// WHY node:http + keep-alive agent instead of fetch: one socket per request
+// through the macOS Docker port-proxy collapses under bursts (W3 finding);
+// a bounded keep-alive pool measures SERVICE capacity, not proxy artifacts.
+const agent = new http.Agent({ keepAlive: true, maxSockets: 128, maxFreeSockets: 32 });
+
+interface HttpResult {
+  status: number;
+  json: unknown;
+}
+
+function postOnce(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+): Promise<http.IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      url,
+      {
+        method: 'POST',
+        headers: { ...headers, 'content-length': Buffer.byteLength(body).toString() },
+        agent,
+      },
+      resolve,
+    );
+    req.setTimeout(30_000, () => req.destroy(new Error('request timed out after 30s')));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+async function drain(res: http.IncomingMessage): Promise<HttpResult> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of res) chunks.push(chunk as Buffer);
+  const text = Buffer.concat(chunks).toString('utf8');
+  let json: unknown = null;
+  if (text.length > 0) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { unparsable: text.slice(0, 120) };
+    }
+  }
+  return { status: res.statusCode ?? 0, json };
+}
+
 export async function postJson(
   url: string,
   headers: Record<string, string>,
   body: unknown,
-): Promise<{ status: number; json: unknown }> {
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  const text = await res.text();
-  let json: unknown = null;
-  try {
-    json = text.length === 0 ? null : JSON.parse(text);
-  } catch {
-    json = { unparsable: text.slice(0, 120) };
-  }
-  return { status: res.status, json };
+): Promise<HttpResult> {
+  const res = await postOnce(url, headers, JSON.stringify(body));
+  return drain(res);
 }
 
 export function classifyError(status: number, json: unknown): string {
@@ -134,18 +175,20 @@ export async function intentUnit(
   const candidateJobs = Array.from({ length: cfg.dupes }, (_, d) => d);
   const submitted = await Promise.all(candidateJobs.map(async (d) => {
     const tC = performance.now();
-    const res = await postJson(`${cfg.apiBase}/v1/change-intents/${intentId}/candidates`, authHeaders(cfg.adminToken), {
+    const res = await postJson(`${cfg.apiBase}/v1/change-intents/${intentId}/candidates`, {
+      ...authHeaders(cfg.adminToken),
+      // Contract: every mutating request carries Idempotency-Key (openapi.yaml).
+      'Idempotency-Key': `${key}-cand-${d}`,
+    }, {
       patch_ref: `bundle:storm-${unitIndex}`,
       head_sha: sha40(rand),
       base_sha: sha40(rand),
       changed_paths: ['services/checkout/cart.go'],
-      ...(d === 0 ? {} : {}),
     });
     const ms = performance.now() - tC;
     if (res.status === 201 || res.status === 200) {
       return { kind: 'submit_candidate', ok: true, ms } as OpOutcome;
     }
-    void d;
     return { kind: 'submit_candidate', ok: false, ms, errorClass: classifyError(res.status, res.json) } as OpOutcome;
   }));
   outcomes.push(...submitted);
@@ -155,6 +198,8 @@ export async function intentUnit(
 /** Bounded-concurrency driver: units flow through `concurrency` workers. */
 export async function runPool<T>(items: readonly T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
   let cursor = 0;
+  let completed = 0;
+  const startedAt = performance.now();
   const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
     for (;;) {
       const index = cursor++;
@@ -166,6 +211,11 @@ export async function runPool<T>(items: readonly T[], limit: number, worker: (it
         // WHY swallow-and-tag: the storm must observe system behavior, not
         // crash on a single transport hiccup; failures land in the report.
         console.error(`storm unit failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      completed += 1;
+      if (completed % 50 === 0 || completed === items.length) {
+        const secs = ((performance.now() - startedAt) / 1000).toFixed(1);
+        console.log(`storm progress: ${completed}/${items.length} units in ${secs}s`);
       }
     }
   });

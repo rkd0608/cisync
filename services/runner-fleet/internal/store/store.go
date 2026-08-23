@@ -60,6 +60,9 @@ type Store interface {
 	// ClaimJobs atomically claims up to c.Limit queued jobs of pool for the
 	// worker, bumping each fence_token (epoch) and setting running state.
 	ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]domain.Job, error)
+	// EnsureWorker registers worker liveness once per slot; claim transactions
+	// must never touch this table (hot-row convoy — see pg_lifecycle.go).
+	EnsureWorker(ctx context.Context, id string, pool string, capacity int, now time.Time) error
 	// Get fetches one job by run_id.
 	Get(ctx context.Context, runID string) (FleetJob, error)
 	// Heartbeat validates fence+running state and refreshes last_heartbeat.

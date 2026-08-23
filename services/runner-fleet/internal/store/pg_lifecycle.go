@@ -17,6 +17,21 @@ import (
 // The claiming worker is registered inside the same tx BEFORE the claim so
 // execution_jobs.claimed_by's FK can never reject an unknown (e.g. external
 // "anonymous") worker.
+// EnsureWorker registers a worker liveness row; called once per executor slot
+// at startup, refreshed opportunistically. Kept OUTSIDE claim transactions.
+func (s *PGStore) EnsureWorker(ctx context.Context, id string, pool string, capacity int, now time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
+		VALUES ($1,$2,$3,$4)
+		ON CONFLICT (id) DO UPDATE SET pool=EXCLUDED.pool,
+			capacity=EXCLUDED.capacity, last_heartbeat=EXCLUDED.last_heartbeat`,
+		id, pool, capacity, now)
+	if err != nil {
+		return fmt.Errorf("pg store: ensure worker %s: %w", id, err)
+	}
+	return nil
+}
+
 func (s *PGStore) ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]domain.Job, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -24,13 +39,10 @@ func (s *PGStore) ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]doma
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
-		VALUES ($1,$2,$3,$4)
-		ON CONFLICT (id) DO UPDATE SET pool=EXCLUDED.pool, last_heartbeat=EXCLUDED.last_heartbeat`,
-		c.WorkerID, c.Pool, c.Limit, now); err != nil {
-		return nil, fmt.Errorf("pg store: upsert worker: %w", err)
-	}
+	// WHY no worker-row upsert here: writing fleet.workers inside the claim
+	// tx serializes every claimer on one hot row and holds it across the
+	// batch UPDATE below — a lock convoy under backlog (W3 storm finding).
+	// Worker liveness is owned by EnsureWorker/TouchWorker instead.
 
 	rows, err := tx.Query(ctx, `
 		UPDATE fleet.execution_jobs j

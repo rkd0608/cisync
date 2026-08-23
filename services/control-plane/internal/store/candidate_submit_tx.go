@@ -91,6 +91,18 @@ func SubmitCandidateTx(ctx context.Context, tx pgx.Tx, s *Store, cand *domain.Ca
 		events = append(events, requestedEvent)
 	}
 
+	// WHY single batch: every AppendEventsTx takes the global chain lock, so
+	// a second call here doubled lock hold time per submit (W3 storm finding).
+	var assignedEvent *domain.Event
+	if assignment != nil && (assignment.Joined || assignment.ClusterID != "") {
+		ev, err := newClusterAssignedEvent(cand, assignment)
+		if err != nil {
+			return nil, err
+		}
+		assignedEvent = ev
+		events = append(events, assignedEvent)
+	}
+
 	if err := s.AppendEventsTx(ctx, tx, events); err != nil {
 		return nil, err
 	}
@@ -162,19 +174,19 @@ func SubmitCandidateTx(ctx context.Context, tx pgx.Tx, s *Store, cand *domain.Ca
 		}
 	}
 
-	if assignment != nil && (assignment.Joined || assignment.ClusterID != "") {
-		if err := s.applyClusterAssignmentTx(ctx, tx, cand, assignment); err != nil {
+	if assignedEvent != nil {
+		if err := s.applyClusterProjectionTx(ctx, tx, cand, assignment, assignedEvent); err != nil {
 			return nil, err
 		}
 	}
 	return events, nil
 }
 
-// applyClusterAssignmentTx persists the cluster join (or new cluster) and
-// appends the cluster.assigned event.
-func (s *Store) applyClusterAssignmentTx(ctx context.Context, tx pgx.Tx, cand *domain.Candidate, a *ClusterAssignmentData) error {
+// newClusterAssignedEvent builds the cluster.assigned event so callers can
+// batch it with the submit append (one global chain-lock acquisition).
+func newClusterAssignedEvent(cand *domain.Candidate, a *ClusterAssignmentData) (*domain.Event, error) {
 	actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "cluster"}
-	assignedEvent, err := domain.NewEvent(cand.TenantID,
+	return domain.NewEvent(cand.TenantID,
 		domain.AggregateRef{Type: string(domain.AggCluster), ID: a.ClusterID},
 		"cluster.assigned", "", domain.NewCorrelationID(), actor,
 		map[string]any{
@@ -185,12 +197,11 @@ func (s *Store) applyClusterAssignmentTx(ctx context.Context, tx pgx.Tx, cand *d
 			"similarity_score": a.TrigramSimilarity,
 			"strategy_version": a.StrategyVersion,
 		})
-	if err != nil {
-		return err
-	}
-	if err := s.AppendEventsTx(ctx, tx, []*domain.Event{assignedEvent}); err != nil {
-		return err
-	}
+}
+
+// applyClusterProjectionTx persists the cluster join (or new cluster)
+// projection; its event was already appended in the submit batch.
+func (s *Store) applyClusterProjectionTx(ctx context.Context, tx pgx.Tx, cand *domain.Candidate, a *ClusterAssignmentData, assignedEvent *domain.Event) error {
 
 	// New cluster: this candidate found no qualifying representative and
 	// seeds a singleton cluster it represents.

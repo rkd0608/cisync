@@ -95,24 +95,42 @@ func (s *Store) appendMembers(ctx context.Context, snap *ClusterSnapshot) error 
 	}
 	snap.Members = append(snap.Members, cluster.MemberWithRelation{Member: repMember})
 
+	// WHY two passes: hydrating members while the rows iterator is open
+	// checks out a SECOND connection per nested query; under concurrency
+	// every holder waits for a free conn and the pool gridlocks (W3 storm:
+	// 63/64 conns parked mid-iteration). Drain first, hydrate after.
 	rows, err := s.Pool.Query(ctx,
 		`SELECT candidate_id, relation_to_rep FROM ctrl.cluster_members WHERE cluster_id=$1`, snap.ID)
 	if err != nil {
 		return fmt.Errorf("cluster members: %w", err)
 	}
-	defer rows.Close()
+	type memberRef struct {
+		id       string
+		relation string
+	}
+	refs := make([]memberRef, 0, 8)
 	for rows.Next() {
-		var candidateID, relation string
-		if err := rows.Scan(&candidateID, &relation); err != nil {
+		var ref memberRef
+		if err := rows.Scan(&ref.id, &ref.relation); err != nil {
+			rows.Close()
 			return fmt.Errorf("scan cluster member: %w", err)
 		}
-		member, err := s.memberFromCandidate(ctx, snap.TenantID, candidateID)
+		refs = append(refs, ref)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate cluster members: %w", err)
+	}
+	rows.Close()
+
+	for _, ref := range refs {
+		member, err := s.memberFromCandidate(ctx, snap.TenantID, ref.id)
 		if err != nil {
 			return err
 		}
-		snap.Members = append(snap.Members, cluster.MemberWithRelation{Member: member, RelationToRep: relation})
+		snap.Members = append(snap.Members, cluster.MemberWithRelation{Member: member, RelationToRep: ref.relation})
 	}
-	return rows.Err()
+	return nil
 }
 
 // memberFromCandidate builds the clustering Member view from the candidate

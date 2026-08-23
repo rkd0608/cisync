@@ -40,7 +40,7 @@ keys: ## generate dev ed25519 ledger key (gitignored)
 	openssl genpkey -algorithm ed25519 -out platform/dev-keys/ledger_ed25519.dev.key
 
 storm: ## run concurrency storm against running stack
-	cd tests/scenarios && pnpm exec tsx storm.ts --concurrency 500
+	cd tests && pnpm exec tsx scenarios/storm.ts --concurrency 500 --repos 8 --dupes 4
 
 test-integration: ## black-box compose-up suites
 	cd tests/e2e && pnpm exec vitest run

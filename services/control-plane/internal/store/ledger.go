@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -57,10 +59,33 @@ func (s *Store) AppendEvents(ctx context.Context, events []*domain.Event) error 
 
 // AppendEventsTx is AppendEvents within a caller-supplied transaction so
 // projections commit atomically with their events.
+//
+// WHY batching: the advisory lock serializes ALL ledger writers globally, so
+// the critical section must be minimal — canonical JSON is computed BEFORE
+// the lock and rows are written with two multi-value INSERTs (one per table)
+// instead of 2N round trips. Callers must append every event of a tx in ONE
+// call; a second AppendEventsTx in the same tx doubles global lock hold time
+// (W3 storm finding: throughput collapse under 500-writer bursts).
 func (s *Store) AppendEventsTx(ctx context.Context, tx pgx.Tx, events []*domain.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+
+	actorJSONs := make([][]byte, len(events))
+	payloadJSONs := make([][]byte, len(events))
+	for i, ev := range events {
+		actorJSON, err := domain.CanonicalJSON(ev.Actor)
+		if err != nil {
+			return fmt.Errorf("canonical actor seq-prep %s: %w", ev.ID, err)
+		}
+		payloadJSON, err := domain.CanonicalJSON(ev.Payload)
+		if err != nil {
+			return fmt.Errorf("canonical payload prep %s: %w", ev.ID, err)
+		}
+		actorJSONs[i] = actorJSON
+		payloadJSONs[i] = payloadJSON
+	}
+
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, appendLockKey); err != nil {
 		return fmt.Errorf("append lock: %w", err)
 	}
@@ -74,37 +99,42 @@ func (s *Store) AppendEventsTx(ctx context.Context, tx pgx.Tx, events []*domain.
 		return fmt.Errorf("append tail read: %w", err)
 	}
 	startSeq := seq
-	for _, ev := range events {
+
+	ledgerValues := make([]string, 0, len(events))
+	outboxValues := make([]string, 0, len(events))
+	seqArgs := make([]any, 0, len(events)*15)
+	outboxArgs := make([]any, 0, len(events)*6)
+	for i, ev := range events {
 		seq++
 		ev.Seq = seq
 		ev.PrevHash = prevHash
 		ev.EntryHash = domain.ComputeEntryHash(seq, ev.ID, ev.Type, ev.Version, ev.PayloadSHA256, prevHash)
-		actorJSON, err := domain.CanonicalJSON(ev.Actor)
-		if err != nil {
-			return err
-		}
-		payloadJSON, err := domain.CanonicalJSON(ev.Payload)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO ctrl.ledger (seq, id, type, version, tenant_id, aggregate_type, aggregate_id,
-			   causation_id, correlation_id, actor, payload, payload_sha256, prev_hash, entry_hash, occurred_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-			ev.Seq, ev.ID, ev.Type, ev.Version, ev.TenantID, ev.Aggregate.Type, ev.Aggregate.ID,
-			ev.CausationID, ev.CorrelationID, actorJSON, payloadJSON, ev.PayloadSHA256,
-			ev.PrevHash, ev.EntryHash, ev.OccurredAt,
-		); err != nil {
-			return fmt.Errorf("append ledger row seq=%d: %w", seq, err)
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO ctrl.outbox (event_id, seq, tenant_id, type, aggregate_type, aggregate_id)
-			 VALUES ($1,$2,$3,$4,$5,$6)`,
-			ev.ID, ev.Seq, ev.TenantID, ev.Type, ev.Aggregate.Type, ev.Aggregate.ID,
-		); err != nil {
-			return fmt.Errorf("append outbox row seq=%d: %w", seq, err)
-		}
 		prevHash = ev.EntryHash
+
+		base := len(seqArgs)
+		seqArgs = append(seqArgs,
+			ev.Seq, ev.ID, ev.Type, ev.Version, ev.TenantID, ev.Aggregate.Type, ev.Aggregate.ID,
+			ev.CausationID, ev.CorrelationID, actorJSONs[i], payloadJSONs[i], ev.PayloadSHA256,
+			ev.PrevHash, ev.EntryHash, ev.OccurredAt,
+		)
+		ledgerValues = append(ledgerValues, "("+placeholderGroup(base+1, 15)+")")
+
+		obase := len(outboxArgs)
+		outboxArgs = append(outboxArgs, ev.ID, ev.Seq, ev.TenantID, ev.Type, ev.Aggregate.Type, ev.Aggregate.ID)
+		outboxValues = append(outboxValues, "("+placeholderGroup(obase+1, 6)+")")
+	}
+
+	ledgerQuery := `INSERT INTO ctrl.ledger (seq, id, type, version, tenant_id, aggregate_type, aggregate_id,
+	   causation_id, correlation_id, actor, payload, payload_sha256, prev_hash, entry_hash, occurred_at)
+	 VALUES ` + strings.Join(ledgerValues, ",")
+	if _, err := tx.Exec(ctx, ledgerQuery, seqArgs...); err != nil {
+		return fmt.Errorf("append ledger rows %d..%d: %w", startSeq+1, seq, err)
+	}
+
+	outboxQuery := `INSERT INTO ctrl.outbox (event_id, seq, tenant_id, type, aggregate_type, aggregate_id)
+	 VALUES ` + strings.Join(outboxValues, ",")
+	if _, err := tx.Exec(ctx, outboxQuery, outboxArgs...); err != nil {
+		return fmt.Errorf("append outbox rows %d..%d: %w", startSeq+1, seq, err)
 	}
 
 	for boundary := (startSeq/CheckpointInterval + 1) * CheckpointInterval; boundary <= seq && s.signer != nil; boundary += CheckpointInterval {
@@ -121,4 +151,13 @@ func (s *Store) AppendEventsTx(ctx context.Context, tx pgx.Tx, events []*domain.
 		}
 	}
 	return nil
+}
+
+// placeholderGroup renders "($n,$n+1,...)" for multi-value INSERTs.
+func placeholderGroup(start, count int) string {
+	parts := make([]string, 0, count)
+	for i := start; i < start+count; i++ {
+		parts = append(parts, "$"+strconv.Itoa(i))
+	}
+	return strings.Join(parts, ",")
 }
