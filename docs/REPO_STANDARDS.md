@@ -1,7 +1,8 @@
 # Sauron Repository Standards (BINDING FOR ALL AGENTS)
 
-> Every agent brief MUST reference this file. Violations block merge. The
-> integrator wave runs `make hygiene` and reverts non-conforming files.
+> Every agent brief MUST reference this file AND `docs/ENGINEERING_CHARTER.md`
+> (250-line file cap, TDD, zero loose types, dependency approvals). Violations block
+> merge. The integrator wave runs `make hygiene` and reverts non-conforming files.
 
 ## 1. Principles
 

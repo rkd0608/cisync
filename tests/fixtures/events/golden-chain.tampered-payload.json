@@ -1,0 +1,241 @@
+[
+  {
+    "id": "evt_TA34TEFZ78DYYQZ3KX32J9SJK9",
+    "seq": 1,
+    "type": "intent.declared",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "intent",
+      "id": "int_E2340V7JJTC012YS5GGRAYZ0WQ"
+    },
+    "causation_id": "evt_TA34C5WNJPC01HSTZGG9HN5FNM",
+    "correlation_id": "corr_0F9WQZE8VPC01HSTZGG9HN5FNM",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:9bb0fe785217e155708a6fd1db255fc3cd59d2df75f090b7ef1876a04b751e63",
+    "prev_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "entry_hash": "sha256:292aa8b61defaf5861e43f14c9a886fc7ab041c262514e0f969603074a855d12",
+    "payload": {
+      "intent_id": "int_E2340V7JJTC012YS5GGRAYZ0WQ",
+      "goal": "synthetic goal golden",
+      "owned_surfaces": [
+        "services/checkout/**"
+      ],
+      "risk_class": "medium",
+      "origin": "synthetic",
+      "resolved_policy": {
+        "policy_id": "default-pack-golden",
+        "policy_version": 1
+      },
+      "compute_budget": {
+        "cpu_minutes": 100,
+        "environment_minutes": 200,
+        "repair_attempts": 3
+      }
+    }
+  },
+  {
+    "id": "evt_TA341SRNJTJMA67QXWS3KCDA21",
+    "seq": 2,
+    "type": "lease.granted",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "lease",
+      "id": "lease_NDC96A61DRR0SHGDAEA5HWW4XN"
+    },
+    "causation_id": "evt_TA34C5WNJPKBA74C46WRS9FEBN",
+    "correlation_id": "corr_0F9WQZE8VPKBA74C46WRS9FEBV",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:8379132b78abd68fc5d4b54a5c1a8837a783908000e9ee697a5a69b9b8ad2cda",
+    "prev_hash": "sha256:292aa8b61defaf5861e43f14c9a886fc7ab041c262514e0f969603074a855d12",
+    "entry_hash": "sha256:9b30f679ec997dfe21cd138115b34e9dbb4a3c5b64566014aae40f78257412ef",
+    "payload": {
+      "lease_id": "lease_NDC96A61DRR0SHGDAEA5HWW4XN",
+      "intent_id": "int_E2340V7JJTC012YS5GGRAYZ0WQ",
+      "scope": {
+        "kind": "change_scope",
+        "surfaces": [
+          "services/checkout/**"
+        ]
+      },
+      "holder": "agent-golden",
+      "budget": {
+        "cpu_minutes": 100,
+        "environment_minutes": 200,
+        "repair_attempts": 3
+      },
+      "ttl_expires_at": "2026-08-23T01:00:00.000Z",
+      "conflicts": [],
+      "required_evidence": [
+        "selected_unit_pass"
+      ]
+    }
+  },
+  {
+    "id": "evt_TA34C51J6R4EY6T73546S9FERN",
+    "seq": 3,
+    "type": "candidate.submitted",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "candidate",
+      "id": "cand_0SN6QKET55DHA6Q84ZBPPY2VQ8"
+    },
+    "causation_id": "evt_TA34C5WNJPYQK4RAP0GRCSNQPR",
+    "correlation_id": "corr_0F9WQZE8VPYQK4RAP0GRCSNQPR",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:099197c3318c8438c4aa84af1f32de5a8c24274bfc9aa646ab6a947093b9922b",
+    "prev_hash": "sha256:9b30f679ec997dfe21cd138115b34e9dbb4a3c5b64566014aae40f78257412ef",
+    "entry_hash": "sha256:deb189a496929cd83090f31799d79be94a9c6b40ad91d8bf4a62a33372d0d2d7",
+    "payload": {
+      "candidate_id": "cand_0SN6QKET55DHA6Q84ZBPPY2VQ8",
+      "intent_id": "int_E2340V7JJTC012YS5GGRAYZ0WQ",
+      "submitter": "agent-golden",
+      "patch_ref": "bundle:70e793d64df93ca35f9209b5f86f1b5ec571b42bd71a813d70e793d64df93ca3",
+      "head_sha": "86371c53ce831e2c70e793ec9d72b924e97482d6",
+      "base_sha": "22581c53ce8dd03c70e79388be72b924e33692d6",
+      "changed_paths": [
+        "services/checkout/cart.go",
+        "docs/tampered.md"
+      ]
+    }
+  },
+  {
+    "id": "evt_TA34357K5HVZ06S6595RPWVJ2J",
+    "seq": 4,
+    "type": "validation.planned",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "validation_plan",
+      "id": "val_QSV40V7JJTNQS2YS5GGRKNQ0WQ"
+    },
+    "causation_id": "evt_TA34C5WNJPNQS5Q3DHJRBRQVQA",
+    "correlation_id": "corr_0F9WQZE8VPNQS5Q3DHJRBRQVQA",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:2fbd78fb2c3979ec759745f0d9f0daad5790da78d16422326ca23bdb742831b5",
+    "prev_hash": "sha256:deb189a496929cd83090f31799d79be94a9c6b40ad91d8bf4a62a33372d0d2d7",
+    "entry_hash": "sha256:96b87901aed0ffedf3274cce26e3cb543c1971aea8706d483519fb2404b00fad",
+    "payload": {
+      "plan_id": "val_QSV40V7JJTNQS2YS5GGRKNQ0WQ",
+      "candidate_id": "cand_0SN6QKET55DHA6Q84ZBPPY2VQ8",
+      "tiers": [
+        {
+          "tier": 1,
+          "jobs": [
+            "selected_unit"
+          ],
+          "rationale": "static selection"
+        }
+      ],
+      "required_evidence_kinds": [
+        "selected_unit_pass"
+      ],
+      "inputs_hash": "sha256:9f28883e75e0a6cf5550b42bd739c222d81f8a4069fffa5ec571d36ccc72b924",
+      "policy_version": {
+        "policy_id": "default-pack-golden",
+        "policy_version": 1
+      }
+    }
+  },
+  {
+    "id": "evt_TA346P0JJTYBKT4XC63398CFZR",
+    "seq": 5,
+    "type": "evidence.recorded",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "evidence",
+      "id": "ev_TAHD8MZZ75NWRKZAAJG073YANN"
+    },
+    "causation_id": "evt_TA34C5WNJPR8J44CGX5CPFYRNN",
+    "correlation_id": "corr_0F9WQZE8VPR8J44CGX5CPFYRNN",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:4cc7066c4d82d95aca723354762ab4284ad34945137f30066f16fafca7737d93",
+    "prev_hash": "sha256:96b87901aed0ffedf3274cce26e3cb543c1971aea8706d483519fb2404b00fad",
+    "entry_hash": "sha256:3b7c4a7a7cd0750f39716633bd671d6639220ac4d4c9a20858377e3dee8c457c",
+    "payload": {
+      "ev_id": "ev_TAHD8MZZ75NWRKZAAJG073YANN",
+      "run_id": "run_3XN40V7JJT1VK2YS5GGRZSH0WQ",
+      "attempt": 1,
+      "candidate_id": "cand_0SN6QKET55DHA6Q84ZBPPY2VQ8",
+      "kind": "selected_unit_pass",
+      "verdict": "pass",
+      "digests": [
+        "sha256:136ca69b509702c025b958a4f86f1bf14a84793e75e0ae03973682d64df9df28"
+      ],
+      "inputs_hash": "sha256:9f28883e75e0a6cf5550b42bd739c222d81f8a4069fffa5ec571d36ccc72b924",
+      "cost_millicents": 120,
+      "produced_by_lease": "lease_NDC96A61DRR0SHGDAEA5HWW4XN"
+    }
+  },
+  {
+    "id": "evt_TA34SSJK8ST0KT4CXXS398SFZR",
+    "seq": 6,
+    "type": "decision.rendered",
+    "version": 1,
+    "tenant_id": "org_WPT49S1B780QS0B3C6AMS9HVQR",
+    "aggregate": {
+      "type": "decision",
+      "id": "dec_DD640V7JJTBB42YS5GGR9920WQ"
+    },
+    "causation_id": "evt_TA34C5WNJPBB45TBCJ5CPYFFBN",
+    "correlation_id": "corr_0F9WQZE8VPBB45TBCJ5CPYFFBN",
+    "actor": {
+      "kind": "service",
+      "id": "sauron-test"
+    },
+    "occurred_at": "2026-08-23T00:00:00.000Z",
+    "payload_sha256": "sha256:722ce8a1325d140735867f8a3263e69368a10d9c957bc34906db52348f86bad3",
+    "prev_hash": "sha256:3b7c4a7a7cd0750f39716633bd671d6639220ac4d4c9a20858377e3dee8c457c",
+    "entry_hash": "sha256:935733274a43af8504aca7c6ecdf3cb723bdf54f4906a90c486dbb04cb1ce1cf",
+    "payload": {
+      "decision_id": "dec_DD640V7JJTBB42YS5GGR9920WQ",
+      "subject": {
+        "type": "candidate",
+        "id": "cand_0SN6QKET55DHA6Q84ZBPPY2VQ8"
+      },
+      "verb": "eligible_for_merge_train",
+      "confidence": 0.93,
+      "policy": {
+        "policy_id": "default-pack-golden",
+        "policy_version": 1
+      },
+      "explanation": {
+        "summary": "decision golden",
+        "factors": [
+          {
+            "name": "evidence",
+            "value": 1,
+            "source": "dossier"
+          }
+        ]
+      },
+      "evidence_refs": [
+        "ev_TAHD8MZZ75NWRKZAAJG073YANN"
+      ],
+      "inputs_hash": "sha256:9f28883e75e0a6cf5550b42bd739c222d81f8a4069fffa5ec571d36ccc72b924"
+    }
+  }
+]

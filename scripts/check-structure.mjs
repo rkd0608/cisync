@@ -1,10 +1,12 @@
-// Structure gate — enforces docs/REPO_STANDARDS §2/§5.
-import { existsSync, readdirSync, statSync } from 'node:fs';
+// Structure gate — enforces docs/REPO_STANDARDS §2/§5 + ENGINEERING_CHARTER §1 (line cap).
+import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FORBIDDEN = [/\.(bak|orig)$/i, /(^|~)$/, /^\.DS_Store$/, /^tmp_/i, /^scratch_/i, /^output\./i];
 const GO_FILE = /^[a-z0-9_]+(_test)?\.go$/;
 const MIGRATION = /^\d{4}_[a-z0-9_]+\.(up|down)\.sql$/;
+const LINE_CAP = 250; // ENGINEERING_CHARTER §1
+const CODE_EXT = /\.(go|ts|tsx|js|mjs|sql)$/;
 let errors = [];
 
 function walk(dir, base = '') {
@@ -15,8 +17,16 @@ function walk(dir, base = '') {
     if (statSync(p).isDirectory()) {
       if (name === 'node_modules' || name === '.git' || name === '.next') continue;
       walk(p, rel);
-    } else if (name.endsWith('.go') && !name.endsWith('_generated.go')) {
+      continue;
+    }
+    if (name.endsWith('.go') && !name.endsWith('_generated.go')) {
       if (!GO_FILE.test(name)) errors.push(`bad Go filename (snake_case required): ${rel}`);
+    }
+    if (CODE_EXT.test(name) && !name.endsWith('_generated.go')) {
+      const lineCount = statSync(p).size === 0 ? 0 : readFileSync(p, 'utf8').split('\n').length;
+      if (lineCount > LINE_CAP) {
+        errors.push(`file exceeds ${LINE_CAP} lines (ENGINEERING_CHARTER §1): ${rel} (${lineCount})`);
+      }
     }
   }
 }

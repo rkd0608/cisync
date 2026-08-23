@@ -1,0 +1,77 @@
+// Package store defines the persistence contract for the fleet execution
+// plane. Postgres is the state authority (D1); the interface lets test doubles
+// and future engines slot in.
+package store
+
+import (
+	"context"
+	"time"
+
+	"sauron.dev/sauron/runner-fleet/internal/domain"
+)
+
+// Completion is the complete-request payload gated by fence token (I-11).
+type Completion struct {
+	FenceToken           int64
+	Status               string
+	LogsDigest           string
+	ArtifactDigests      []string
+	DurationMS           int64
+	ActualCostMilliCents int64
+	Classification       string
+}
+
+// FleetJob is a stored execution job including mutable claim state.
+type FleetJob struct {
+	ID            string
+	RunID         string
+	Attempt       int
+	Tier          int
+	Pool          string
+	Status        string
+	FenceToken    int64
+	ClaimedBy     string
+	ClaimedAt     time.Time
+	LastHeartbeat time.Time
+	FinishedAt    time.Time
+	ResultRef     map[string]any
+	Accepted      bool
+	Spec          domain.JobSpec
+	CreatedAt     time.Time
+}
+
+// Claim identifies the claiming worker and its capability filter.
+type Claim struct {
+	Pool     string
+	Provider string
+	Limit    int
+	WorkerID string
+}
+
+// Store persists execution jobs, worker registry, and digest-addressed
+// artifacts. Implementations must make ClaimJobs atomic so at most one worker
+// holds a run at a time.
+type Store interface {
+	// Enqueue inserts a job in status queued with fence_token 0.
+	Enqueue(ctx context.Context, job domain.Job) error
+	// ClaimJobs atomically claims up to c.Limit queued jobs of pool for the
+	// worker, bumping each fence_token (epoch) and setting running state.
+	ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]domain.Job, error)
+	// Get fetches one job by run_id.
+	Get(ctx context.Context, runID string) (FleetJob, error)
+	// Heartbeat validates fence+running state and refreshes last_heartbeat.
+	Heartbeat(ctx context.Context, runID string, fenceToken int64, now time.Time) error
+	// Complete applies the fenced completion gate: only the current epoch may
+	// accept; acceptance is at-most-once per run/attempt (I-11).
+	Complete(ctx context.Context, runID string, c Completion, now time.Time) error
+	// Cancel marks a non-terminal job cancelled, bumping its epoch so stale
+	// workers are rejected afterwards. Returns false when already terminal.
+	Cancel(ctx context.Context, runID string, reason string, now time.Time) (bool, error)
+	// RecordArtifacts upserts artifact metadata rows for a run.
+	RecordArtifacts(ctx context.Context, runID string, artifacts []domain.Artifact, now time.Time) error
+	// RequeueStale requeues running jobs whose heartbeat is older than
+	// threshold, bumping epochs; returns the requeued run_ids.
+	RequeueStale(ctx context.Context, threshold time.Duration, now time.Time) ([]string, error)
+	// QueueDepth counts queued jobs per pool/tier.
+	QueueDepth(ctx context.Context) (map[string]int64, error)
+}

@@ -1,0 +1,101 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// DevTenant is the tenant claimed by the admin token in dev posture.
+const DevTenant = "org_default"
+
+// Config is the control-plane's full environment-derived configuration.
+type Config struct {
+	PGDSN         string
+	Addr          string
+	FleetURL      string
+	AdminToken    string
+	WebhookSecret string
+	LedgerKeyFile string
+	TenantID      string
+
+	RelayBatchSize    int
+	RelayPollInterval time.Duration
+	TickInterval      time.Duration
+	ReconcileInterval time.Duration
+	DefaultLeaseTTL   time.Duration
+	RateLimitPerMin   int
+}
+
+func env(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return def
+}
+
+func envInt(key string, def int) (int, error) {
+	v := env(key, "")
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("config %s: %w", key, err)
+	}
+	return n, nil
+}
+
+func envDuration(key string, def time.Duration) (time.Duration, error) {
+	v := env(key, "")
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("config %s: %w", key, err)
+	}
+	return d, nil
+}
+
+// Load parses SAURON_CTRL_* environment variables into Config; required vars
+// error out when missing.
+func Load() (*Config, error) {
+	cfg := &Config{
+		PGDSN:         env("SAURON_CTRL_PG_DSN", "postgres://sauron:sauron_dev_only@localhost:5432/sauron"),
+		Addr:          env("SAURON_CTRL_ADDR", ":8081"),
+		FleetURL:      env("SAURON_CTRL_FLEET_URL", "http://localhost:8082"),
+		AdminToken:    env("SAURON_CTRL_ADMIN_TOKEN", ""),
+		WebhookSecret: env("SAURON_CTRL_WEBHOOK_SECRET", env("SAURON_INGEST_WEBHOOK_SECRET", "")),
+		LedgerKeyFile: env("SAURON_CTRL_LEDGER_KEY_FILE", ""),
+		TenantID:      env("SAURON_CTRL_TENANT_ID", DevTenant),
+	}
+	var err error
+	if cfg.RelayBatchSize, err = envInt("SAURON_CTRL_RELAY_BATCH", 100); err != nil {
+		return nil, err
+	}
+	if cfg.RelayPollInterval, err = envDuration("SAURON_CTRL_RELAY_POLL", 500*time.Millisecond); err != nil {
+		return nil, err
+	}
+	if cfg.TickInterval, err = envDuration("SAURON_CTRL_TICK_INTERVAL", time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.ReconcileInterval, err = envDuration("SAURON_CTRL_RECONCILE_INTERVAL", 30*time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.DefaultLeaseTTL, err = envDuration("SAURON_CTRL_LEASE_TTL", 1500*time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.RateLimitPerMin, err = envInt("SAURON_CTRL_RATE_LIMIT_PER_MIN", 120); err != nil {
+		return nil, err
+	}
+	if cfg.AdminToken == "" {
+		return nil, fmt.Errorf("config SAURON_CTRL_ADMIN_TOKEN: required")
+	}
+	if cfg.WebhookSecret == "" {
+		return nil, fmt.Errorf("config SAURON_CTRL_WEBHOOK_SECRET: required")
+	}
+	return cfg, nil
+}

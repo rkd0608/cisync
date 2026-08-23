@@ -1,0 +1,8 @@
+BEGIN;
+
+DROP TABLE IF EXISTS fleet.artifacts;
+DROP TABLE IF EXISTS fleet.execution_jobs;
+DROP TABLE IF EXISTS fleet.workers;
+DROP SCHEMA IF EXISTS fleet CASCADE;
+
+COMMIT;

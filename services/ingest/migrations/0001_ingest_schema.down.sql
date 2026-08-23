@@ -1,0 +1,6 @@
+BEGIN;
+
+DROP TABLE IF EXISTS ingest.deliveries;
+DROP SCHEMA IF EXISTS ingest CASCADE;
+
+COMMIT;

@@ -5,7 +5,7 @@
   "description": "Normative event envelope + CORE payload definitions. Envelope hash chain: entry_hash = sha256(seq || id || type || version || payload_sha256 || prev_hash). Event names are <aggregate>.<verb_past> (frozen, D4).",
   "$defs": {
     "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
-    "prefixedUlid": { "type": "string", "pattern": "^(evt|int|cand|clus|val|run|ev|fc|lease|repair|pol|dec|org|corr)_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "prefixedUlid": { "type": "string", "pattern": "^(evt|int|cand|clus|val|run|ev|fc|lease|repair|pol|dec|org|corr|dlv)_[0-9A-HJKMNP-TV-Z]{26}$" },
     "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "globArray": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "actorKind": { "type": "string", "enum": ["agent", "human", "service", "github"] },
