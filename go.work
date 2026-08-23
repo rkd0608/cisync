@@ -1,0 +1,8 @@
+go 1.23
+
+use (
+	./services/ingest
+	./services/control-plane
+	./services/runner-fleet
+	./services/github-connector
+)

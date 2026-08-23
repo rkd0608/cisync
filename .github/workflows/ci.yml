@@ -1,0 +1,28 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  hygiene-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.23' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Go build/vet/test
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./... -race -count=1
+      - name: Hygiene gate
+        run: node scripts/check-structure.mjs
+      - name: Web typecheck/lint
+        run: |
+          cd apps/web
+          pnpm install --frozen-lockfile
+          pnpm lint && pnpm tsc --noEmit

@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sauron.dev/contracts/events.schema.json",
+  "title": "Sauron Ledger Events v1",
+  "description": "Normative event envelope + CORE payload definitions. Envelope hash chain: entry_hash = sha256(seq || id || type || version || payload_sha256 || prev_hash). Event names are <aggregate>.<verb_past> (frozen, D4).",
+  "$defs": {
+    "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "prefixedUlid": { "type": "string", "pattern": "^(evt|int|cand|clus|val|run|ev|fc|lease|repair|pol|dec|org|corr)_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "globArray": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "actorKind": { "type": "string", "enum": ["agent", "human", "service", "github"] },
+    "Envelope": {
+      "type": "object",
+      "required": ["id", "seq", "type", "version", "tenant_id", "aggregate", "causation_id", "correlation_id", "actor", "occurred_at", "payload_sha256", "prev_hash", "entry_hash", "payload"],
+      "properties": {
+        "id": { "$ref": "#/$defs/prefixedUlid" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "type": { "type": "string" },
+        "version": { "const": 1 },
+        "tenant_id": { "$ref": "#/$defs/prefixedUlid" },
+        "aggregate": {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "type": "string", "enum": ["delivery", "intent", "lease", "candidate", "cluster", "validation_plan", "validation_run", "evidence", "failure_case", "repair_task", "policy", "decision"] },
+            "id": { "$ref": "#/$defs/prefixedUlid" }
+          }
+        },
+        "causation_id": { "type": "string" },
+        "correlation_id": { "$ref": "#/$defs/prefixedUlid" },
+        "actor": {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "$ref": "#/$defs/actorKind" },
+            "id": { "type": "string" }
+          }
+        },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "payload_sha256": { "$ref": "#/$defs/sha256" },
+        "prev_hash": { "$ref": "#/$defs/sha256" },
+        "entry_hash": { "$ref": "#/$defs/sha256" },
+        "payload": { "type": "object" }
+      }
+    },
+    "BudgetValues": {
+      "type": "object",
+      "required": ["cpu_minutes", "environment_minutes", "repair_attempts"],
+      "properties": {
+        "cpu_minutes": { "type": "integer", "minimum": 0 },
+        "environment_minutes": { "type": "integer", "minimum": 0 },
+        "repair_attempts": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "PolicyRef": {
+      "type": "object",
+      "required": ["policy_id", "policy_version"],
+      "properties": {
+        "policy_id": { "type": "string" },
+        "policy_version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "CORE_EVENTS": {
+      "type": "object",
+      "description": "Binding CORE set for v1. Payloads keyed by event type.",
+      "properties": {
+        "delivery.accepted": {
+          "type": "object",
+          "required": ["source", "ext_delivery_id", "normalized_kind", "repo"],
+          "properties": {
+            "source": { "type": "string", "enum": ["github", "agent_api"] },
+            "ext_delivery_id": { "type": "string" },
+            "normalized_kind": { "type": "string" },
+            "repo": { "type": "string" }
+          }
+        },
+        "intent.declared": {
+          "type": "object",
+          "required": ["intent_id", "goal", "owned_surfaces", "risk_class", "origin", "resolved_policy", "compute_budget"],
+          "properties": {
+            "intent_id": { "$ref": "#/$defs/prefixedUlid" },
+            "goal": { "type": "string" },
+            "constraints": { "type": "array", "items": { "type": "string" } },
+            "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+            "owned_surfaces": { "$ref": "#/$defs/globArray" },
+            "risk_class": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+            "deadline": { "type": ["string", "null"], "format": "date-time" },
+            "origin": { "type": "string", "enum": ["agent_api", "cli", "github_webhook", "synthetic"] },
+            "agent_lineage": { "type": "array", "items": { "type": "string" } },
+            "resolved_policy": { "$ref": "#/$defs/PolicyRef" },
+            "compute_budget": { "$ref": "#/$defs/BudgetValues" }
+          }
+        },
+        "lease.granted": {
+          "type": "object",
+          "required": ["lease_id", "intent_id", "scope", "holder", "budget", "ttl_expires_at", "conflicts", "required_evidence"],
+          "properties": {
+            "lease_id": { "$ref": "#/$defs/prefixedUlid" },
+            "intent_id": { "$ref": "#/$defs/prefixedUlid" },
+            "scope": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["change_scope", "environment"] },
+                "surfaces": { "type": "array", "items": { "type": "string" } },
+                "env_template": { "type": "string" }
+              }
+            },
+            "holder": { "type": "string" },
+            "budget": { "$ref": "#/$defs/BudgetValues" },
+            "ttl_expires_at": { "type": "string", "format": "date-time" },
+            "conflicts": { "type": "array" },
+            "required_evidence": { "type": "array", "items": { "type": "string" } },
+            "queue_position": { "type": ["integer", "null"] }
+          }
+        },
+        "lease.renewed": {
+          "type": "object",
+          "required": ["lease_id", "ttl_expires_at", "renewal_count"],
+          "properties": {
+            "lease_id": { "$ref": "#/$defs/prefixedUlid" },
+            "ttl_expires_at": { "type": "string", "format": "date-time" },
+            "renewal_count": { "type": "integer" }
+          }
+        },
+        "lease.revoked": {
+          "type": "object",
+          "required": ["lease_id", "reason", "released_budget"],
+          "properties": {
+            "lease_id": { "$ref": "#/$defs/prefixedUlid" },
+            "reason": { "type": "string", "enum": ["superseded", "tenant_teardown", "repo_deleted", "ttl", "intent_terminal"] },
+            "released_budget": { "$ref": "#/$defs/BudgetValues" }
+          }
+        },
+        "lease.expired": { "$ref": "#/$defs/lease.revoked" },
+        "candidate.submitted": {
+          "type": "object",
+          "required": ["candidate_id", "intent_id", "submitter", "patch_ref", "head_sha", "base_sha", "changed_paths"],
+          "properties": {
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "intent_id": { "$ref": "#/$defs/prefixedUlid" },
+            "submitter": { "type": "string" },
+            "patch_ref": { "type": "string" },
+            "head_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "base_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "changed_paths": { "type": "array", "items": { "type": "string" } },
+            "est_cost_millicents": { "type": "integer" }
+          }
+        },
+        "cluster.assigned": {
+          "type": "object",
+          "required": ["cluster_id", "candidate_id", "rep_candidate_id", "relation", "strategy_version"],
+          "properties": {
+            "cluster_id": { "$ref": "#/$defs/prefixedUlid" },
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "rep_candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "relation": { "type": "string", "enum": ["duplicate_of", "alternative_of", "composable_with", "conflicts_with", "prerequisite_of", "representative"] },
+            "similarity_score": { "type": "number" },
+            "strategy_version": { "type": "string" }
+          }
+        },
+        "validation.planned": {
+          "type": "object",
+          "required": ["plan_id", "candidate_id", "tiers", "required_evidence_kinds", "inputs_hash", "policy_version"],
+          "properties": {
+            "plan_id": { "$ref": "#/$defs/prefixedUlid" },
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "tiers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["tier", "jobs", "rationale"],
+                "properties": {
+                  "tier": { "type": "integer", "minimum": 0, "maximum": 4 },
+                  "jobs": { "type": "array", "items": { "type": "string" } },
+                  "rationale": { "type": "string" },
+                  "selection_confidence": { "type": ["number", "null"] }
+                }
+              }
+            },
+            "required_evidence_kinds": { "type": "array", "items": { "type": "string" } },
+            "inputs_hash": { "$ref": "#/$defs/sha256" },
+            "policy_version": { "$ref": "#/$defs/PolicyRef" }
+          }
+        },
+        "validation.requested": {
+          "type": "object",
+          "required": ["run_id", "plan_id", "candidate_id", "tier", "est_cost_millicents", "priority", "pool"],
+          "properties": {
+            "run_id": { "$ref": "#/$defs/prefixedUlid" },
+            "plan_id": { "$ref": "#/$defs/prefixedUlid" },
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "tier": { "type": "integer", "minimum": 0, "maximum": 4 },
+            "est_duration_ms": { "type": "integer" },
+            "est_cost_millicents": { "type": "integer" },
+            "priority": { "type": "number" },
+            "cancellation_conditions": { "type": "object" },
+            "pool": { "type": "string" }
+          }
+        },
+        "validation.cancelled": {
+          "type": "object",
+          "required": ["run_ids", "reason"],
+          "properties": {
+            "run_ids": { "type": "array", "items": { "$ref": "#/$defs/prefixedUlid" }, "minItems": 1 },
+            "reason": { "type": "string", "enum": ["superseded", "stale_base", "budget", "intent_closed"] }
+          }
+        },
+        "validation.started": {
+          "type": "object",
+          "required": ["run_id", "attempt", "fence_token", "worker_id", "provider"],
+          "properties": {
+            "run_id": { "$ref": "#/$defs/prefixedUlid" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "fence_token": { "type": "integer", "minimum": 1 },
+            "worker_id": { "type": "string" },
+            "provider": { "type": "string", "enum": ["sim", "docker"] }
+          }
+        },
+        "validation.completed": {
+          "type": "object",
+          "required": ["run_id", "attempt", "status", "duration_ms"],
+          "properties": {
+            "run_id": { "$ref": "#/$defs/prefixedUlid" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "status": { "type": "string", "enum": ["succeeded", "failed", "timed_out"] },
+            "logs_digest": { "$ref": "#/$defs/sha256" },
+            "artifact_digests": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+            "duration_ms": { "type": "integer" },
+            "actual_cost_millicents": { "type": "integer" }
+          }
+        },
+        "evidence.recorded": {
+          "type": "object",
+          "required": ["ev_id", "run_id", "attempt", "candidate_id", "kind", "verdict", "digests", "inputs_hash", "cost_millicents"],
+          "properties": {
+            "ev_id": { "$ref": "#/$defs/prefixedUlid" },
+            "run_id": { "$ref": "#/$defs/prefixedUlid" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "kind": { "type": "string" },
+            "verdict": { "type": "string", "enum": ["pass", "fail"] },
+            "digests": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+            "inputs_hash": { "$ref": "#/$defs/sha256" },
+            "confidence": { "type": "number" },
+            "cost_millicents": { "type": "integer" },
+            "produced_by_lease": { "$ref": "#/$defs/prefixedUlid" }
+          }
+        },
+        "evidence.invalidated": {
+          "type": "object",
+          "required": ["ev_ids", "reason"],
+          "properties": {
+            "ev_ids": { "type": "array", "items": { "$ref": "#/$defs/prefixedUlid" }, "minItems": 1 },
+            "reason": { "type": "string", "enum": ["base_advanced", "toolchain_changed", "ttl_expired"] },
+            "replan_plan_id": { "$ref": "#/$defs/prefixedUlid" }
+          }
+        },
+        "merge_base.advanced": {
+          "type": "object",
+          "required": ["repo", "old_sha", "new_sha", "affected_candidate_ids"],
+          "properties": {
+            "repo": { "type": "string" },
+            "old_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "new_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "affected_candidate_ids": { "type": "array", "items": { "$ref": "#/$defs/prefixedUlid" } }
+          }
+        },
+        "failure.classified": {
+          "type": "object",
+          "required": ["fc_id", "run_id", "classification", "confidence", "signature_digest"],
+          "properties": {
+            "fc_id": { "$ref": "#/$defs/prefixedUlid" },
+            "run_id": { "$ref": "#/$defs/prefixedUlid" },
+            "classification": {
+              "type": "string",
+              "enum": ["infra_transient", "known_flake", "probable_flake", "compile_regression", "test_expectation_drift", "functional_regression", "merge_conflict", "security_policy_violation", "timeout"]
+            },
+            "confidence": { "type": "number" },
+            "signature_digest": { "$ref": "#/$defs/sha256" },
+            "suspected_paths": { "type": "array", "items": { "type": "string" } },
+            "reproduction_command": { "type": "string" }
+          }
+        },
+        "repair.authorized": {
+          "type": "object",
+          "required": ["repair_id", "fc_id", "candidate_id", "envelope"],
+          "properties": {
+            "repair_id": { "$ref": "#/$defs/prefixedUlid" },
+            "fc_id": { "$ref": "#/$defs/prefixedUlid" },
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "envelope": {
+              "type": "object",
+              "required": ["reproduction_command", "allowed_paths", "max_iterations"],
+              "properties": {
+                "reproduction_command": { "type": "string" },
+                "failed_assertion": { "type": "string" },
+                "suspected_diff_hunks": { "type": "array", "items": { "type": "string" } },
+                "allowed_paths": { "$ref": "#/$defs/globArray" },
+                "prohibited_paths": { "type": "array", "items": { "type": "string" } },
+                "max_iterations": { "type": "integer", "minimum": 1, "maximum": 5 },
+                "required_evidence_after_repair": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "repair.completed": {
+          "type": "object",
+          "required": ["repair_id", "outcome", "attempts_used"],
+          "properties": {
+            "repair_id": { "$ref": "#/$defs/prefixedUlid" },
+            "outcome": { "type": "string", "enum": ["applied", "exhausted", "aborted"] },
+            "attempts_used": { "type": "integer" },
+            "new_patch_refs": { "type": "array", "items": { "type": "string" } },
+            "required_evidence_status": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string" },
+                  "status": { "type": "string", "enum": ["accepted", "pending"] }
+                }
+              }
+            }
+          }
+        },
+        "candidate.superseded": {
+          "type": "object",
+          "required": ["candidate_id", "by_candidate_id", "relation", "reason"],
+          "properties": {
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "by_candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "relation": { "type": "string" },
+            "reason": { "type": "string", "enum": ["dominated_duplicate", "tournament_loser", "intent_solved"] }
+          }
+        },
+        "candidate.cancelled": {
+          "type": "object",
+          "required": ["candidate_id", "reason"],
+          "properties": {
+            "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
+            "reason": { "type": "string", "enum": ["intent_closed", "deadline", "lease_lost", "prerequisite_failed"] }
+          }
+        },
+        "decision.rendered": {
+          "type": "object",
+          "required": ["decision_id", "subject", "verb", "confidence", "policy", "explanation", "evidence_refs", "inputs_hash"],
+          "properties": {
+            "decision_id": { "$ref": "#/$defs/prefixedUlid" },
+            "subject": {
+              "type": "object",
+              "required": ["type", "id"],
+              "properties": {
+                "type": { "type": "string", "enum": ["intent", "candidate", "integration_set"] },
+                "id": { "$ref": "#/$defs/prefixedUlid" }
+              }
+            },
+            "verb": { "type": "string", "enum": ["eligible_for_merge_train", "rejected", "deferred"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "policy": { "$ref": "#/$defs/PolicyRef" },
+            "explanation": {
+              "type": "object",
+              "required": ["summary", "factors"],
+              "properties": {
+                "summary": { "type": "string" },
+                "factors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "value", "source"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "value": {},
+                      "source": { "type": "string" }
+                    }
+                  }
+                },
+                "skipped_evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["kind", "reason"],
+                    "properties": { "kind": { "type": "string" }, "reason": { "type": "string" } }
+                  }
+                }
+              }
+            },
+            "evidence_refs": { "type": "array", "items": { "$ref": "#/$defs/prefixedUlid" } },
+            "inputs_hash": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/Envelope" }
+  ]
+}

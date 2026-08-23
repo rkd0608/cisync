@@ -1,0 +1,62 @@
+name: sauron
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sauron
+      POSTGRES_PASSWORD: sauron_dev_only
+      POSTGRES_DB: sauron
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sauron -d sauron"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ingest:
+    build: ../services/ingest
+    environment:
+      SAURON_INGEST_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
+      SAURON_INGEST_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
+      SAURON_INGEST_ADDR: ":8080"
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  control-plane:
+    build: ../services/control-plane
+    environment:
+      SAURON_CTRL_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
+      SAURON_CTRL_ADDR: ":8081"
+      SAURON_CTRL_FLEET_URL: http://runner-fleet:8082
+      SAURON_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.dev.key
+      SAURON_CTRL_ADMIN_TOKEN: dev_admin_token_not_for_prod
+    volumes:
+      - ./dev-keys:/keys:ro
+    ports: ["8081:8081"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  runner-fleet:
+    build: ../services/runner-fleet
+    environment:
+      SAURON_FLEET_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
+      SAURON_FLEET_ADDR: ":8082"
+      SAURON_FLEET_PROVIDER: sim
+      SAURON_FLEET_SIM_WORKERS: "8"
+    ports: ["8082:8082"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    build: ../apps/web
+    environment:
+      NEXT_PUBLIC_SAURON_API_URL: http://localhost:8081
+    ports: ["3000:3000"]
+    depends_on: [control-plane]
+
+volumes:
+  pgdata:

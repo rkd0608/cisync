@@ -1,0 +1,453 @@
+openapi: 3.1.0
+info:
+  title: Sauron Control-Plane API
+  version: 1.0.0
+  description: >
+    Agent-native verification & integration control plane. Normative contract for v1.
+    All mutating requests require an Idempotency-Key header; replays return the original
+    response (I-12). Tenant identity derives from the Authorization token, never payload.
+servers:
+  - url: http://localhost:8081/v1
+security:
+  - bearerAuth: []
+paths:
+  /change-intents:
+    post:
+      operationId: createIntent
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntentCreate' }
+      responses:
+        '200':
+          description: Intent granted (idempotent replay returns identical body)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntentGrant' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/BudgetExceeded' }
+  /change-intents/{intentId}:
+    get:
+      operationId: getIntent
+      parameters: [{ $ref: '#/components/parameters/IntentId' }]
+      responses:
+        '200':
+          description: Intent state incl. evidence_completeness_pct (D8 formula)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Intent' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /change-intents/{intentId}/candidates:
+    get:
+      operationId: listCandidates
+      parameters: [{ $ref: '#/components/parameters/IntentId' }]
+      responses:
+        '200':
+          description: Candidate summaries incl. cluster/relation
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CandidateSummary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: submitCandidate
+      parameters: [{ $ref: '#/components/parameters/IntentId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CandidateSubmit' }
+      responses:
+        '201':
+          description: Candidate registered, validation plan built
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CandidateAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /candidates/{candidateId}:
+    get:
+      operationId: getCandidate
+      parameters: [{ $ref: '#/components/parameters/CandidateId' }]
+      responses:
+        '200':
+          description: Candidate + priority + queue_position
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Candidate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /candidates/{candidateId}/dossier:
+    get:
+      operationId: getDossier
+      parameters: [{ $ref: '#/components/parameters/CandidateId' }]
+      responses:
+        '200':
+          description: Evidence dossier (see DOMAIN_MODEL_DRAFT §7 shape)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceDossier' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /clusters/{clusterId}:
+    get:
+      operationId: getCluster
+      parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+      responses:
+        '200':
+          description: Cluster + members + relations + representative
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cluster' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /leases/{leaseId}/renew:
+    post:
+      operationId: renewLease
+      parameters: [{ $ref: '#/components/parameters/LeaseId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttl_seconds: { type: integer, minimum: 30, maximum: 3600, default: 1500 }
+      responses:
+        '200':
+          description: Renewed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaseRenewal' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /leases/{leaseId}:
+    delete:
+      operationId: releaseLease
+      parameters: [{ $ref: '#/components/parameters/LeaseId' }]
+      responses:
+        '204': { description: Released (idempotent) }
+  /events:
+    get:
+      operationId: tailEvents
+      parameters:
+        - { name: after_seq, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: types, in: query, schema: { type: string, description: comma-separated event types } }
+        - { name: aggregate, in: query, schema: { type: string, description: '"type:id" filter' } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200':
+          description: Ledger tail for agents/web sync
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_seq]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/EventEnvelope' }
+                  next_seq: { type: integer, format: int64 }
+        '416': { $ref: '#/components/responses/BadRequest' }
+  /hooks/github:
+    post:
+      operationId: githubWebhook
+      security: []
+      parameters:
+        - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }
+        - { name: X-GitHub-Delivery, in: header, required: true, schema: { type: string } }
+        - { name: X-GitHub-Event, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '202': { description: Accepted (async processing; always 202 on valid signature) }
+        '401': { description: Bad signature }
+        '413': { description: Payload too large }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+    IntentId:
+      name: intentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^int_[0-9A-HJKMNP-TV-Z]{26}$' }
+    CandidateId:
+      name: candidateId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^cand_[0-9A-HJKMNP-TV-Z]{26}$' }
+    ClusterId:
+      name: clusterId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^clus_[0-9A-HJKMNP-TV-Z]{26}$' }
+    LeaseId:
+      name: leaseId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^lease_[0-9A-HJKMNP-TV-Z]{26}$' }
+  responses:
+    BadRequest:
+      description: validation_failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Uniform 404 (never distinguishes cross-tenant existence)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: conflict_state — details.reason ∈ late_submission|intent_closed|expired_lease|revoked_lease|duplicate_sha|version_conflict|not_classified
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    BudgetExceeded:
+      description: Machine-readable budget/rate signal so agents self-regulate
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    RiskClass: { type: string, enum: [low, medium, high, critical] }
+    IntentCreate:
+      type: object
+      required: [goal, repository, base, expected_surfaces, acceptance_criteria, risk]
+      properties:
+        goal: { type: string, maxLength: 2000 }
+        repository: { type: string, example: acme/payments }
+        base: { type: string, example: main }
+        expected_surfaces:
+          type: array
+          items: { type: string, example: services/checkout/** }
+        acceptance_criteria: { type: array, items: { type: string } }
+        constraints: { type: array, items: { type: string } }
+        risk: { $ref: '#/components/schemas/RiskClass' }
+        deadline: { type: string, format: date-time, nullable: true }
+        agent_lineage: { type: array, items: { type: string } }
+    ComputeBudget:
+      type: object
+      required: [cpu_minutes, environment_minutes, repair_attempts]
+      properties:
+        cpu_minutes: { type: integer }
+        environment_minutes: { type: integer }
+        repair_attempts: { type: integer }
+    ConflictRef:
+      type: object
+      required: [intent_id, relation, owner, recommendation]
+      properties:
+        intent_id: { type: string }
+        relation: { type: string, enum: [overlapping] }
+        owner: { type: string }
+        recommendation: { type: string, enum: [coordinate, proceed, wait] }
+    IntentGrant:
+      type: object
+      required: [intent_id, lease_id, base_snapshot, worktree_or_branch, allowed_paths, conflicts, required_evidence, compute_budget]
+      properties:
+        intent_id: { type: string }
+        lease_id: { type: string }
+        base_snapshot: { type: string, example: main@b734e }
+        worktree_or_branch: { type: string }
+        allowed_paths: { type: array, items: { type: string } }
+        prohibited_paths: { type: array, items: { type: string } }
+        conflicts: { type: array, items: { $ref: '#/components/schemas/ConflictRef' } }
+        required_evidence: { type: array, items: { type: string } }
+        compute_budget: { $ref: '#/components/schemas/ComputeBudget' }
+        queue_position: { type: integer, nullable: true }
+        eta_seconds: { type: integer, nullable: true }
+    IntentState:
+      type: string
+      enum: [exploring, validating, blocked, repairing, merge_ready, deploying, monitoring, completed, rejected]
+    Intent:
+      type: object
+      required: [intent_id, state, goal, repository, owned_surfaces, risk_class, evidence_completeness_pct, created_at]
+      properties:
+        intent_id: { type: string }
+        state: { $ref: '#/components/schemas/IntentState' }
+        goal: { type: string }
+        repository: { type: string }
+        owned_surfaces: { type: array, items: { type: string } }
+        risk_class: { $ref: '#/components/schemas/RiskClass' }
+        evidence_completeness_pct: { type: number, minimum: 0, maximum: 1 }
+        deadline: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+    CandidateSummary:
+      type: object
+      required: [candidate_id, state, head_sha, cluster_id, relation_to_rep]
+      properties:
+        candidate_id: { type: string }
+        state: { type: string }
+        head_sha: { type: string }
+        priority_score: { type: number }
+        cluster_id: { type: string, nullable: true }
+        relation_to_rep:
+          type: [string, 'null']
+          enum: [duplicate_of, alternative_of, composable_with, conflicts_with, prerequisite_of, null]
+    CandidateSubmit:
+      type: object
+      required: [patch_ref, head_sha, base_sha]
+      properties:
+        patch_ref: { type: string, description: git bundle URL or bundle digest }
+        head_sha: { type: string, minLength: 40, maxLength: 40 }
+        base_sha: { type: string, minLength: 40, maxLength: 40 }
+        changed_paths: { type: array, items: { type: string } }
+    PlanSummary:
+      type: object
+      properties:
+        tiers:
+          type: array
+          items:
+            type: object
+            properties:
+              tier: { type: integer, minimum: 0, maximum: 4 }
+              jobs: { type: array, items: { type: string } }
+              rationale: { type: string }
+              selection_confidence: { type: number, nullable: true }
+        deferred: { type: array, items: { type: string } }
+    CandidateAccepted:
+      type: object
+      required: [candidate_id, plan_summary, lease_id]
+      properties:
+        candidate_id: { type: string }
+        plan_summary: { $ref: '#/components/schemas/PlanSummary' }
+        lease_id: { type: string }
+    Candidate:
+      allOf:
+        - $ref: '#/components/schemas/CandidateSummary'
+        - type: object
+          required: [intent_id, queue_position, est_cost_millicents]
+          properties:
+            intent_id: { type: string }
+            queue_position: { type: integer, nullable: true }
+            est_cost_millicents: { type: integer }
+    EvidenceDossier:
+      type: object
+      required: [candidate_id, intent_id, generated_at, inputs_hash, decision, evidence_accepted, evidence_deferred, known_uncertainty, required_post_merge]
+      properties:
+        candidate_id: { type: string }
+        intent_id: { type: string }
+        generated_at: { type: string, format: date-time }
+        inputs_hash: { type: string }
+        decision:
+          type: object
+          required: [decision_id, verb, confidence, policy, summary]
+          properties:
+            decision_id: { type: string }
+            verb: { type: string, enum: [eligible_for_merge_train, rejected, deferred] }
+            confidence: { type: number }
+            policy:
+              type: object
+              properties:
+                policy_id: { type: string }
+                version: { type: integer }
+            summary: { type: string }
+        evidence_accepted:
+          type: array
+          items:
+            type: object
+            required: [ev_id, kind, verdict]
+            properties:
+              ev_id: { type: string }
+              kind: { type: string }
+              verdict: { type: string, enum: [pass, fail] }
+              digests: { type: array, items: { type: string } }
+              meta: { type: object, additionalProperties: true }
+        evidence_deferred:
+          type: array
+          minItems: 0
+          items:
+            type: object
+            required: [kind, reason, stage_required]
+            properties:
+              kind: { type: string }
+              reason: { type: string }
+              stage_required: { type: string }
+        known_uncertainty:
+          type: array
+          items:
+            type: object
+            properties:
+              description: { type: string }
+              mitigation: { type: string }
+        required_post_merge:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              params: { type: object, additionalProperties: true }
+    Cluster:
+      type: object
+      required: [cluster_id, repo, rep_candidate_id, members, state, strategy_version]
+      properties:
+        cluster_id: { type: string }
+        repo: { type: string }
+        rep_candidate_id: { type: string }
+        member_count: { type: integer }
+        state: { type: string, enum: [forming, active, dissolved] }
+        strategy_version: { type: string }
+        members:
+          type: array
+          items:
+            type: object
+            required: [candidate_id, relation_to_rep]
+            properties:
+              candidate_id: { type: string }
+              relation_to_rep: { $ref: '#/components/schemas/CandidateSummary/properties/relation_to_rep' }
+              similarity_score: { type: number }
+    LeaseRenewal:
+      type: object
+      required: [lease_id, ttl_expires_at, renewal_count]
+      properties:
+        lease_id: { type: string }
+        ttl_expires_at: { type: string, format: date-time }
+        renewal_count: { type: integer }
+    EventEnvelope:
+      type: object
+      required: [id, seq, type, version, tenant_id, aggregate, causation_id, correlation_id, actor, occurred_at, payload_sha256, prev_hash, entry_hash, payload]
+      properties:
+        id: { type: string, pattern: '^evt_[0-9A-HJKMNP-TV-Z]{26}$' }
+        seq: { type: integer, format: int64 }
+        type: { type: string, example: candidate.submitted }
+        version: { type: integer }
+        tenant_id: { type: string }
+        aggregate:
+          type: object
+          properties:
+            type: { type: string }
+            id: { type: string }
+        causation_id: { type: string }
+        correlation_id: { type: string }
+        actor:
+          type: object
+          properties:
+            kind: { type: string, enum: [agent, human, service, github] }
+            id: { type: string }
+        occurred_at: { type: string, format: date-time }
+        payload_sha256: { type: string }
+        prev_hash: { type: string }
+        entry_hash: { type: string }
+        payload: { type: object }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [validation_failed, unauthorized, forbidden, not_found, conflict_state, rate_limited, budget_exceeded, unavailable]
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+            retry_after_s: { type: integer, nullable: true }
+            suggestions: { type: array, items: { type: string } }
