@@ -50,13 +50,20 @@ describe('I-04 contract: lease grants are scope- and TTL-bounded by schema', () 
 });
 
 describe.skipIf(!liveModeEnabled())('I-04 live: claimed credentials stay inside their declared job', () => {
-  it('claimed job_spec matches the sim pool and rejects foreign-fence heartbeats', async () => {
-    const grant = await createIntent('i04-live');
-    await submitCandidate(grant.intent_id, 'i04-live');
-    const claimed = await claimWithin(15_000);
-    if (!claimed) return; // dispatch not wired yet in this environment
+  it('claimed job_spec matches the sim pool and rejects foreign-fence heartbeats', { timeout: 30_000 }, async () => {
+    // WHY a seeded job in the probe pool: claiming from 'sim' steals a live
+    // run of another concurrent suite and corrupts its fence epoch (I-11
+    // regression driver). The probe only needs A claimable job.
+    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL, fleetBase } = await import('./lib/live.js');
+    await seedFenceProbeJob(`i04-${Date.now()}`);
+    let claimed: Awaited<ReturnType<typeof claimFleetJob>> | undefined;
+    for (let i = 0; i < 20 && !claimed; i++) {
+      claimed = await claimFleetJob(FENCE_PROBE_POOL);
+      if (!claimed) await new Promise((r) => setTimeout(r, 200));
+    }
+    if (!claimed) return; // claim path unavailable in this environment
     const spec = claimed.job.job_spec;
-    expect(claimed.job.pool).toBe('sim');
+    expect(claimed.job.pool).toBe(FENCE_PROBE_POOL);
     expect(spec.repo).toMatch(/^[\w.-]+\/[\w.-]+$/);
     expect(spec.base_sha).toMatch(/^[a-f0-9]{40}$/);
     expect(spec.head_sha).toMatch(/^[a-f0-9]{40}$/);
@@ -69,17 +76,6 @@ describe.skipIf(!liveModeEnabled())('I-04 live: claimed credentials stay inside 
       body: JSON.stringify({ fence_token: foreign }),
     });
     expect(beat.status).not.toBe(204);
-
-    async function claimWithin(timeoutMs: number) {
-      const deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        const { claimFleetJob } = await import('./lib/live.js');
-        const claimed = await claimFleetJob();
-        if (claimed) return claimed;
-        await new Promise((r) => setTimeout(r, 400));
-      }
-      return undefined;
-    }
   });
 
   it('dispatch reaches the fleet after a candidate lands (liveness of scoping path)', async () => {

@@ -8,6 +8,10 @@ const (
 	StatusPending       = "pending"
 	StatusForwarded     = "forwarded"
 	StatusForwardFailed = "forward_failed"
+	// StatusRejected quarantines signature-invalid deliveries: audit-only
+	// rows that are never retried and never occupy the dedup slot (the
+	// partial unique index covers sig_ok rows only).
+	StatusRejected = "rejected"
 )
 
 // SourceGitHub is the only external source in v1.
@@ -32,5 +36,5 @@ type Delivery struct {
 
 // Retryable reports whether a delivery is eligible for another forward attempt.
 func (d *Delivery) Retryable(maxAttempts int) bool {
-	return d.Status != StatusForwarded && d.Attempts < maxAttempts
+	return d.Status != StatusForwarded && d.Status != StatusRejected && d.Attempts < maxAttempts
 }

@@ -64,6 +64,23 @@ func TestAssignRelationClassification(t *testing.T) {
 			Member{ID: "rep", ChangedPaths: repPaths, ChangedSymbols: []string{"Lambda"}},
 			RelationConflicting,
 		},
+		{
+			// v1 REST submissions carry no changed_symbols (openapi
+			// CandidateSubmit has no symbol field): with BOTH sides
+			// symbol-less the symbol gate is vacuous, so identical full path
+			// sets + trigram ≥ τ classify as duplicates — otherwise
+			// duplicate_of/supersede propagation is unreachable via the API.
+			"duplicate: identical path sets, both sides symbol-less",
+			Member{ID: "new", ChangedPaths: repPaths},
+			Member{ID: "rep", ChangedPaths: repPaths},
+			RelationDuplicateOf,
+		},
+		{
+			"conflicting: partial overlap, both sides symbol-less",
+			Member{ID: "new", ChangedPaths: append([]string{"services/cart/pricing.go"}, repPaths...)},
+			Member{ID: "rep", ChangedPaths: repPaths},
+			RelationConflicting,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

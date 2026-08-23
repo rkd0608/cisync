@@ -76,7 +76,7 @@ func runServer() {
 
 	// Real engine scheduler: priority ranking + policy-capped admission +
 	// fleet dispatch + completion ingestion (evidence/failure/decisions).
-	engineScheduler := scheduler.NewEngine(st, fleet, "sim", 8)
+	engineScheduler := scheduler.NewEngine(st, fleet, "sim", cfg.SchedBatch)
 
 	outbox.Register("validation.requested", func(ctx context.Context, item store.OutboxItem) error {
 		return st.ExecTx(ctx, func(tx pgx.Tx) error {
@@ -91,7 +91,7 @@ func runServer() {
 	}
 	go outbox.Run(relayCtx)
 	go engineScheduler.Run(relayCtx, cfg.TickInterval)
-	go relay.NewReconciler(st, fleet).Run(relayCtx, cfg.ReconcileInterval)
+	go relay.NewReconciler(st, fleet, cfg.StaleRunMaxAge).Run(relayCtx, cfg.ReconcileInterval)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,

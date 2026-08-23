@@ -4,7 +4,7 @@ import { envelopeForType } from './lib/event-schema.js';
 import * as payloads from './lib/payloads.js';
 import { buildChainedEnvelopes, firstEnvelope } from './lib/builders.js';
 import { liveModeEnabled } from './lib/env.js';
-import { createIntent, submitCandidate, tailEvents, waitForEvent } from './lib/live.js';
+import { createIntent, drainEvents, submitCandidate, waitForEvent } from './lib/live.js';
 
 /**
  * I-09 — Every Decision/plan/lease/repair stamps a resolvable
@@ -67,20 +67,21 @@ describe('I-09 contract: policy stamps are structurally mandatory', () => {
 });
 
 describe.skipIf(!liveModeEnabled())('I-09 live: rendered decisions carry resolvable policy stamps', () => {
-  it('decision.rendered has non-empty policy_id and integer version ≥ 1', async () => {
+  it('decision.rendered has non-empty policy_id and integer version ≥ 1', { timeout: 90_000 }, async () => {
     const grant = await createIntent('i09-live');
     const cand = await submitCandidate(grant.intent_id, 'i09-live');
     const decision = await waitForEvent(
       (ev) => ev.type === 'decision.rendered' && ev.payload['subject'] !== undefined && String((ev.payload['subject'] as Record<string, unknown>)['id']) === cand.candidate_id,
       { description: `decision.rendered for ${cand.candidate_id}`, timeoutMs: 60_000 },
-    ).catch(async () => tailEvents(0).then((p) => p.events.find((e) => e.type === 'decision.rendered')));
+    ).catch(async () => drainEvents().then((events) => events.find((e) => e.type === 'decision.rendered')));
     expect(decision, 'no decision.rendered found in ledger').toBeDefined();
     const policy = decision?.payload['policy'] as { policy_id?: string; policy_version?: number };
     expect(policy?.policy_id).toBeTruthy();
     expect(policy?.policy_version).toBeGreaterThanOrEqual(1);
     // The plan that produced the candidate carries the same pack lineage.
-    const page = await tailEvents(0);
-    const plan = page.events.find((e) => e.type === 'validation.planned' && e.payload['candidate_id'] === cand.candidate_id);
+    // WHY drain (not first page): earlier suites push this candidate's plan
+    // beyond a single tail page.
+    const plan = (await drainEvents()).find((e) => e.type === 'validation.planned' && e.payload['candidate_id'] === cand.candidate_id);
     expect(plan, 'candidate has no validation.planned').toBeDefined();
     expect((plan?.payload['policy_version'] as { policy_version?: number })?.policy_version).toBeGreaterThanOrEqual(1);
   });

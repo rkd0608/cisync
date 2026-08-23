@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,6 +82,9 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	pol := domain.DefaultPolicy()
 	now := time.Now().UTC()
 	candID := domain.NewID(domain.PrefixCandidate)
+	if intent.InitialCandidateID != "" && s.claimInitialCandidateSlot(r.Context(), tenant, intent.ID, intent.InitialCandidateID) {
+		candID = intent.InitialCandidateID
+	}
 	changedPaths := in.ChangedPaths
 	if changedPaths == nil {
 		changedPaths = []string{}
@@ -189,6 +193,24 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Inc("sauron_ctrl_http_requests_total", "201")
 }
 
+// claimInitialCandidateSlot consumes the intent's reserved first-candidate
+// slot atomically; ok=false means the slot was already used (or absent) and
+// the submission must mint a fresh id. The conditional UPDATE makes concurrent
+// first submissions race-safe.
+func (s *Server) claimInitialCandidateSlot(ctx context.Context, tenant, intentID, reserved string) bool {
+	if reserved == "" {
+		return false
+	}
+	tag, err := s.store.Pool.Exec(ctx,
+		`UPDATE ctrl.intents SET initial_candidate_id=''
+		 WHERE id=$1 AND tenant_id=$2 AND initial_candidate_id=$3`,
+		intentID, tenant, reserved)
+	if err != nil || tag.RowsAffected() != 1 {
+		return false
+	}
+	return true
+}
+
 // decodeCandidateSubmit performs the boundary validation shared by the
 // submit path: idempotent-replay already handled by the caller.
 func (s *Server) decodeCandidateSubmit(w http.ResponseWriter, r *http.Request, intentID string, raw []byte) (*domain.Intent, candidateSubmit, bool) {
@@ -214,7 +236,7 @@ func (s *Server) decodeCandidateSubmit(w http.ResponseWriter, r *http.Request, i
 		WriteDomainError(w, fmt.Errorf("%w: intent state %s rejects submissions", domain.ErrLateSubmission, intent.State))
 		return nil, in, false
 	}
-	dup, err := s.store.LiveCandidateExists(r.Context(), tenant, intent.ID, in.HeadSHA)
+	dup, err := s.store.LiveCandidateExists(r.Context(), tenant, intent.ID, in.HeadSHA, in.BaseSHA)
 	if err != nil {
 		WriteDomainError(w, err)
 		return nil, in, false

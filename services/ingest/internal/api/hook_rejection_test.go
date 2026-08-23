@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sauron.dev/sauron/ingest/internal/domain"
 )
 
 func TestHookSignatureFailures(t *testing.T) {
@@ -51,14 +53,34 @@ func TestHookSignatureFailures(t *testing.T) {
 	}
 
 	for _, id := range []string{"d-tamper", "d-wrong", "d-missing", "d-garbage"} {
-		if _, err := h.st.GetDelivery(context.Background(), "github", id); err == nil {
-			t.Fatalf("rejected delivery %s must not be persisted for forwarding", id)
+		d, err := h.st.GetDelivery(context.Background(), "github", id)
+		if err != nil {
+			t.Fatalf("rejected delivery %s must be persisted as an audit row: %v", id, err)
+		}
+		if d.SigOK {
+			t.Fatalf("rejected delivery %s must be marked sig_ok=false", id)
+		}
+		if d.Status != domain.StatusRejected {
+			t.Fatalf("rejected delivery %s must be quarantined as %q, got %q", id, domain.StatusRejected, d.Status)
 		}
 	}
 	select {
 	case <-h.ctrlCalls:
 		t.Fatalf("no rejected request may reach control-plane")
 	default:
+	}
+
+	// A later VALID redelivery of a rejected GUID must not be treated as a
+	// duplicate — quarantine rows never occupy the dedup slot.
+	okReq, _ := http.NewRequest(http.MethodPost, h.svc.URL+"/hooks/github", strings.NewReader(string(body)))
+	okReq.Header.Set("Content-Type", "application/json")
+	okReq.Header.Set("X-Hub-Signature-256", signBody([]byte(h.secret), body))
+	okReq.Header.Set("X-GitHub-Delivery", "d-tamper")
+	okReq.Header.Set("X-GitHub-Event", "push")
+	respOK, _ := http.DefaultClient.Do(okReq)
+	respOK.Body.Close()
+	if respOK.StatusCode != http.StatusAccepted {
+		t.Fatalf("valid redelivery after rejection must 202, got %d", respOK.StatusCode)
 	}
 }
 

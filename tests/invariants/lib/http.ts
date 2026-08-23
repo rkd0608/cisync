@@ -34,13 +34,41 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * WHY retry here: under a 24-way concurrent burst the Node fetch pool can
+ * drop connections (ECONNRESET surfaces as TypeError before any response
+ * exists). That is transport noise, not a server verdict — I-06 must judge
+ * typed HTTP statuses only. Retries are therefore limited to thrown
+ * connection-class errors, 2 attempts total, never to actual HTTP responses.
+ */
+const CONNECTION_RETRY_ATTEMPTS = 2;
+const CONNECTION_RETRY_BACKOFF_MS = 150;
+
+function isConnectionClassError(err: unknown): boolean {
+  return err instanceof TypeError && !('status' in err);
+}
+
+async function fetchWithConnectionRetry(opts: RequestOptions): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= CONNECTION_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fetch(opts.url, {
+        method: opts.method,
+        headers: opts.headers,
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        signal: opts.signal,
+      });
+    } catch (err) {
+      lastError = err;
+      if (!isConnectionClassError(err) || attempt === CONNECTION_RETRY_ATTEMPTS) throw err;
+      await new Promise((r) => setTimeout(r, CONNECTION_RETRY_BACKOFF_MS));
+    }
+  }
+  throw lastError;
+}
+
 export async function request<T>(opts: RequestOptions, schema: ZodType<T>): Promise<HttpResponse<T>> {
-  const res = await fetch(opts.url, {
-    method: opts.method,
-    headers: opts.headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    signal: opts.signal,
-  });
+  const res = await fetchWithConnectionRetry(opts);
   const rawText = await res.text();
   let parsedUnknown: unknown;
   try {
@@ -60,11 +88,7 @@ export async function request<T>(opts: RequestOptions, schema: ZodType<T>): Prom
 export async function requestLoose(
   opts: RequestOptions,
 ): Promise<{ status: number; body: unknown; rawText: string }> {
-  const res = await fetch(opts.url, {
-    method: opts.method,
-    headers: opts.headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-  });
+  const res = await fetchWithConnectionRetry(opts);
   const rawText = await res.text();
   const body: unknown = rawText.length === 0 ? null : JSON.parse(rawText);
   return { status: res.status, body, rawText };

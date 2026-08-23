@@ -61,6 +61,8 @@ func CreateIntentTx(ctx context.Context, tx pgx.Tx, s *Store, intent *domain.Int
 			"compute_budget":      intent.Declared.ComputeBudget,
 			"acceptance_criteria": toAnySlice(intent.Declared.AcceptanceCriteria),
 			"constraints":         toAnySlice(intent.Declared.Constraints),
+			// Reserved first-candidate slot: roots the §3b lifecycle trace.
+			"initial_candidate_id": intent.InitialCandidateID,
 		})
 	if err != nil {
 		return nil, err
@@ -81,6 +83,8 @@ func CreateIntentTx(ctx context.Context, tx pgx.Tx, s *Store, intent *domain.Int
 			"ttl_expires_at":    lease.TTLExpiresAt.Format(time.RFC3339),
 			"conflicts":         conflictsAny,
 			"required_evidence": toAnySlice(lease.RequiredEvidence),
+			// Same reserved slot so the granted lease stays inside the trace.
+			"initial_candidate_id": intent.InitialCandidateID,
 		})
 	if err != nil {
 		return nil, err
@@ -118,15 +122,15 @@ func CreateIntentTx(ctx context.Context, tx pgx.Tx, s *Store, intent *domain.Int
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO ctrl.intents (tenant_id, id, seq, state, goal, repo, base_ref, base_snapshot,
 		   owned_surfaces, constraints, acceptance_criteria, risk_class, deadline, origin,
-		   agent_lineage, resolved_policy, compute_budget, created_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		   agent_lineage, resolved_policy, compute_budget, created_at, initial_candidate_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		 ON CONFLICT (id) DO UPDATE SET
 		   seq=EXCLUDED.seq, state=EXCLUDED.state WHERE ctrl.intents.seq < EXCLUDED.seq`,
 		intent.TenantID, intent.ID, intentEvent.Seq, string(intent.State), intent.Declared.Goal,
 		intent.Declared.Repo, intent.Declared.BaseRef, intent.Declared.BaseSnapshot,
 		toTextSlice(intent.Declared.OwnedSurfaces), constraintsJSON, criteriaJSON,
 		string(intent.Declared.RiskClass), deadline, string(intent.Declared.Origin),
-		lineageJSON, policyJSON, budgetJSON, intent.CreatedAt,
+		lineageJSON, policyJSON, budgetJSON, intent.CreatedAt, intent.InitialCandidateID,
 	); err != nil {
 		return nil, fmt.Errorf("insert intent projection: %w", err)
 	}
@@ -175,14 +179,14 @@ func toTextSlice(in []string) []string { return in }
 func (s *Store) GetIntent(ctx context.Context, tenantID, intentID string) (*domain.Intent, error) {
 	row := s.Pool.QueryRow(ctx,
 		`SELECT id, tenant_id, state, goal, repo, base_ref, base_snapshot, owned_surfaces,
-		        risk_class, deadline, origin, created_at, closed_at
+		        risk_class, deadline, origin, created_at, closed_at, initial_candidate_id
 		 FROM ctrl.intents WHERE id=$1 AND tenant_id=$2`, intentID, tenantID)
 	var i domain.Intent
 	var state, risk, origin string
 	var deadline, closedAt *time.Time
 	err := row.Scan(&i.ID, &i.TenantID, &state, &i.Declared.Goal, &i.Declared.Repo,
 		&i.Declared.BaseRef, &i.Declared.BaseSnapshot, &i.Declared.OwnedSurfaces,
-		&risk, &deadline, &origin, &i.CreatedAt, &closedAt)
+		&risk, &deadline, &origin, &i.CreatedAt, &closedAt, &i.InitialCandidateID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, domain.ErrNotFound

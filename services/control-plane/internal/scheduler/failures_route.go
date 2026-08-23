@@ -31,7 +31,7 @@ func (e *EngineScheduler) onRunFailed(ctx context.Context, tx pgx.Tx, run *domai
 	if err := e.store.AppendEventsTx(ctx, tx, []*domain.Event{classifiedEvent}); err != nil {
 		return err
 	}
-	routedAction := routeForClass(fc.Classification)
+	routedAction := routeFailure(fc)
 	if err := store.InsertFailureCaseTx(ctx, tx, run.TenantID, fcID, classifiedEvent.Seq,
 		run.CandidateID, run.ID, fc.SignatureDigest, fc.Classification,
 		fc.ClassificationConfidence, fc.ReproductionCommand, fc.SuspectedPaths,
@@ -224,4 +224,16 @@ func routeForClass(classification string) string {
 	default:
 		return "escalate_human"
 	}
+}
+
+// routeFailure gates the class table with the autonomy confidence floor: the
+// unclassified fallback (no rule matched, confidence 0.30) escalates to human
+// triage instead of auto-authorizing a repair nobody can apply in v1 — the
+// classifier contract explicitly routes sub-floor classifications to
+// escalation (autonomy.escalate_on classification_confidence_lt_0.8).
+func routeFailure(fc failurepkg.FailureCase) string {
+	if fc.RuleID == "unclassified_fallback" {
+		return "escalate_human"
+	}
+	return routeForClass(fc.Classification)
 }

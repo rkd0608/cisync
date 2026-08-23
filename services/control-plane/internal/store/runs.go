@@ -195,11 +195,12 @@ func DispatchRunTx(ctx context.Context, tx pgx.Tx, s *Store, run *domain.Validat
 	ev, err := domain.NewEvent(run.TenantID,
 		domain.AggregateRef{Type: string(domain.AggRun), ID: run.ID},
 		"validation.started", "", corr, actor, map[string]any{
-			"run_id":      run.ID,
-			"attempt":     run.Attempt,
-			"fence_token": run.FenceToken,
-			"worker_id":   "pending-claim",
-			"provider":    "sim",
+			"run_id":       run.ID,
+			"attempt":      run.Attempt,
+			"fence_token":  run.FenceToken,
+			"worker_id":    "pending-claim",
+			"provider":     "sim",
+			"candidate_id": run.CandidateID,
 		})
 	if err != nil {
 		return nil, err

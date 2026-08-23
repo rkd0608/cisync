@@ -65,3 +65,31 @@ func MarkProcessedTx(ctx context.Context, tx pgx.Tx, consumer, eventID string) (
 	}
 	return tag.RowsAffected() == 1, nil
 }
+
+// ProcessedKeys bulk-checks which of the given dedupe keys the consumer has
+// already applied. WHY a pre-check: the fleet completion feed (§4) replays
+// accepted rows forever by contract, so every tick would otherwise run the
+// full load+tx pipeline for already-consumed rows just to hit the I-12
+// dedupe inside it. This read is advisory only — MarkProcessedTx inside the
+// effect tx remains the authoritative race-safe gate.
+func (s *Store) ProcessedKeys(ctx context.Context, consumer string, keys []string) (map[string]bool, error) {
+	found := make(map[string]bool, len(keys))
+	if len(keys) == 0 {
+		return found, nil
+	}
+	rows, err := s.Pool.Query(ctx,
+		`SELECT event_id FROM ctrl.processed_events WHERE consumer=$1 AND event_id = ANY($2)`,
+		consumer, keys)
+	if err != nil {
+		return nil, fmt.Errorf("processed keys lookup: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("scan processed key: %w", err)
+		}
+		found[key] = true
+	}
+	return found, rows.Err()
+}

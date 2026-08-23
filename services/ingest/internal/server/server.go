@@ -31,6 +31,9 @@ func New(cfg config.Config, st store.Store, logger *slog.Logger, metrics *obs.Me
 	retryWorker := retry.NewWorker(st, forwarder, metrics, logger, cfg.RetryInterval, cfg.RetryBase, cfg.MaxAttempts, time.Now)
 
 	mux := http.NewServeMux()
+	// The bare path is the GitHub-facing webhook route; /v1/hooks/github
+	// remains the versioned alias so existing producers keep working.
+	mux.Handle("POST /hooks/github", hook)
 	mux.Handle("POST /v1/hooks/github", hook)
 	mux.Handle("GET /healthz", api.NewHealthzHandler())
 	mux.Handle("GET /metrics", api.NewMetricsHandler(metrics))

@@ -71,13 +71,19 @@ describe('I-07 contract: any single-field tamper breaks verification', () => {
 });
 
 describe.skipIf(!liveModeEnabled())('I-07 live: the served ledger tail verifies cryptographically', () => {
-  it('paged tail is contiguous, schema-valid and hash-chained across pages', async () => {
-    const { tailEvents } = await import('./lib/live.js');
+  it('paged tail is contiguous, schema-valid and hash-chained across pages', { timeout: 60_000 }, async () => {
+    const { apiBase } = await import('./lib/live.js');
+    const { tailEvents } = await import('./lib/tail.js');
     let cursor = 0;
     let previousTailHash: string | undefined;
     let pages = 0;
+    // WHY maxPages scales with the ledger: the dev DB is shared and grows
+    // monotonically across suite runs; a fixed page bound would trip on size,
+    // not on any chain property. The bound only guards a runaway loop.
+    const pageSize = 500;
+    const maxPages = 200;
     for (;;) {
-      const page = await tailEvents(cursor);
+      const page = await tailEvents(apiBase(), cursor, undefined, pageSize);
       if (page.events.length === 0) break;
       const firstOfPage = page.events[0];
       const report = verifyChain(page.events, cursor === 0 || !firstOfPage ? undefined : firstOfPage.seq);
@@ -90,7 +96,7 @@ describe.skipIf(!liveModeEnabled())('I-07 live: the served ledger tail verifies 
       previousTailHash = last?.entry_hash;
       cursor = page.next_seq;
       pages += 1;
-      expect(pages).toBeLessThan(20); // bounded sweep; storm does full replay
+      expect(pages).toBeLessThan(maxPages);
     }
     expect(pages).toBeGreaterThan(0);
   });

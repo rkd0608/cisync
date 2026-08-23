@@ -11,7 +11,7 @@ import { skippedPositiveEvidenceAttempt } from './lib/attack-vectors.js';
 import * as payloads from './lib/payloads.js';
 import { buildChainedEnvelopes, firstEnvelope, type EnvelopeLike } from './lib/builders.js';
 import { liveModeEnabled } from './lib/env.js';
-import { createIntent, getDossier, submitCandidate, tailEvents, waitForEvent } from './lib/live.js';
+import { createIntent, drainEvents, getDossier, submitCandidate, waitForEvent } from './lib/live.js';
 
 /**
  * I-01 — A skipped/quarantined test NEVER counts as positive evidence.
@@ -95,14 +95,27 @@ describe('I-01 contract: accept-time precedence rejects skipped-as-positive atte
 });
 
 describe.skipIf(!liveModeEnabled())('I-01 live: dossier pass-evidence traces only to succeeded runs', () => {
-  it('no accepted pass evidence originates from a non-succeeded run', async () => {
+  it('no accepted pass evidence originates from a non-succeeded run', { timeout: 150_000 }, async () => {
     const grant = await createIntent('i01-live');
     const cand = await submitCandidate(grant.intent_id, 'i01-live');
-    await waitForEvent((ev) => ev.type === 'decision.rendered' && ev.aggregate.id === cand.candidate_id, {
-      description: `decision.rendered for ${cand.candidate_id}`,
-      timeoutMs: 60_000,
-    });
-    const ledger = await fetchWholeTail();
+    await waitForEvent(
+      // WHY payload.subject.id: the frozen envelope aggregates
+      // decision.rendered on the DECISION (dec_…), not the candidate;
+      // matching on aggregate.id can never hit.
+      (ev) =>
+        ev.type === 'decision.rendered' &&
+        String((ev.payload['subject'] as Record<string, unknown> | undefined)?.id) === cand.candidate_id,
+      {
+        description: `decision.rendered for ${cand.candidate_id}`,
+        // Shared-stack reality: under full-suite concurrency the first
+        // dispatch can trail the submission by a minute; the invariant
+        // itself is about evidence provenance, not scheduler speed.
+        timeoutMs: 90_000,
+      },
+    );
+    // WHY drain (not first page): shared-stack suites advance global seq far
+    // past one page; the candidate's own events must be found wherever they sit.
+    const ledger = await drainEvents();
     const succeededRuns = new Set(
       ledger.filter((e) => e.type === 'validation.completed').filter((e) => e.payload['status'] === 'succeeded').map((e) => String(e.payload['run_id'])),
     );
@@ -117,19 +130,4 @@ describe.skipIf(!liveModeEnabled())('I-01 live: dossier pass-evidence traces onl
       expect(succeededRuns.has(runId as string), `pass evidence ${accepted.ev_id} traces to non-succeeded run ${runId}`).toBe(true);
     }
   });
-
-  async function fetchWholeTail() {
-    let cursor = 0;
-    const firstPage = await tailEvents(cursor);
-    const events = [...firstPage.events];
-    let lastNextSeq = firstPage.next_seq;
-    while (lastNextSeq > cursor + firstPage.events.length && firstPage.events.length > 0) {
-      cursor += firstPage.events.length;
-      const page = await tailEvents(cursor);
-      if (page.events.length === 0) break;
-      events.push(...page.events);
-      lastNextSeq = page.next_seq;
-    }
-    return events;
-  }
 });

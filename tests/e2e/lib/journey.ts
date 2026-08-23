@@ -107,16 +107,12 @@ export async function drainTailFor(
   return waitForLedger(description, matches, timeoutMs);
 }
 
+/** Drain the recent tail once (bounded lookback; candidate events are fresh). */
 async function drainTail(): Promise<LedgerEvent[]> {
-  let cursor = 0;
-  const all: LedgerEvent[] = [];
-  for (;;) {
-    const page = await tail(cursor);
-    all.push(...page.events);
-    if (page.events.length === 0 || page.next_seq <= cursor) break;
-    cursor = page.next_seq;
-  }
-  return all;
+  const { apiBase } = await import('../../invariants/lib/live.js');
+  const { recentStart, scanTail } = await import('../../invariants/lib/tail.js');
+  const scan = await scanTail(apiBase(), await recentStart(apiBase()));
+  return scan.events;
 }
 
 export async function renewLease(leaseId: string, ttlSeconds?: number): Promise<{ status: number; body: unknown }> {

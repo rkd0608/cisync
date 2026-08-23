@@ -23,7 +23,7 @@ func testConfig() *config.Config {
 		AdminToken:        "test_admin_token_0123456789",
 		WebhookSecret:     "test_webhook_secret",
 		LedgerKeyFile:     "",
-		TenantID:          "org_default",
+		TenantID:          config.DevTenant,
 		RelayBatchSize:    10,
 		RelayPollInterval: 500000000,
 		TickInterval:      1000000000,

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"sauron.dev/sauron/control-plane/internal/config"
 	"sauron.dev/sauron/control-plane/internal/domain"
 )
 
@@ -18,7 +19,7 @@ func TestDeliveryAggregateMintsPrefixedUlid(t *testing.T) {
 		EventKind:     "push",
 		Repo:          "acme/payments",
 	}
-	ev, err := buildDeliveryAcceptedEvent("org_default", body)
+	ev, err := buildDeliveryAcceptedEvent(config.DevTenant, body)
 	if err != nil {
 		t.Fatalf("build event: %v", err)
 	}
@@ -48,11 +49,11 @@ func TestDeliveryAggregateMintsPrefixedUlid(t *testing.T) {
 // GUID never collide on the minted aggregate identity.
 func TestDeliveryAggregateIDsUniquePerEvent(t *testing.T) {
 	body := &deliveryBody{Source: "github", ExtDeliveryID: "same-guid", EventKind: "push"}
-	first, err := buildDeliveryAcceptedEvent("org_default", body)
+	first, err := buildDeliveryAcceptedEvent(config.DevTenant, body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := buildDeliveryAcceptedEvent("org_default", body)
+	second, err := buildDeliveryAcceptedEvent(config.DevTenant, body)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import { envelopeForType } from './lib/event-schema.js';
 import * as payloads from './lib/payloads.js';
 import { buildChainedEnvelopes, firstEnvelope } from './lib/builders.js';
 import { liveModeEnabled } from './lib/env.js';
-import { createIntent, submitCandidate, tailEvents, waitForEvent } from './lib/live.js';
+import { createIntent, drainEvents, submitCandidate, waitForEvent } from './lib/live.js';
 
 /**
  * I-02 — Evidence/artifact reuse only on FULL inputs_hash match
@@ -72,14 +72,20 @@ describe.skipIf(!liveModeEnabled())('I-02 live: moving the base invalidates the 
       (ev) => ev.type === 'validation.planned' && ev.payload['candidate_id'] === first.candidate_id,
       { description: `validation.planned for ${first.candidate_id}` },
     );
-    const headSha = String((await eventsFor(first.candidate_id)).find((e) => e.type === 'candidate.submitted')?.payload['head_sha']);
+    // WHY drain (not first page): the submitted head_sha must be read from
+    // the real ledger row; a page-bounded read returns undefined once global
+    // seq advances, which used to submit an invalid SHA (HTTP 400).
+    const headSha = String(
+      (await drainEvents()).find((e) => e.type === 'candidate.submitted' && e.payload['candidate_id'] === first.candidate_id)?.payload['head_sha'],
+    );
+    expect(headSha).toMatch(/^[a-f0-9]{40}$/);
     const second = await submitCandidate(grant.intent_id, 'i02-live-b', { headSha });
     await waitForEvent(
       (ev) => ev.type === 'validation.planned' && ev.payload['candidate_id'] === second.candidate_id,
       { description: `validation.planned for ${second.candidate_id}` },
     );
     const hashes = new Map(
-      (await eventsFor(undefined))
+      (await drainEvents())
         .filter((e) => e.type === 'validation.planned')
         .map((e) => [String(e.payload['candidate_id']), String(e.payload['inputs_hash'])]),
     );
@@ -88,10 +94,5 @@ describe.skipIf(!liveModeEnabled())('I-02 live: moving the base invalidates the 
     expect(h1, 'first candidate has no planned inputs_hash').toBeDefined();
     expect(h2, 'second candidate has no planned inputs_hash').toBeDefined();
     expect(h1).not.toBe(h2);
-
-    async function eventsFor(candidateId: string | undefined) {
-      const page = await tailEvents(0);
-      return page.events.filter((e) => candidateId === undefined || e.payload['candidate_id'] === candidateId);
-    }
   });
 });

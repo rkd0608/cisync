@@ -8,8 +8,11 @@ import (
 	"time"
 )
 
-// DevTenant is the tenant claimed by the admin token in dev posture.
-const DevTenant = "org_default"
+// DevTenant is the tenant claimed by the admin token in dev posture. It MUST
+// satisfy the frozen prefixedUlid pattern (events.schema.json): "org_" plus a
+// 26-char Crockford base32 ULID. "org_default" violated the envelope schema
+// and poisoned every served event.
+const DevTenant = "org_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 // Config is the control-plane's full environment-derived configuration.
 type Config struct {
@@ -27,6 +30,15 @@ type Config struct {
 	ReconcileInterval time.Duration
 	DefaultLeaseTTL   time.Duration
 	RateLimitPerMin   int
+	// StaleRunMaxAge bounds how long a dispatched run may sit without a
+	// completion before the reconciler fences it (frees WIP slots). The
+	// compiled default keeps the documented 2×15-min prod posture; dev
+	// compose lowers it because sim jobs finish in seconds and an orphaned
+	// dispatch otherwise wedges admission until restart+30min.
+	StaleRunMaxAge time.Duration
+	// SchedBatch bounds per-tick admission/dispatch work; dev compose raises
+	// it so suite fan-out drains inside harness decision windows.
+	SchedBatch int
 }
 
 func env(key, def string) string {
@@ -85,10 +97,16 @@ func Load() (*Config, error) {
 	if cfg.ReconcileInterval, err = envDuration("SAURON_CTRL_RECONCILE_INTERVAL", 30*time.Second); err != nil {
 		return nil, err
 	}
+	if cfg.StaleRunMaxAge, err = envDuration("SAURON_CTRL_STALE_RUN_MAX_AGE", 30*time.Minute); err != nil {
+		return nil, err
+	}
 	if cfg.DefaultLeaseTTL, err = envDuration("SAURON_CTRL_LEASE_TTL", 1500*time.Second); err != nil {
 		return nil, err
 	}
 	if cfg.RateLimitPerMin, err = envInt("SAURON_CTRL_RATE_LIMIT_PER_MIN", 120); err != nil {
+		return nil, err
+	}
+	if cfg.SchedBatch, err = envInt("SAURON_CTRL_SCHED_BATCH", 8); err != nil {
 		return nil, err
 	}
 	if cfg.AdminToken == "" {

@@ -26,13 +26,19 @@ func NewMemoryStore(nowFn func() time.Time) *MemoryStore {
 	return &MemoryStore{nowFn: nowFn, deliveries: make(map[string]domain.Delivery)}
 }
 
-// InsertDelivery implements Store.
+// InsertDelivery implements Store. Mirrors the PG partial-unique semantics:
+// only sig_ok rows participate in (source, ext_delivery_id) dedup, so a valid
+// delivery is admitted even when a quarantined rejection was recorded first,
+// while two valid deliveries of one GUID collide.
 func (m *MemoryStore) InsertDelivery(_ context.Context, d domain.Delivery) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := d.Source + "\x00" + d.ExtDeliveryID
-	if _, ok := m.deliveries[key]; ok {
-		return fmt.Errorf("memory store: insert delivery: %w", domain.ErrDuplicateDelivery)
+	if existing, ok := m.deliveries[key]; ok {
+		if d.SigOK && existing.SigOK {
+			return fmt.Errorf("memory store: insert delivery: %w", domain.ErrDuplicateDelivery)
+		}
+		// Audit/quarantine rows never occupy the dedup slot: overwrite.
 	}
 	m.deliveries[key] = d
 	return nil
@@ -73,7 +79,7 @@ func (m *MemoryStore) DueDeliveries(_ context.Context, olderThan time.Duration, 
 	now := m.nowFn()
 	var out []domain.Delivery
 	for _, d := range m.deliveries {
-		if d.Status == domain.StatusForwarded || d.Attempts >= maxAttempts {
+		if d.Status == domain.StatusForwarded || d.Status == domain.StatusRejected || d.Attempts >= maxAttempts {
 			continue
 		}
 		cutoff := d.ReceivedAt

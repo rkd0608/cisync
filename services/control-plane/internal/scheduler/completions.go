@@ -25,8 +25,21 @@ func (e *EngineScheduler) IngestCompletions(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Advisory bulk pre-check so replayed feed rows skip the load+tx pipeline;
+	// the authoritative I-12 gate stays inside applyCompletion's tx.
+	keys := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		keys = append(keys, dedupeKey(job.RunID, job.FenceToken))
+	}
+	doneKeys, err := e.store.ProcessedKeys(ctx, completionConsumer, keys)
+	if err != nil {
+		return 0, err
+	}
 	consumed := 0
 	for _, job := range jobs {
+		if doneKeys[dedupeKey(job.RunID, job.FenceToken)] {
+			continue
+		}
 		applied, err := e.applyCompletion(ctx, job)
 		if err != nil {
 			logf("completion %s@%d: %v", job.RunID, job.FenceToken, err)
@@ -44,6 +57,20 @@ func (e *EngineScheduler) IngestCompletions(ctx context.Context) (int, error) {
 func (e *EngineScheduler) applyCompletion(ctx context.Context, job relay.CompletedJob) (bool, error) {
 	run, err := e.store.GetRunByID(ctx, job.RunID)
 	if err != nil {
+		if err == domain.ErrNotFound {
+			// Unknown run (e.g. a probe job seeded straight into the fleet):
+			// nothing to mutate — absorb as a marked diagnostic so the feed
+			// row stops re-surfacing every tick.
+			logf("unknown-run completion %s@%d absorbed; no effects", job.RunID, job.FenceToken)
+			if err := e.store.ExecTx(ctx, func(tx pgx.Tx) error {
+				_, err := store.MarkProcessedTx(ctx, tx, completionConsumer,
+					dedupeKey(job.RunID, job.FenceToken))
+				return err
+			}); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
 		return false, fmt.Errorf("load run: %w", err)
 	}
 	if job.FenceToken != run.FenceToken || job.Attempt != run.Attempt {
@@ -53,9 +80,28 @@ func (e *EngineScheduler) applyCompletion(ctx context.Context, job relay.Complet
 			job.RunID, job.FenceToken, run.FenceToken)
 		return false, nil
 	}
+	// Decision freshness: a completion for an already-terminal run or a
+	// decided candidate is absorbed as a diagnostic (I-08) and marked
+	// processed so the feed row stops re-surfacing every tick.
+	candState, err := e.store.CandidateStateByID(ctx, run.TenantID, run.CandidateID)
+	if err != nil && err != domain.ErrNotFound {
+		return false, fmt.Errorf("load candidate state: %w", err)
+	}
+	if reason := completionIsDiagnostic(run.State, candState); reason {
+		logf("diagnostic completion %s@%d absorbed (run %s, candidate %s); no effects",
+			job.RunID, job.FenceToken, run.State, candState)
+		if err := e.store.ExecTx(ctx, func(tx pgx.Tx) error {
+			_, err := store.MarkProcessedTx(ctx, tx, completionConsumer,
+				dedupeKey(job.RunID, job.FenceToken))
+			return err
+		}); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
 	var applied bool
 	err = e.store.ExecTx(ctx, func(tx pgx.Tx) error {
-		dedupeKey := fmt.Sprintf("fleet:%s:%d", job.RunID, job.FenceToken)
+		dedupeKey := dedupeKey(job.RunID, job.FenceToken)
 		first, err := store.MarkProcessedTx(ctx, tx, completionConsumer, dedupeKey)
 		if err != nil {
 			return err
@@ -103,6 +149,9 @@ func (e *EngineScheduler) appendCompletedTx(ctx context.Context, tx pgx.Tx, run 
 			"artifact_digests":       toAnySlice(job.ArtifactDigests),
 			"duration_ms":            job.DurationMS,
 			"actual_cost_millicents": job.CostMillicents,
+			// Correlation stamp so the served lifecycle of ONE candidate is
+			// traceable through the public tail (ARCHITECTURE_DRAFT §3a).
+			"candidate_id": run.CandidateID,
 		})
 	if err != nil {
 		return 0, err
@@ -122,4 +171,9 @@ func (e *EngineScheduler) appendCompletedTx(ctx context.Context, tx pgx.Tx, run 
 
 func mapFleetStatus(status string) string {
 	return strings.ToLower(status)
+}
+
+// dedupeKey is the I-12 consumer key for one fleet completion.
+func dedupeKey(runID string, fenceToken int64) string {
+	return fmt.Sprintf("fleet:%s:%d", runID, fenceToken)
 }

@@ -96,6 +96,24 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.metrics.CounterInc("ingest_webhook_rejected_total", "Webhook requests rejected at the edge", "reason", "bad_signature")
 		h.logger.Warn("webhook signature verification failed",
 			slog.String("ext_delivery_id", deliveryID), slog.String("event_kind", eventKind))
+		// Quarantine as an audit-only row (EC-003): sig_ok=false rows are
+		// excluded from the dedup partial index so a later valid redelivery
+		// of the same GUID is never swallowed. Best-effort — rejection
+		// response must not depend on audit persistence.
+		if auditErr := h.store.InsertDelivery(r.Context(), domain.Delivery{
+			ID:            "dlv_" + ulid.Make().String(),
+			Source:        domain.SourceGitHub,
+			ExtDeliveryID: deliveryID,
+			EventKind:     eventKind,
+			SigOK:         false,
+			Headers:       map[string]string{"x-github-event": eventKind, "x-github-delivery": deliveryID},
+			Payload:       raw,
+			Status:        domain.StatusRejected,
+			ReceivedAt:    h.nowFn(),
+		}); auditErr != nil {
+			h.logger.Info("quarantine audit row skipped",
+				slog.String("ext_delivery_id", deliveryID), slog.String("err", auditErr.Error()))
+		}
 		http.Error(w, `{"error":{"code":"unauthorized","message":"invalid signature"}}`, http.StatusUnauthorized)
 		return
 	}

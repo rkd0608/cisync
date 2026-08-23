@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -93,6 +94,19 @@ func (s *Server) handleRenewLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := lease.Renew(body.TTLSeconds); err != nil {
+		if errors.Is(err, domain.ErrPostTerminal) {
+			// Post-terminal renewal is a typed conflict per openapi:
+			// conflict_state with details.reason from the frozen vocabulary.
+			reason := "revoked_lease"
+			if lease.State == domain.LeaseExpired {
+				reason = "expired_lease"
+			}
+			WriteError(w, http.StatusConflict, "conflict_state",
+				"lease is not renewable; request a fresh grant",
+				map[string]any{"reason": reason}, nil, nil)
+			s.metrics.Inc("sauron_ctrl_http_requests_total", "409")
+			return
+		}
 		WriteDomainError(w, err)
 		return
 	}

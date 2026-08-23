@@ -63,7 +63,7 @@ describe('I-13 contract: tie-break comparator is a strict total order', () => {
 });
 
 describe.skipIf(!liveModeEnabled())('I-13 live: served tail ordering is logical, not wall-clock', () => {
-  it('seq is contiguous and ascending across pages regardless of occurred_at ties', async () => {
+  it('seq is contiguous and ascending across pages regardless of occurred_at ties', { timeout: 60_000 }, async () => {
     let cursor = 0;
     let previous: number | undefined;
     let sawTie = false;
@@ -83,7 +83,9 @@ describe.skipIf(!liveModeEnabled())('I-13 live: served tail ordering is logical,
       }
       cursor = res.body.next_seq;
       pages += 1;
-      expect(pages).toBeLessThan(20);
+      // WHY the bound scales: shared dev DB grows monotonically; a fixed
+      // page count would trip on ledger size, not on ordering properties.
+      expect(pages).toBeLessThan(200);
     }
     expect(pages).toBeGreaterThan(0);
     // WHY record-only: ties cannot be forced black-box; contiguity above is

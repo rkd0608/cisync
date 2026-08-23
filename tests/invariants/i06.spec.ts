@@ -80,7 +80,9 @@ describe('I-06 contract: releases never exceed grants; reasons are frozen', () =
 });
 
 describe.skipIf(!liveModeEnabled())('I-06 live: overflow is refused with a machine-readable budget signal', () => {
-  it('concurrent burst yields only successes or typed rejections — never overrun or 5xx', async () => {
+  // WHY 60s: the contract here is the OUTCOME distribution (2xx or typed
+  // 429), not wall-clock; under full-suite concurrency the burst may queue.
+  it('concurrent burst yields only successes or typed rejections — never overrun or 5xx', { timeout: 60_000 }, async () => {
     const outcomes: string[] = [];
     const results = await Promise.allSettled(
       Array.from({ length: 24 }, (_, i) =>
@@ -101,7 +103,10 @@ describe.skipIf(!liveModeEnabled())('I-06 live: overflow is refused with a machi
     for (const r of results) {
       if (r.status === 'fulfilled') {
         expect(r.value.status).toBe(200);
-        outcomes.push('granted');
+        // WHY the raw status, not a label: the acceptance predicate below
+        // classifies on it; 'granted' strings masked non-2xx successes and
+        // made every-fulfilled runs look like violations.
+        outcomes.push(String(r.value.status));
         continue;
       }
       if (r.reason instanceof HttpError) {
@@ -113,6 +118,7 @@ describe.skipIf(!liveModeEnabled())('I-06 live: overflow is refused with a machi
       }
     }
     // Every refusal is one of the two documented admission signals.
+    console.log('I06-OUTCOMES', JSON.stringify(outcomes));
     for (const outcome of outcomes) {
       if (outcome.startsWith('429')) {
         expect(['429:budget_exceeded', '429:rate_limited']).toContain(outcome);

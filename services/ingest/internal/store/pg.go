@@ -3,14 +3,19 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sauron.dev/sauron/ingest/internal/domain"
 )
+
+// pgErrCodeUnique is the SQLSTATE for unique_violation.
+const pgErrCodeUnique = "23505"
 
 // PGStore is the Postgres-backed Store over schema ingest (exclusive write
 // ownership per ARCHITECTURE §2).
@@ -48,8 +53,10 @@ func (s *PGStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-// InsertDelivery implements Store. The (source, ext_delivery_id) unique index
-// is the dedup authority (D1).
+// InsertDelivery implements Store. Dedup authority is the partial unique
+// index over (source, ext_delivery_id) WHERE sig_ok: valid deliveries collide
+// (duplicate GUID), quarantined sig_ok=false audit rows never do. Any unique
+// violation maps to ErrDuplicateDelivery (D1).
 func (s *PGStore) InsertDelivery(ctx context.Context, d domain.Delivery) error {
 	headers, err := json.Marshal(d.Headers)
 	if err != nil {
@@ -60,10 +67,13 @@ func (s *PGStore) InsertDelivery(ctx context.Context, d domain.Delivery) error {
 		INSERT INTO ingest.deliveries
 			(id, source, ext_delivery_id, event_kind, repo, sig_ok, headers, payload, status, attempts, received_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-		ON CONFLICT (source, ext_delivery_id) DO NOTHING`,
+		ON CONFLICT DO NOTHING`,
 		d.ID, d.Source, d.ExtDeliveryID, d.EventKind, d.Repo, d.SigOK, headers, payload,
 		d.Status, d.Attempts, d.ReceivedAt)
 	if err != nil {
+		if pgErr := newPgUniqueViolation(err); pgErr != nil {
+			return fmt.Errorf("pg store: insert delivery: %w", domain.ErrDuplicateDelivery)
+		}
 		return fmt.Errorf("pg store: insert delivery: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -118,16 +128,17 @@ func (s *PGStore) UpdateForwardState(ctx context.Context, id string, status stri
 	return nil
 }
 
-// DueDeliveries implements Store.
+// DueDeliveries implements Store. Quarantined rejected rows are audit-only
+// and never retried.
 func (s *PGStore) DueDeliveries(ctx context.Context, olderThan time.Duration, maxAttempts int, limit int) ([]domain.Delivery, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, source, ext_delivery_id, event_kind, repo, sig_ok, status, attempts, received_at, COALESCE(last_attempt_at, received_at), payload
 		FROM ingest.deliveries
-		WHERE status <> $1 AND attempts < $2
+		WHERE status = ANY($1) AND attempts < $2
 		  AND COALESCE(last_attempt_at, received_at) <= $3
 		ORDER BY received_at
 		LIMIT $4`,
-		domain.StatusForwarded, maxAttempts, time.Now().Add(-olderThan), limit)
+		[]string{domain.StatusPending, domain.StatusForwardFailed}, maxAttempts, time.Now().Add(-olderThan), limit)
 	if err != nil {
 		return nil, fmt.Errorf("pg store: due deliveries: %w", err)
 	}
@@ -173,4 +184,15 @@ func nullableTime(t time.Time) any {
 		return nil
 	}
 	return t
+}
+
+// newPgUniqueViolation reports whether err is a Postgres unique_violation
+// (SQLSTATE 23505); used to map constraint collisions onto the domain
+// sentinel without leaking driver types upward.
+func newPgUniqueViolation(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgErrCodeUnique {
+		return err
+	}
+	return nil
 }

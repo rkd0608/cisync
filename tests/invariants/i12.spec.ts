@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { liveModeEnabled, harnessEnv } from './lib/env.js';
-import { apiBase, authedHeaders, ingestBase } from './lib/live.js';
+import { apiBase, authedHeaders, findEvents, ingestBase } from './lib/live.js';
 import { intentGrantSchema } from './lib/api-schemas.js';
 import { newIdempotencyKey, request, requestLoose } from './lib/http.js';
 
@@ -62,8 +62,12 @@ describe.skipIf(!liveModeEnabled())('I-12 live: duplicate commands collapse to o
     expect(second.status).toBe(first.status);
     // Byte-level identity is the strongest documented replay guarantee.
     expect(second.rawText).toBe(first.rawText);
-    const page = await import('./lib/live.js').then((m) => m.tailEvents(0));
-    const declared = page.events.filter((e) => e.type === 'intent.declared' && e.payload['intent_id'] === first.body.intent_id);
+    // WHY findEvents over one tail page: shared-stack suites advance global
+    // seq past the default page; the pair must be found wherever it sits.
+    const declared = await findEvents(
+      (e) => e.type === 'intent.declared' && e.payload['intent_id'] === first.body.intent_id,
+      { timeoutMs: 10_000 },
+    );
     expect(declared).toHaveLength(1);
   });
 
@@ -76,19 +80,16 @@ describe.skipIf(!liveModeEnabled())('I-12 live: duplicate commands collapse to o
       expect([200, 202]).toContain(res.status);
       if (res.status === 404) return; // ingest not deployed in this env; ctrl-only mode
     }
-    const accepted = await waitForDeliveryAccepted(guid, 20_000);
+    const accepted = await findDeliveryAccepted(guid, 20_000);
     expect(accepted).toHaveLength(1);
 
-    async function waitForDeliveryAccepted(targetGuid: string, timeoutMs: number) {
-      const deadline = Date.now() + timeoutMs;
-      let found: Awaited<ReturnType<typeof import('./lib/live.js').tailEvents>>['events'] = [];
-      while (Date.now() < deadline) {
-        const page = await import('./lib/live.js').then((m) => m.tailEvents(0));
-        found = page.events.filter((e) => e.type === 'delivery.accepted' && e.payload['ext_delivery_id'] === targetGuid);
-        if (found.length > 0) return found;
-        await new Promise((r) => setTimeout(r, 400));
-      }
-      return found;
+    // Paginates via findEvents so the GUID is found regardless of how far
+    // global seq advanced during earlier suites.
+    async function findDeliveryAccepted(targetGuid: string, timeoutMs: number) {
+      return findEvents(
+        (e) => e.type === 'delivery.accepted' && e.payload['ext_delivery_id'] === targetGuid,
+        { timeoutMs },
+      );
     }
 
     async function postSignedWebhook(deliveryGuid: string, rawBody: string, secretKey: string) {

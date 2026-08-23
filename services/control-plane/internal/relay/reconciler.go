@@ -11,11 +11,22 @@ import (
 type Reconciler struct {
 	store *store.Store
 	fleet *FleetClient
+	// staleMaxAge bounds dispatched-without-completion lifetime; see
+	// config.StaleRunMaxAge for why it is configurable.
+	staleMaxAge time.Duration
 }
 
-// NewReconciler constructs the reconciler.
-func NewReconciler(st *store.Store, fleet *FleetClient) *Reconciler {
-	return &Reconciler{store: st, fleet: fleet}
+// DefaultStaleRunMaxAge is the documented prod posture: 2× the default job
+// timeout (15 min).
+const DefaultStaleRunMaxAge = 30 * time.Minute
+
+// NewReconciler constructs the reconciler; maxAge ≤ 0 falls back to the
+// documented 30-minute posture.
+func NewReconciler(st *store.Store, fleet *FleetClient, maxAge time.Duration) *Reconciler {
+	if maxAge <= 0 {
+		maxAge = DefaultStaleRunMaxAge
+	}
+	return &Reconciler{store: st, fleet: fleet, staleMaxAge: maxAge}
 }
 
 // Run loops reconcile every interval until ctx is cancelled (ARCHITECTURE §3:
@@ -64,8 +75,7 @@ func (rc *Reconciler) ReconcileOnce(ctx context.Context) error {
 		}
 	}
 
-	staleMaxAge := 2 * 15 * time.Minute
-	cancelled, err := rc.store.CancelStaleDispatchedRuns(ctx, staleMaxAge, "stale_base")
+	cancelled, err := rc.store.CancelStaleDispatchedRuns(ctx, rc.staleMaxAge, "stale_base")
 	if err != nil {
 		return err
 	}

@@ -35,7 +35,7 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 		}
 	}
 	if !isRequired {
-		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan)
+		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan, nil)
 	}
 	leaseJTI := fmt.Sprintf("fleet:%s:%d", run.ID, job.FenceToken)
 	prior, err := e.store.AcceptedEvidenceForRun(ctx, run.TenantID, run.ID)
@@ -50,7 +50,7 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 	outcome := evidenceEvaluate(rec, evidenceContext(plan, leaseJTI, prior))
 	if outcome.Action != evidencepkg.ActionAccept {
 		logf("evidence %s for run %s rejected: %s", kind, run.ID, outcome.Reason)
-		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan)
+		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan, nil)
 	}
 	ev, err := newEvidenceRecordedEvent(rec)
 	if err != nil {
@@ -63,12 +63,22 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 	if err := store.InsertEvidenceTx(ctx, tx, rec, ev.Seq); err != nil {
 		return err
 	}
-	return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan)
+	// The just-inserted row is INVISIBLE to pool reads until commit, so the
+	// sufficiency check must count it explicitly (see maybeRenderEligible).
+	return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan,
+		&store.EvidenceRef{ID: rec.ID, Kind: kind})
 }
 
 // maybeRenderEligible renders eligible_for_merge_train once every required
-// kind has an accepted record (sufficiency == 1 per D8).
-func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, tenantID, candidateID string, plan *domain.ValidationPlan) error {
+// kind has an accepted record (sufficiency == 1 per D8) AND no unresolved
+// required-kind failure / pending repair blocks the verb (decision must
+// reflect ALL completed evidence).
+//
+// extra carries the CURRENT transaction's own accepted record: store reads
+// inside this effect tx go through the pool and cannot see its uncommitted
+// writes, so without it sufficiency would always compute <1 on the completing
+// run and the decision would stall until some later completion re-checked.
+func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, tenantID, candidateID string, plan *domain.ValidationPlan, extra *store.EvidenceRef) error {
 	// Decisions are immutable facts; only the FIRST time sufficiency hits 1
 	// renders one (replays of the completion feed must not duplicate).
 	existing, err := e.store.LatestDecisionForCandidate(ctx, tenantID, candidateID)
@@ -78,9 +88,24 @@ func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, te
 	if err != nil && err != domain.ErrNotFound {
 		return err
 	}
+	failedRequired, err := e.store.CountFailedRequiredRuns(ctx, tenantID, candidateID, plan.RequiredEvidenceKinds)
+	if err != nil {
+		return fmt.Errorf("count failed required runs: %w", err)
+	}
+	candState, err := e.store.CandidateStateByID(ctx, tenantID, candidateID)
+	if err != nil && err != domain.ErrNotFound {
+		return fmt.Errorf("load candidate state: %w", err)
+	}
+	if reason := eligibilityBlockReason(candState, failedRequired); reason != "" {
+		logf("eligible blocked for %s: %s", candidateID, reason)
+		return nil
+	}
 	accepted, err := e.store.AcceptedEvidenceRefsForCandidate(ctx, tenantID, candidateID)
 	if err != nil {
 		return err
+	}
+	if extra != nil {
+		accepted = append(accepted, *extra)
 	}
 	sufficiency := evidenceSufficiency(plan.RequiredEvidenceKinds, accepted)
 	if sufficiency < 1 {

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -43,12 +44,26 @@ func NewCorrelationID() string { return NewID(PrefixCorr) }
 // HashPrefix prefixes every stored digest (events.schema.json $defs/sha256).
 const HashPrefix = "sha256:"
 
-// CanonicalJSON marshals v with encoding/json's deterministic map key order;
-// it is the canonical byte form used for payload digests.
+// CanonicalJSON marshals v into the canonical byte form used for payload
+// digests: recursively key-sorted JSON. encoding/json alone is NOT enough —
+// struct values serialize in field declaration order (e.g. ConflictRef), so
+// an independent verifier recomputing digests over sorted keys would reject
+// them. Round-tripping through generic maps restores full sortability; UseNumber
+// keeps numeric literals byte-exact.
 func CanonicalJSON(v any) ([]byte, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("canonical json: %w", err)
 	}
-	return b, nil
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var generic any
+	if err := dec.Decode(&generic); err != nil {
+		return nil, fmt.Errorf("canonical json round-trip: %w", err)
+	}
+	out, err := json.Marshal(generic)
+	if err != nil {
+		return nil, fmt.Errorf("canonical json re-marshal: %w", err)
+	}
+	return out, nil
 }

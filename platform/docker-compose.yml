@@ -22,6 +22,7 @@ services:
       SAURON_INGEST_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
       SAURON_INGEST_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
       SAURON_INGEST_ADDR: ":8080"
+      SAURON_INGEST_CTRL_URL: http://control-plane:8081
     ports: ["8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -29,13 +30,32 @@ services:
   control-plane:
     build: ../services/control-plane
     environment:
-      SAURON_CTRL_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
+      SAURON_CTRL_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron?pool_max_conns=20
+      # WHY 20 conns: scheduler tick, outbox relay and API bursts share one
+      # pool; the pgx default (4×CPU) starves intent-creation bursts.
       SAURON_CTRL_ADDR: ":8081"
       SAURON_CTRL_FLEET_URL: http://runner-fleet:8082
       SAURON_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.dev.key
       SAURON_CTRL_ADMIN_TOKEN: dev_admin_token_not_for_prod
       SAURON_CTRL_CONNECTOR_URL: http://github-connector:8083
       SAURON_CTRL_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
+      # WHY 600: one suite run issues ~40 intent creations inside ~30s; the
+      # 120/min default bucket drains across back-to-back runs and 429s them.
+      # Typed rate_limited refusals themselves stay contract-conformant.
+      SAURON_CTRL_RATE_LIMIT_PER_MIN: "600"
+      # WHY 24: batch bounds per-tick dispatch; 8 starved suite fan-out
+      # (17 runs per candidate) behind multi-suite concurrency.
+      SAURON_CTRL_SCHED_BATCH: "24"
+      # WHY 200ms: e2e/invariant suites fan out ~16 sim runs per candidate;
+      # the 1s default tick made decision latency exceed the 30s harness
+      # windows under full-suite load (W3 close-out, SPEC §3).
+      SAURON_CTRL_TICK_INTERVAL: "200ms"
+      # WHY 5s+300s: a fleet restart orphans ctrl-side dispatched runs and
+      # the reconciler must reclaim them, BUT a run may legitimately sit
+      # dispatched while the fleet works through a burst backlog — killing
+      # it there strands its candidate (a required kind can never complete).
+      SAURON_CTRL_RECONCILE_INTERVAL: "5s"
+      SAURON_CTRL_STALE_RUN_MAX_AGE: "300s"
     volumes:
       - ./dev-keys:/keys:ro
     ports: ["8081:8081"]
@@ -48,7 +68,9 @@ services:
       SAURON_FLEET_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
       SAURON_FLEET_ADDR: ":8082"
       SAURON_FLEET_PROVIDER: sim
-      SAURON_FLEET_SIM_WORKERS: "8"
+      # WHY 48: matches multi-suite fan-out so queued runs drain faster than
+      # the harness decision windows; sim jobs are trivial, dev posture only.
+      SAURON_FLEET_SIM_WORKERS: "48"
     ports: ["8082:8082"]
     depends_on:
       postgres: { condition: service_healthy }

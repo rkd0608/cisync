@@ -85,7 +85,7 @@ func (s *Server) handleGetDossier(w http.ResponseWriter, r *http.Request) {
 			DecisionID: decision.ID,
 			Verb:       decision.Verb,
 			Confidence: decision.Confidence,
-			Policy:     decision.Policy,
+			Policy:     dossierPolicyJSON{PolicyID: decision.Policy.PolicyID, Version: decision.Policy.Version},
 			Summary:    decision.Summary,
 		},
 		EvidenceAccepted:  accepted,
@@ -97,12 +97,20 @@ func (s *Server) handleGetDossier(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
 }
 
+// dossierPolicyJSON matches openapi EvidenceDossier.decision.policy
+// key-for-key: the REST shape spells the version field "version" (the event
+// schema's PolicyRef uses "policy_version" — they are intentionally distinct).
+type dossierPolicyJSON struct {
+	PolicyID string `json:"policy_id"`
+	Version  int    `json:"version"`
+}
+
 type dossierDecisionJSON struct {
-	DecisionID string           `json:"decision_id"`
-	Verb       string           `json:"verb"`
-	Confidence float64          `json:"confidence"`
-	Policy     domain.PolicyRef `json:"policy"`
-	Summary    string           `json:"summary"`
+	DecisionID string            `json:"decision_id"`
+	Verb       string            `json:"verb"`
+	Confidence float64           `json:"confidence"`
+	Policy     dossierPolicyJSON `json:"policy"`
+	Summary    string            `json:"summary"`
 }
 
 type dossierEvidenceJSON struct {

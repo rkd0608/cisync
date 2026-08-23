@@ -126,6 +126,14 @@ func classify(c, rep Member, symOverlap, trigram float64) string {
 		symOverlap >= SymbolOverlapThreshold && trigram >= TrigramThreshold {
 		return RelationDuplicateOf
 	}
+	// Symbol-less submissions (v1 REST carries no changed_symbols): the
+	// symbol gate cannot discriminate, so identical FULL path sets with
+	// trigram ≥ τ are the same fix — without this duplicate_of and the
+	// supersede propagation it drives are unreachable via the API.
+	if len(c.ChangedSymbols) == 0 && len(rep.ChangedSymbols) == 0 &&
+		trigram >= TrigramThreshold && samePathSet(c.ChangedPaths, rep.ChangedPaths) {
+		return RelationDuplicateOf
+	}
 	for _, dep := range c.DependsOn {
 		if dep == rep.ID {
 			return RelationPrerequisite
@@ -135,6 +143,23 @@ func classify(c, rep Member, symOverlap, trigram float64) string {
 		return RelationConflicting
 	}
 	return RelationAlternativeOf
+}
+
+// samePathSet reports set equality of two path slices (order-insensitive).
+func samePathSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	setB := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		setB[x] = struct{}{}
+	}
+	for _, x := range a {
+		if _, ok := setB[x]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func sharesExactPath(a, b []string) bool {

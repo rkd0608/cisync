@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { staleFenceAttempt } from './lib/attack-vectors.js';
 import { liveModeEnabled } from './lib/env.js';
-import { claimFleetJob, completeFleetJob, createIntent, submitCandidate } from './lib/live.js';
+import { claimFleetJob, completeFleetJob } from './lib/live.js';
 import type { FleetClaimResponse } from './lib/api-schemas.js';
 
 /**
@@ -43,17 +43,21 @@ describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder wr
   let claimed: ClaimedJob | undefined;
 
   async function claimWithin(timeoutMs: number): Promise<ClaimedJob | undefined> {
+    // WHY the probe pool: claiming from 'sim' steals another suite's live run
+    // and double-bumps its fence, stranding that candidate (I-11 regression
+    // driver). The seeded job exercises the identical fencing surface.
+    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL } = await import('./lib/live.js');
+    await seedFenceProbeJob(`i11-${Date.now()}`);
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const found = await claimFleetJob();
+      const found = await claimFleetJob(FENCE_PROBE_POOL);
       if (found) return found.job;
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 200));
     }
     return undefined;
   }
 
-  it('wrong-token completion → 409 fence_mismatch; correct token → accepted', async () => {
-    await seedWork();
+  it('wrong-token completion → 409 fence_mismatch; correct token → accepted', { timeout: 30_000 }, async () => {
     claimed = await claimWithin(15_000);
     if (!claimed) return; // dispatch not wired yet
     const wrong = await completeFleetJob(claimed.run_id, claimed.fence_token + 1_000_000, 'succeeded');
@@ -66,10 +70,5 @@ describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder wr
     const right = await completeFleetJob(claimed.run_id, claimed.fence_token, 'failed');
     expect(right.status).toBe(200);
     expect(right.accepted).toBe(true);
-
-    async function seedWork(): Promise<void> {
-      const grant = await createIntent('i11-live');
-      await submitCandidate(grant.intent_id, 'i11-live');
-    }
   });
 });

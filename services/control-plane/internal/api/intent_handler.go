@@ -130,6 +130,9 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	intentID := domain.NewID(domain.PrefixIntent)
 	leaseID := domain.NewID(domain.PrefixLease)
+	// Reserve the first candidate slot so the §3b lifecycle trace is rooted
+	// in one id from declaration onward.
+	initialCand := domain.NewID(domain.PrefixCandidate)
 	declared := domain.IntentDeclared{
 		Goal:               in.Goal,
 		Repo:               in.Repository,
@@ -149,6 +152,7 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 		declared.Deadline = &t
 	}
 	intent := domain.NewIntent(intentID, tenant, declared, now)
+	intent.InitialCandidateID = initialCand
 	lease := domain.NewLease(leaseID, tenant, intentID,
 		domain.LeaseScope{Kind: domain.ScopeChangeScope, Surfaces: in.ExpectedSurfaces},
 		"agent:"+tenant, pol.PerCandidateBudget, s.cfg.DefaultLeaseTTL, requiredEvidence, now)

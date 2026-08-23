@@ -97,6 +97,11 @@ type Intent struct {
 	Declared  IntentDeclared
 	CreatedAt time.Time
 	ClosedAt  *time.Time
+	// InitialCandidateID reserves the FIRST candidate slot at declaration
+	// (ARCHITECTURE_DRAFT §3b): it is stamped into intent.declared /
+	// lease.granted payloads and consumed by the first submission, making
+	// the whole lifecycle traceable from a single candidate id.
+	InitialCandidateID string
 }
 
 // NewIntent constructs an intent in the exploring state.

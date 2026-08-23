@@ -14,12 +14,23 @@ import (
 // ClaimJobs implements Store. The single UPDATE ... WHERE id IN (SELECT ...
 // FOR UPDATE SKIP LOCKED) statement is the atomic claim primitive; concurrent
 // claimers never receive the same row and every claim bumps the epoch.
+// The claiming worker is registered inside the same tx BEFORE the claim so
+// execution_jobs.claimed_by's FK can never reject an unknown (e.g. external
+// "anonymous") worker.
 func (s *PGStore) ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]domain.Job, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("pg store: begin claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
+		VALUES ($1,$2,$3,$4)
+		ON CONFLICT (id) DO UPDATE SET pool=EXCLUDED.pool, last_heartbeat=EXCLUDED.last_heartbeat`,
+		c.WorkerID, c.Pool, c.Limit, now); err != nil {
+		return nil, fmt.Errorf("pg store: upsert worker: %w", err)
+	}
 
 	rows, err := tx.Query(ctx, `
 		UPDATE fleet.execution_jobs j
@@ -56,13 +67,6 @@ func (s *PGStore) ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]doma
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("pg store: commit claim: %w", err)
-	}
-	if _, err := s.pool.Exec(ctx, `
-		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
-		VALUES ($1,$2,$3,$4)
-		ON CONFLICT (id) DO UPDATE SET pool=EXCLUDED.pool, last_heartbeat=EXCLUDED.last_heartbeat`,
-		c.WorkerID, c.Pool, c.Limit, now); err != nil {
-		return nil, fmt.Errorf("pg store: upsert worker: %w", err)
 	}
 	return claimed, nil
 }

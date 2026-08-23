@@ -47,7 +47,9 @@ describe('I-10 contract: refusal envelope is machine-readable', () => {
 });
 
 describe.skipIf(!liveModeEnabled())('I-10 live: burst sees only grants or typed refusals', () => {
-  it('concurrent intent burst never overruns admission (5xx-free)', async () => {
+  // WHY 60s: asserts the OUTCOME distribution only; latency under full-suite
+  // concurrency is not part of the I-10 contract.
+  it('concurrent intent burst never overruns admission (5xx-free)', { timeout: 60_000 }, async () => {
     const attempts = Array.from({ length: 16 }, (_, i) =>
       request(
         {

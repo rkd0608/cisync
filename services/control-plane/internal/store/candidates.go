@@ -19,13 +19,15 @@ type CandidateAcceptedData struct {
 }
 
 // LiveCandidateExists reports whether a non-terminal candidate already covers
-// (intent_id, head_sha) — duplicate_sha conflict (EC-019).
-func (s *Store) LiveCandidateExists(ctx context.Context, tenantID, intentID, headSHA string) (bool, error) {
+// (intent_id, head_sha, base_sha) — duplicate_sha conflict (EC-019). The
+// base participates because a moved base is a changed input (I-02): the same
+// patch on a new base must plan fresh, never be swallowed as a duplicate.
+func (s *Store) LiveCandidateExists(ctx context.Context, tenantID, intentID, headSHA, baseSHA string) (bool, error) {
 	var exists bool
 	err := s.Pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM ctrl.candidates
-		 WHERE tenant_id=$1 AND intent_id=$2 AND head_sha=$3 AND state NOT IN ('superseded','cancelled'))`,
-		tenantID, intentID, headSHA,
+		 WHERE tenant_id=$1 AND intent_id=$2 AND head_sha=$3 AND base_sha=$4 AND state NOT IN ('superseded','cancelled'))`,
+		tenantID, intentID, headSHA, baseSHA,
 	).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("live candidate check: %w", err)
@@ -182,4 +184,19 @@ func derefString(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// CandidateStateByID returns just the lifecycle state of one candidate —
+// the lightweight read the completion gate needs for I-08 absorption.
+func (s *Store) CandidateStateByID(ctx context.Context, tenantID, candidateID string) (domain.CandidateState, error) {
+	row := s.Pool.QueryRow(ctx,
+		`SELECT state FROM ctrl.candidates WHERE id=$1 AND tenant_id=$2`, candidateID, tenantID)
+	var state string
+	if err := row.Scan(&state); err != nil {
+		if err == pgx.ErrNoRows {
+			return "", domain.ErrNotFound
+		}
+		return "", fmt.Errorf("candidate state: %w", err)
+	}
+	return domain.CandidateState(state), nil
 }
