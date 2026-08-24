@@ -280,3 +280,16 @@ Assumes ARCHITECTURE wave numbering; UX waves ride behind their backend deps. Al
 5. **Shadow metrics definition sign-off**: agreement_rate denominator (all decisions? only divergences?) and whether "would-have-blocked" counts need ground-truth labels from full-suite runs — needs TEST_STRATEGY owner (mirrors DOMAIN_MODEL §9.8).
 6. **Queue SLA surface**: should unresolved-queue-age alarm anyone (email/slack) in v0.2, or purely passive dashboard?
 7. **Onboarding posture choice**: v0.2 shows compiled-in policy readonly — do we fake multi-posture selection (cosmetic) or show truth (single default)? Truth recommended; confirm no demo-value objection.
+
+
+---
+
+## 10. INTEGRATOR RULINGS (FROZEN for W5)
+
+1. Human approvals: G1/G2 ship gated on existing ADMIN bearer scope; UI shows action bar only for admin-scoped sessions, read-only otherwise. RBAC = v0.3.
+2. `?at=dec_X` permalinks: re-render live data with a "state changed since this decision" banner in v0.2; snapshot copies = LATER.
+3. Synthetic-intent adoption: API/CLI-only in v0.2; dossier shows amber synthetic flag, no adopt button.
+4. PR comments: NONE in v0.2 — check-only (restraint argument adopted wholesale); exceptions revisit at W3+ behind policy opt-in.
+5. Shadow metrics (G6): LATER; strips render hidden until endpoint exists (graceful absence contract).
+6. Queue SLA alarms: passive dashboard only in v0.2.
+7. Onboarding posture: show TRUTH (single compiled-in default policy readonly) — no cosmetic choice screens.

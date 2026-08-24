@@ -46,15 +46,17 @@ describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder wr
   let leaseToken: string | undefined;
 
   async function claimWithin(timeoutMs: number): Promise<ClaimedJob | undefined> {
-    // WHY the probe pool: claiming from 'sim' steals another suite's live run
-    // and double-bumps its fence, stranding that candidate (I-11 regression
-    // driver). The seeded job exercises the identical fencing surface.
-    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL } = await import('./lib/live.js');
+    // WHY a seeded job in its own private probe pool: claiming from 'sim'
+    // steals another suite's live run and double-bumps its fence, stranding
+    // that candidate (I-11 regression driver); a SHARED probe pool hands
+    // back stale leftovers whose credentials we don't hold. The seeded job
+    // exercises the identical fencing surface with its own credential.
+    const { seedFenceProbeJob, claimFleetJob } = await import('./lib/live.js');
     const seed = await seedFenceProbeJob(`i11-${Date.now()}`);
     leaseToken = seed.leaseToken;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const found = await claimFleetJob(FENCE_PROBE_POOL);
+      const found = await claimFleetJob(seed.pool);
       if (found) return found.job;
       await new Promise((r) => setTimeout(r, 200));
     }
@@ -79,9 +81,16 @@ describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder wr
 
   it('completion without the job-lease credential is refused unauthorized (P0-1)', { timeout: 30_000 }, async () => {
     if (!claimed) return;
-    const unauthed = await completeFleetJob(claimed.run_id, claimed.fence_token, 'failed');
+    // WHY raw fetch: completeFleetJob fails closed client-side when called
+    // without a credential; the probe must observe the SERVER's typed 401.
+    const { fleetBase, expectErrorBody } = await import('./lib/live.js');
+    const unauthed = await fetch(`${fleetBase()}/internal/fleet/jobs/${claimed.run_id}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fence_token: claimed.fence_token, status: 'failed', logs_digest: 'sha256:' + 'b'.repeat(64), artifact_digests: [], duration_ms: 900, actual_cost_millicents: 42 }),
+    });
     expect(unauthed.status).toBe(401);
-    const envelope = await import('./lib/live.js').then((m) => m.expectErrorBody(unauthed.status, JSON.stringify(unauthed.body)));
+    const envelope = await expectErrorBody(unauthed.status, await unauthed.text());
     expect(envelope.error.code).toBe('unauthorized');
   });
 });

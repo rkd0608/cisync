@@ -2,7 +2,7 @@ package policy
 
 import (
 	"errors"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -229,8 +229,11 @@ func TestPropertyResolveDeterministic(t *testing.T) {
 			})
 		}
 		shuffled := append([]PolicyRecord(nil), recs...)
-		// reverse to get a different permutation deterministically
-		sort.SliceStable(shuffled, func(i, j int) bool { return true })
+		// Reverse for a deterministic different permutation. WHY not sort:
+		// a `return true` comparator violates strict-weak ordering, so the
+		// "permutation" was whatever sort happened to produce — sometimes no
+		// permutation at all, which made this property vacuous/flaky.
+		slices.Reverse(shuffled)
 		subject := propSubject(t)
 		a, errA := Resolve(subject, RegistryFunc(func() ([]PolicyRecord, error) { return recs, nil }))
 		b, errB := Resolve(subject, RegistryFunc(func() ([]PolicyRecord, error) { return shuffled, nil }))

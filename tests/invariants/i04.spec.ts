@@ -51,31 +51,46 @@ describe('I-04 contract: lease grants are scope- and TTL-bounded by schema', () 
 
 describe.skipIf(!liveModeEnabled())('I-04 live: claimed credentials stay inside their declared job', () => {
   it('claimed job_spec matches the sim pool and rejects foreign-fence heartbeats', { timeout: 30_000 }, async () => {
-    // WHY a seeded job in the probe pool: claiming from 'sim' steals a live
-    // run of another concurrent suite and corrupts its fence epoch (I-11
-    // regression driver). The probe only needs A claimable job.
-    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL, fleetBase } = await import('./lib/live.js');
-    await seedFenceProbeJob(`i04-${Date.now()}`);
+    // WHY a seeded job in a private probe pool: claiming from 'sim' steals a
+    // live run of another concurrent suite and corrupts its fence epoch
+    // (I-11 regression driver). The probe only needs A claimable job, and it
+    // mutates with its own seeded credential (P0-1/B2).
+    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL, fleetBase, expectErrorBody } = await import('./lib/live.js');
+    const seed = await seedFenceProbeJob(`i04-${Date.now()}`);
     let claimed: Awaited<ReturnType<typeof claimFleetJob>> | undefined;
     for (let i = 0; i < 20 && !claimed; i++) {
-      claimed = await claimFleetJob(FENCE_PROBE_POOL);
+      claimed = await claimFleetJob(seed.pool);
       if (!claimed) await new Promise((r) => setTimeout(r, 200));
     }
     if (!claimed) return; // claim path unavailable in this environment
+    expect(claimed.job.pool).toContain(FENCE_PROBE_POOL);
     const spec = claimed.job.job_spec;
-    expect(claimed.job.pool).toBe(FENCE_PROBE_POOL);
     expect(spec.repo).toMatch(/^[\w.-]+\/[\w.-]+$/);
     expect(spec.base_sha).toMatch(/^[a-f0-9]{40}$/);
     expect(spec.head_sha).toMatch(/^[a-f0-9]{40}$/);
     expect(spec.timeout_ms).toBeGreaterThan(0);
-    // A fence token the lease never declared must not operate the job.
+    const beat = (fence: number, token?: string): Promise<Response> =>
+      fetch(`${fleetBase()}/internal/fleet/jobs/${claimed!.job.run_id}/heartbeat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ fence_token: fence }),
+      });
+
+    // A mutation WITHOUT the job-lease credential is refused as the typed
+    // 401 BEFORE any fence evaluation (P0-1 auth ordering).
+    const unauthed = await beat(claimed.job.fence_token);
+    expect(unauthed.status).toBe(401);
+    expect((await expectErrorBody(unauthed.status, await unauthed.text())).error.code).toBe('unauthorized');
+
+    // A VALID credential presenting a fence the lease never declared hits
+    // the fenced write: 409 fence_mismatch — never 204.
     const foreign = claimed.job.fence_token + 1_000_000;
-    const beat = await fetch(`${fleetBase()}/internal/fleet/jobs/${claimed.job.run_id}/heartbeat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fence_token: foreign }),
-    });
-    expect(beat.status).not.toBe(204);
+    const stale = await beat(foreign, seed.leaseToken);
+    expect(stale.status).toBe(409);
+    expect(String(((await stale.json()) as Record<string, unknown>)['reason'])).toBe('fence_mismatch');
   });
 
   it('dispatch reaches the fleet after a candidate lands (liveness of scoping path)', async () => {

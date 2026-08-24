@@ -35,12 +35,15 @@ func openTestPG(t *testing.T) *PGStore {
 // probe) must be registered atomically with the claim — the
 // execution_jobs.claimed_by FK makes an unregistered claim impossible, and it
 // must surface as success, never a 500.
+// WHY a private pool: the shared 'sim' pool can hold older queued rows whose
+// LIMIT-4 head evicts this test's job on a long-lived dev stack.
 func TestClaimAutoRegistersUnknownWorker(t *testing.T) {
 	st := openTestPG(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
 	const runID = "run_claim_anon_reg"
+	const pool = "test-anon-reg"
 	if _, err := st.pool.Exec(ctx, `DELETE FROM fleet.execution_jobs WHERE run_id=$1`, runID); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -48,12 +51,12 @@ func TestClaimAutoRegistersUnknownWorker(t *testing.T) {
 		_, _ = st.pool.Exec(ctx, `DELETE FROM fleet.execution_jobs WHERE run_id=$1`, runID)
 	})
 
-	err := st.Enqueue(ctx, domain.Job{RunID: runID, Attempt: 1, Tier: 1, Pool: "sim"})
+	err := st.Enqueue(ctx, domain.Job{RunID: runID, Attempt: 1, Tier: 1, Pool: pool})
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	claimed, err := st.ClaimJobs(ctx, Claim{Pool: "sim", Provider: "external", Limit: 4, WorkerID: "anonymous"}, now)
+	claimed, err := st.ClaimJobs(ctx, Claim{Pool: pool, Provider: "external", Limit: 4, WorkerID: "anonymous"}, now)
 	if err != nil {
 		t.Fatalf("claim with unknown worker id must succeed: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"sauron.dev/sauron/control-plane/internal/config"
 	"sauron.dev/sauron/control-plane/internal/domain"
+	"sauron.dev/sauron/control-plane/internal/joblease"
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
@@ -53,8 +54,14 @@ func pgScheduler(t *testing.T) (*EngineScheduler, *store.Store, func()) {
 		st.Close()
 		t.Fatalf("migrate: %v", err)
 	}
+	// P0-1/B2: dispatch mints a job-lease credential per run, so the engine
+	// under test needs a real signer — nil now fails closed at dispatchOne.
+	signer, err := joblease.NewSignerForTesting()
+	if err != nil {
+		t.Fatalf("job lease test signer: %v", err)
+	}
 	fleet := &fakeFleet{}
-	engine := NewEngine(st, fleet, "sim", 8, nil)
+	engine := NewEngine(st, fleet, "sim", 8, signer)
 	return engine, st, func() { st.Close() }
 }
 
@@ -127,12 +134,22 @@ func seedValidationCandidate(t *testing.T, st *store.Store, tenantID, tag string
 
 // dispatchRuns walks the seeded runs through queued→dispatched exactly like
 // the scheduler does, so seeded completions carry the post-claim fence (I-11).
+// The reservation mirrors Admit's arithmetic (cpuMinutes(est) + one
+// concurrency slot per dispatched run) — I-06 conservation is only meaningful
+// against the amounts production dispatch actually reserves.
 func dispatchRuns(t *testing.T, engine *EngineScheduler, runIDs []string) {
 	t.Helper()
 	resolved := DefaultPolicySource()
 	for _, id := range runIDs {
-		if _, err := engine.dispatchOne(context.Background(), id,
-			BudgetReservation{}, resolved); err != nil {
+		run, err := engine.store.GetRunByID(context.Background(), id)
+		if err != nil {
+			t.Fatalf("load %s: %v", id, err)
+		}
+		reservation := BudgetReservation{
+			CPUMinutes:           cpuMinutes(run.EstDurationMS),
+			ConcurrentCandidates: 1,
+		}
+		if _, err := engine.dispatchOne(context.Background(), id, reservation, resolved); err != nil {
 			t.Fatalf("dispatch %s: %v", id, err)
 		}
 	}

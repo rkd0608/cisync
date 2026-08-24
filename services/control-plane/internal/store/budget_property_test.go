@@ -47,8 +47,23 @@ func TestBudgetConservationProperty(t *testing.T) {
 	tenant := tenantFor(t, st)
 	kinds := []BudgetKind{BudgetCPUMinutes, BudgetConcurrentCandidates, BudgetRepairAttempts}
 
+	// P0-3: ReserveBudgetsTx fails closed when a kind has no configured
+	// limit, so this conservation harness pins an effectively-unbounded one;
+	// the deny path is covered separately by TestReserveEnforcesLimitAtomically.
+	noCeiling := BudgetLimits{}
+	for _, k := range kinds {
+		noCeiling[k] = 1 << 40
+	}
+
 	rapid.Check(t, func(t *rapid.T) {
 		ctx := context.Background()
+		// Zero the baseline INSIDE each rapid iteration: counters persist
+		// across iterations (and suite runs), and conservation is asserted
+		// against a zero start.
+		if _, err := st.Pool.Exec(ctx,
+			`DELETE FROM ctrl.budget_counters WHERE tenant_id=$1`, tenant); err != nil {
+			t.Fatalf("reset counters: %v", err)
+		}
 		outstanding := map[BudgetKind]int64{}
 		for _, k := range kinds {
 			outstanding[k] = 0
@@ -70,7 +85,7 @@ func TestBudgetConservationProperty(t *testing.T) {
 		for i, op := range ops {
 			err := st.ExecTx(ctx, func(tx pgx.Tx) error {
 				if op.reserve > 0 {
-					return ReserveBudgetsTx(ctx, tx, tenant, int64(i), BudgetDeltas{op.kind: op.reserve}, nil)
+					return ReserveBudgetsTx(ctx, tx, tenant, int64(i), BudgetDeltas{op.kind: op.reserve}, noCeiling)
 				}
 				return ReleaseBudgetsTx(ctx, tx, tenant, int64(i), BudgetDeltas{op.kind: op.release})
 			})
@@ -114,6 +129,13 @@ func TestReserveEnforcesLimitAtomically(t *testing.T) {
 	}
 	ctx := context.Background()
 	tenant := tenantFor(t, st)
+
+	// Zero the baseline: the rapid conservation test shares this tenant and
+	// leaves arbitrary counter values behind.
+	if _, err := st.Pool.Exec(ctx,
+		`DELETE FROM ctrl.budget_counters WHERE tenant_id=$1`, tenant); err != nil {
+		t.Fatalf("reset counters: %v", err)
+	}
 
 	err = st.ExecTx(ctx, func(tx pgx.Tx) error {
 		return ReserveBudgetsTx(ctx, tx, tenant, 1, BudgetDeltas{BudgetCPUMinutes: 5},

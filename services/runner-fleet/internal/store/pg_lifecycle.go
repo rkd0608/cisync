@@ -12,11 +12,9 @@ import (
 // ClaimJobs implements Store. The single UPDATE ... WHERE id IN (SELECT ...
 // FOR UPDATE SKIP LOCKED) statement is the atomic claim primitive; concurrent
 // claimers never receive the same row and every claim bumps the epoch.
-// The claiming worker is registered inside the same tx BEFORE the claim so
-// execution_jobs.claimed_by's FK can never reject an unknown (e.g. external
-// "anonymous") worker.
 // EnsureWorker registers a worker liveness row; called once per executor slot
-// at startup, refreshed opportunistically. Kept OUTSIDE claim transactions.
+// at startup. ClaimJobs re-registers unknown claiming workers itself — see
+// the comment there for why that is required, not optional.
 func (s *PGStore) EnsureWorker(ctx context.Context, id string, pool string, capacity int, now time.Time) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
@@ -31,16 +29,30 @@ func (s *PGStore) EnsureWorker(ctx context.Context, id string, pool string, capa
 }
 
 func (s *PGStore) ClaimJobs(ctx context.Context, c Claim, now time.Time) ([]domain.Job, error) {
+	// Re-register an unknown claiming worker BEFORE the tx with DO NOTHING.
+	// WHY here: RequeueStale's liveness GC can reap a live executor slot
+	// (slots register once at startup and never refresh), and claimed_by's FK
+	// would then fail every later claim of that slot — the live W4 stall. The
+	// upsert sits OUTSIDE the claim tx (which must never touch fleet.workers,
+	// W3 lock-convoy finding), touches only this worker's row, and mirrors
+	// MemoryStore.ClaimJobs auto-registration so both stores agree.
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO fleet.workers (id, pool, capacity, last_heartbeat)
+		VALUES ($1,$2,1,$3)
+		ON CONFLICT (id) DO NOTHING`,
+		c.WorkerID, c.Pool, now); err != nil {
+		return nil, fmt.Errorf("pg store: register claiming worker %s: %w", c.WorkerID, err)
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("pg store: begin claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// WHY no worker-row upsert here: writing fleet.workers inside the claim
-	// tx serializes every claimer on one hot row and holds it across the
-	// batch UPDATE below — a lock convoy under backlog (W3 storm finding).
-	// Worker liveness is owned by EnsureWorker/TouchWorker instead.
+	// WHY no worker-row upsert INSIDE the tx: writing fleet.workers within
+	// the claim tx serializes every claimer on one hot row and holds it
+	// across the batch UPDATE below — a lock convoy under backlog (W3 storm
+	// finding). The registration above deliberately precedes Begin.
 
 	rows, err := tx.Query(ctx, `
 		UPDATE fleet.execution_jobs j

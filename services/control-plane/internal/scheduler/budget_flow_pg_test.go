@@ -29,6 +29,17 @@ func budgetUsed(t *testing.T, st *store.Store, tenantID string) map[store.Budget
 	return snap[tenantID]
 }
 
+// resetBudgetCounters zeroes the tenant's I-06 baseline: these tests share
+// one DB (and one DevTenant row-set) across the whole suite, and both
+// conservation assertions are phrased from zero.
+func resetBudgetCounters(t *testing.T, st *store.Store, tenantID string) {
+	t.Helper()
+	if _, err := st.Pool.Exec(context.Background(),
+		`DELETE FROM ctrl.budget_counters WHERE tenant_id=$1`, tenantID); err != nil {
+		t.Fatalf("reset counters: %v", err)
+	}
+}
+
 func TestDispatchReservesAndCompletionReleasesBudget(t *testing.T) {
 	engine, st, done := pgScheduler(t)
 	defer done()
@@ -36,6 +47,7 @@ func TestDispatchReservesAndCompletionReleasesBudget(t *testing.T) {
 	tenantID := config.DevTenant
 	tag := fmt.Sprintf("i06flow-%d", time.Now().UnixNano())
 	seeded := seedValidationCandidate(t, st, tenantID, tag)
+	resetBudgetCounters(t, st, tenantID)
 
 	before := budgetUsed(t, st, tenantID)[store.BudgetCPUMinutes]
 
@@ -77,6 +89,7 @@ func TestCancelOfDispatchedRunsReleasesReservations(t *testing.T) {
 	tenantID := config.DevTenant
 	tag := fmt.Sprintf("i06cancel-%d", time.Now().UnixNano())
 	seeded := seedValidationCandidate(t, st, tenantID, tag)
+	resetBudgetCounters(t, st, tenantID)
 	dispatchRuns(t, engine, seeded.runIDs)
 
 	var cancelled []string

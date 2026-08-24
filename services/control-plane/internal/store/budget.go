@@ -28,11 +28,19 @@ type BudgetDeltas map[BudgetKind]int64
 // BudgetLimits are the policy-enforced ceilings per kind.
 type BudgetLimits map[BudgetKind]int64
 
+// budgetHourBucketSQL is the fixed UTC-hour bucket expression every window
+// comparison shares (§8 budgets.per_tenant_hour: hourly ceiling, not an
+// all-time quota).
+const budgetHourBucketSQL = `date_trunc('hour', now())`
+
 // ReserveBudgetsTx atomically upsert-increments the counters inside the
 // caller's transaction (the SAME tx that flips validation_runs
 // queued→dispatched) and enforces the policy limits on the RETURNING used
 // value: any kind crossing its ceiling fails the whole reservation, rolling
-// back with the state flip. One UPDATE per kind — atomic, no read-modify-write.
+// back with the state flip. One UPDATE per kind — atomic, no read-modify-
+// write. Counters from a previous hour bucket are zeroed INSIDE this upsert,
+// so the first reserve of a fresh hour starts from zero even if no snapshot
+// ran first.
 func ReserveBudgetsTx(ctx context.Context, tx pgx.Tx, tenantID string, seq int64, deltas BudgetDeltas, limits BudgetLimits) error {
 	for kind, delta := range deltas {
 		if delta <= 0 {
@@ -44,11 +52,16 @@ func ReserveBudgetsTx(ctx context.Context, tx pgx.Tx, tenantID string, seq int64
 		}
 		var used int64
 		err := tx.QueryRow(ctx,
-			`INSERT INTO ctrl.budget_counters (tenant_id, kind, used, updated_seq)
-			 VALUES ($1,$2,$3,$4)
+			`INSERT INTO ctrl.budget_counters (tenant_id, kind, used, updated_seq, window_started_at)
+			 VALUES ($1,$2,$3,$4,`+budgetHourBucketSQL+`)
 			 ON CONFLICT (tenant_id, kind)
-			 DO UPDATE SET used = ctrl.budget_counters.used + EXCLUDED.used,
-			               updated_seq = EXCLUDED.updated_seq
+			 DO UPDATE SET used = CASE
+			                       WHEN ctrl.budget_counters.window_started_at < ` + budgetHourBucketSQL + `
+			                       THEN EXCLUDED.used
+			                       ELSE ctrl.budget_counters.used + EXCLUDED.used
+			                     END,
+			               updated_seq = EXCLUDED.updated_seq,
+			               window_started_at = ` + budgetHourBucketSQL + `
 			 RETURNING used`,
 			tenantID, string(kind), delta, seq,
 		).Scan(&used)
@@ -88,10 +101,19 @@ func ReleaseBudgetsTx(ctx context.Context, tx pgx.Tx, tenantID string, seq int64
 
 // BudgetUsageSnapshot reads current per-tenant usage so the tick's admission
 // pass computes remaining budgets WITHOUT re-seeding sentinels (P0-3).
+// Counters stamped in a previous hour bucket are lazily zeroed first: their
+// usage is last hour's spend, and the per_tenant_hour ceiling must not stay
+// exhausted forever.
 func (s *Store) BudgetUsageSnapshot(ctx context.Context, tenants []string) (map[string]map[BudgetKind]int64, error) {
 	out := make(map[string]map[BudgetKind]int64, len(tenants))
 	if len(tenants) == 0 {
 		return out, nil
+	}
+	if _, err := s.Pool.Exec(ctx,
+		`UPDATE ctrl.budget_counters
+		 SET used = 0, window_started_at = `+budgetHourBucketSQL+`
+		 WHERE tenant_id = ANY($1) AND window_started_at < `+budgetHourBucketSQL, tenants); err != nil {
+		return nil, fmt.Errorf("budget window rollover: %w", err)
 	}
 	rows, err := s.Pool.Query(ctx,
 		`SELECT tenant_id, kind, used FROM ctrl.budget_counters WHERE tenant_id = ANY($1)`,

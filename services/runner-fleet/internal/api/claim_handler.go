@@ -76,6 +76,15 @@ func (h *ClaimHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if req.WorkerID == "" {
 		req.WorkerID = "anonymous"
 	}
+	// The claiming worker is registered OUTSIDE the claim tx (which must
+	// never touch fleet.workers — W3 lock-convoy finding) but BEFORE the
+	// claim: execution_jobs.claimed_by's FK rejects an unknown worker, so
+	// external claims of never-seen worker ids would 500 (live W4 finding).
+	if err := h.store.EnsureWorker(r.Context(), req.WorkerID, req.Pool, 1, h.nowFn()); err != nil {
+		h.logger.Error("worker registration failed", slog.String("err", err.Error()))
+		writeError(w, http.StatusInternalServerError, "unavailable", "claim failed")
+		return
+	}
 	jobs, err := h.store.ClaimJobs(r.Context(), store.Claim{
 		Pool:     req.Pool,
 		Provider: "external",

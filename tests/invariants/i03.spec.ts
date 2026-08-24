@@ -110,21 +110,22 @@ describe('I-03 contract: at most one acceptance per (run_id,attempt) and per lea
 
 describe.skipIf(!liveModeEnabled())('I-03/I-11 live: fleet complete twice on one job is fenced off', () => {
   it('second completion of an already-accepted job returns 409 already_accepted', { timeout: 30_000 }, async () => {
-    // WHY a seeded job in the probe pool: claiming from 'sim' would steal a
-    // scheduler-dispatched run of another concurrent suite and corrupt its
-    // fence epoch; this probe only needs A claimed job, not a real run.
-    const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL } = await import('./lib/live.js');
-    await seedFenceProbeJob(`i03-${Date.now()}`);
+    // WHY a seeded job in a private probe pool: claiming from 'sim' would
+    // steal a scheduler-dispatched run of another concurrent suite and
+    // corrupt its fence epoch; this probe only needs A claimed job, not a
+    // real run. The seeded credential (P0-1/B2) is presented on completion.
+    const { seedFenceProbeJob, claimFleetJob, completeFleetJob } = await import('./lib/live.js');
+    const seed = await seedFenceProbeJob(`i03-${Date.now()}`);
     let claimed: Awaited<ReturnType<typeof claimFleetJob>> | undefined;
     for (let i = 0; i < 20 && !claimed; i++) {
-      claimed = await claimFleetJob(FENCE_PROBE_POOL);
+      claimed = await claimFleetJob(seed.pool);
       if (!claimed) await new Promise((r) => setTimeout(r, 200));
     }
     if (!claimed) return; // claim path unavailable in this environment
-    const first = await completeFleetJob(claimed.job.run_id, claimed.job.fence_token, 'succeeded');
+    const first = await completeFleetJob(claimed.job.run_id, claimed.job.fence_token, 'succeeded', seed.leaseToken);
     expect(first.status).toBe(200);
     expect(first.accepted).toBe(true);
-    const replay = await completeFleetJob(claimed.job.run_id, claimed.job.fence_token, 'succeeded');
+    const replay = await completeFleetJob(claimed.job.run_id, claimed.job.fence_token, 'succeeded', seed.leaseToken);
     expect(replay.status).toBe(409);
     expect(replay.reason).toBe('already_accepted');
   });

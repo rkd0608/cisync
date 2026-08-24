@@ -1,6 +1,7 @@
 package joblease
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -84,16 +85,20 @@ func TestVerifierRejectsTamperedPayload(t *testing.T) {
 	claims := validClaims()
 	token, _ := signer.Mint(claims)
 	parts := strings.Split(token, ".")
-	// Flip one character INSIDE the payload segment: changing signed bytes
-	// guarantees rejection regardless of canonical-base64 trailing bits.
-	payload := []byte(parts[1])
-	for i := range payload {
-		if payload[i] == 'A' {
-			payload[i] = 'B'
-			break
-		}
+	// Tamper INSIDE the decoded payload: whether the base64 text happens to
+	// contain a given character is data-dependent (this test was flaky when
+	// it scanned for 'A'), so mutate the decoded JSON bytes instead — signed
+	// bytes change ⇒ rejection regardless of canonical-base64 trailing bits.
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
 	}
-	parts[1] = string(payload)
+	if payload[0] == '"' {
+		payload[0] = '!'
+	} else {
+		payload[0] = '"'
+	}
+	parts[1] = base64.RawURLEncoding.EncodeToString(payload)
 	if _, err := verifier.Verify(strings.Join(parts, ".")); err == nil {
 		t.Fatal("tampered token must be rejected")
 	}

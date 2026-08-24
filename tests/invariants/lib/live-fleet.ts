@@ -13,29 +13,38 @@ import { mintJobLeaseToken } from './joblease.js';
 import type { ClaimedJob } from './live';
 
 /**
- * Pool used ONLY by fence/complete probes that seed their own synthetic jobs.
- * WHY a private pool: claiming from 'sim' steals whatever scheduler-dispatched
- * run is at the queue head — the extra claims double-bump its fence epoch, so
- * the real completion can never match control-plane's fence and the victim
- * candidate is starved of evidence (the i01/journey flake class). Jobs seeded
- * into this pool are invisible to the executor and to other suites.
+ * Prefix for pools used ONLY by fence/complete probes that seed their own
+ * synthetic jobs. Each seeded job gets its own suffixed pool: claiming from a
+ * SHARED probe pool hands back the OLDEST queued row, so leftovers from
+ * earlier suite runs (or a concurrently running suite's target) arrive
+ * without a matching credential and starve every later probe behind the
+ * LIMIT-4 head (live W4 finding). Private pools make claims self-only.
  */
 export const FENCE_PROBE_POOL = 'test-fence-probe';
 
 let probeCounter = 0;
 
 /**
- * Seed one synthetic job into the fence-probe pool and return its identity.
- * run_id is a valid prefixed ULID so served envelopes stay schema-clean.
+ * Seed one synthetic job into a FRESH private probe pool and return its
+ * identity plus the dispatch-time credential bound to it (fence 1, the epoch
+ * the first claim produces). run_id is a valid prefixed ULID so served
+ * envelopes stay schema-clean.
  */
-export async function seedFenceProbeJob(tag: string): Promise<{ runId: string; pool: string; leaseToken: string }> {
+export interface SeededProbeJob {
+  runId: string;
+  pool: string;
+  leaseToken: string;
+}
+
+export async function seedFenceProbeJob(tag: string): Promise<SeededProbeJob> {
   probeCounter += 1;
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   let ulid = '';
   for (let i = 0; i < 26; i++) {
     ulid += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
-  const runId = `run_${ulid}${probeCounter <= 1 ? '' : ''}`;
+  const runId = `run_${ulid}`;
+  const pool = `${FENCE_PROBE_POOL}-${probeCounter}-${Math.floor(Math.random() * 1e9).toString(36)}`;
   // P0-1/B2: the probe presents a REAL credential — without it every
   // mutation on the job is refused 401 unauthorized by the fleet gate.
   const leaseToken = mintJobLeaseToken({ run_id: runId, attempt: 1, fence_token: 1, repo: `acme/fence-probe-${tag}` });
@@ -48,7 +57,7 @@ export async function seedFenceProbeJob(tag: string): Promise<{ runId: string; p
       run_id: runId,
       attempt: 1,
       tier: 1,
-      pool: FENCE_PROBE_POOL,
+      pool,
       lease_token: leaseToken,
       job_spec: {
         kind: 'selected_unit',
@@ -64,20 +73,15 @@ export async function seedFenceProbeJob(tag: string): Promise<{ runId: string; p
   if (res.status !== 200 && res.status !== 201 && res.status !== 202) {
     throw new Error(`seed job returned ${res.status}: ${String(res.rawText).slice(0, 200)}`);
   }
-  return { runId, pool: FENCE_PROBE_POOL, leaseToken };
+  return { runId, pool, leaseToken };
 }
 
-/** Bearer header for one stored probe credential. */
-function leaseHeaders(leaseToken?: string): Record<string, string> {
-  if (!leaseToken) throw new Error('probe completion requires the claim-returned lease_token');
-  return { Authorization: `Bearer ${leaseToken}` };
-}
-
-function sha40(seed: string): string {
-  return Buffer.from(seed.repeat(8), 'utf8').subarray(0, 20).toString('hex');
-}
-
-/** Claim ONE job from the given pool (default: the real sim pool). */
+/**
+ * Claim the SEEDED job from its private pool. Production runners present the
+ * claim-returned lease_token on every mutation; the seed mints the identical
+ * credential itself (same run/attempt/fence binding), so callers pass
+ * `seed.leaseToken` back on heartbeat/complete.
+ */
 export async function claimFleetJob(pool = 'sim'): Promise<ClaimedJob | undefined> {
   const res = await requestLoose({
     url: `${fleetBase()}/internal/fleet/jobs/claim`,
@@ -89,6 +93,16 @@ export async function claimFleetJob(pool = 'sim'): Promise<ClaimedJob | undefine
   const parsed = fleetClaimResponseSchema.parse(res.body);
   const job = parsed.jobs[0];
   return job ? { job } : undefined;
+}
+
+/** Bearer header for one stored probe credential. */
+function leaseHeaders(leaseToken?: string): Record<string, string> {
+  if (!leaseToken) throw new Error('probe completion requires the claim-returned lease_token');
+  return { Authorization: `Bearer ${leaseToken}` };
+}
+
+function sha40(seed: string): string {
+  return Buffer.from(seed.repeat(8), 'utf8').subarray(0, 20).toString('hex');
 }
 
 export interface FleetCompleteOutcome {

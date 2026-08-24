@@ -457,3 +457,16 @@ e2e green in CI.
    real installations landing, or stamp tenant_id per installation now (cheap insurance)?
 7. **OAuth v0.3 scope floor** — is identify-only (`read:user`) the agreed minimum for the
    identity-linking upgrade, with acting-as-user features gated per-feature later?
+
+
+---
+
+## 10. INTEGRATOR RULINGS (FROZEN for W5)
+
+1. `check_run` subscription: APPROVED (read-only event class, required for re-runs).
+2. Rerun default: `replan`; caps 2/candidate, 20/h/installation (env-tunable; budget owned by platform admin).
+3. `Contents:Read`: INCLUDE in v0.2 permission set (avoids second consent cycle; read-only).
+4. Tracked base branches: env default `main,master`; per-installation config UI = LATER.
+5. Dev tunnel: cloudflared quick-tunnel default (zero-account); ngrok static domain documented as option in runbook.
+6. Tenancy: D11 single-tenant posture stands through v0.2; installation_id stamped on deliveries + ghconn rows for forensics.
+7. OAuth: v0.3, floor `read:user`, acting-as-user features gated per-feature later.

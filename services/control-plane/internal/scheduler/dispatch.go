@@ -41,7 +41,7 @@ func (e *EngineScheduler) dispatchQueued(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	budgets := remainingBudgets(resolved.Body.Budgets.PerTenantHour, usage)
+	budgets := remainingBudgets(resolved.Body.Budgets.PerTenantHour, usage, tenantsOf(queued))
 	res := Admit(ranked, caps, WIPSnapshot{InFlightByTier: inFlight}, budgets)
 
 	admissionsByID := make(map[string]Admission, res.AdmittedCount)
@@ -217,14 +217,18 @@ func parseTier(tierText string) int {
 }
 
 // remainingBudgets derives each queued tenant's remaining budget from REAL
-// counter usage against the policy ceilings. Tenants without any counter
-// row have consumed nothing (P0-3: counters start at zero implicitly).
-func remainingBudgets(perTenantHour policypkg.PerTenantHourBudget, usage map[string]map[store.BudgetKind]int64) BudgetLedger {
+// counter usage against the policy ceilings. The usage snapshot only holds
+// tenants that already own counter rows, so the ledger is keyed by the QUEUED
+// tenants instead: a tenant without any row has consumed nothing (P0-3:
+// counters start at zero implicitly) and must see the full ceiling — deriving
+// from the snapshot alone funded nobody and starved all fresh tenants.
+func remainingBudgets(perTenantHour policypkg.PerTenantHourBudget, usage map[string]map[store.BudgetKind]int64, tenants []string) BudgetLedger {
 	b := BudgetLedger{
-		TenantCPURemaining:        make(map[string]int64, len(usage)),
-		TenantConcurrentRemaining: make(map[string]int64, len(usage)),
+		TenantCPURemaining:        make(map[string]int64, len(tenants)),
+		TenantConcurrentRemaining: make(map[string]int64, len(tenants)),
 	}
-	for tenantID, used := range usage {
+	for _, tenantID := range tenants {
+		used := usage[tenantID]
 		b.TenantCPURemaining[tenantID] = perTenantHour.CPUMinutes - used[store.BudgetCPUMinutes]
 		b.TenantConcurrentRemaining[tenantID] = perTenantHour.ConcurrentCandidates - used[store.BudgetConcurrentCandidates]
 	}
