@@ -34,6 +34,11 @@ type Admission struct {
 	CandidateID string
 	Admitted    bool
 	DenyReason  string
+	// ReservedCPU/ReservedConcurrent are the exact I-06 budget reservations
+	// this run takes; the dispatch tx persists them atomically with the
+	// queued→dispatched flip.
+	ReservedCPU        int64
+	ReservedConcurrent int64
 }
 
 // Deltas are exactly the reservations taken by admitted runs. Conservation
@@ -107,6 +112,8 @@ func Admit(batch []RankedRun, caps Caps, wip WIPSnapshot, budgets BudgetLedger) 
 			conc[run.TenantID] -= concNeed
 			seenCandidates[run.TenantID][run.CandidateID] = struct{}{}
 			adm.Admitted = true
+			adm.ReservedCPU = need
+			adm.ReservedConcurrent = concNeed
 			recordDelta(&res.Deltas, run.TenantID, run.Tier, need, concNeed)
 			res.AdmittedCount++
 		}

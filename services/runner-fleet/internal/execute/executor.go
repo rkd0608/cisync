@@ -4,15 +4,14 @@ package execute
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
-	"sauron.dev/sauron/runner-fleet/internal/providers"
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
 
@@ -30,10 +29,15 @@ type Executor struct {
 	heartbeatInterval time.Duration
 	pollInterval      time.Duration
 	nowFn             func() time.Time
+	// LeaseVerifier gates internal mutations behind the job-lease credential
+	// (B2/I-04): a completion from a worker that cannot prove its dispatch-
+	// time lease is discarded exactly like a stale-fence result. nil fails
+	// closed.
+	LeaseVerifier *joblease.Verifier
 }
 
 // New builds an executor for a pool. nowFn is injectable for tests.
-func New(st store.Store, p domain.Provider, reg *Registry, m *obs.Metrics, logger *slog.Logger, pool, providerName string, concurrency int, heartbeatInterval, pollInterval time.Duration) *Executor {
+func New(st store.Store, p domain.Provider, reg *Registry, m *obs.Metrics, logger *slog.Logger, pool, providerName string, concurrency int, heartbeatInterval, pollInterval time.Duration, leaseVerifier *joblease.Verifier) *Executor {
 	return &Executor{
 		store:             st,
 		provider:          p,
@@ -47,6 +51,7 @@ func New(st store.Store, p domain.Provider, reg *Registry, m *obs.Metrics, logge
 		heartbeatInterval: heartbeatInterval,
 		pollInterval:      pollInterval,
 		nowFn:             time.Now,
+		LeaseVerifier:     leaseVerifier,
 	}
 }
 
@@ -125,11 +130,9 @@ func (e *Executor) runJob(ctx context.Context, job domain.Job) {
 			case <-heartbeatDone:
 				return
 			case <-ticker.C:
-				hbCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				err := e.store.Heartbeat(hbCtx, job.RunID, job.FenceToken, e.nowFn())
-				cancel()
-				if err != nil {
-					e.logger.Warn("heartbeat rejected", slog.String("run_id", job.RunID), slog.String("err", err.Error()))
+				// Heartbeats ride the job-lease gate too: an unprovable
+				// credential stops the loop (B2/I-04, same as completion).
+				if !e.heartbeatOnce(job) {
 					return
 				}
 			}
@@ -187,53 +190,6 @@ loop:
 		outcome.DurationMS = e.nowFn().Sub(startedAt).Milliseconds()
 	}
 	e.completeInternal(ctx, job, outcome)
-}
-
-// maxLogsExcerptBytes bounds the log prefix carried in result_ref so
-// control-plane can classify failures without fetching artifacts.
-const maxLogsExcerptBytes = 4096
-
-// completeInternal is the executor-side completion path; a fence rejection
-// means the job was cancelled or reclaimed elsewhere and the result MUST be
-// discarded without mutating state (I-11).
-func (e *Executor) completeInternal(ctx context.Context, job domain.Job, outcome domain.Outcome) {
-	digests := make([]string, 0, len(outcome.Artifacts))
-	for _, a := range outcome.Artifacts {
-		digests = append(digests, a.Digest)
-	}
-	logsDigest := providers.DigestOf(outcome.Logs)
-	excerpt := outcome.Logs
-	if len(excerpt) > maxLogsExcerptBytes {
-		excerpt = excerpt[:maxLogsExcerptBytes]
-	}
-	err := e.store.Complete(ctx, job.RunID, store.Completion{
-		FenceToken:           job.FenceToken,
-		Status:               outcome.Status,
-		LogsDigest:           logsDigest,
-		ArtifactDigests:      digests,
-		DurationMS:           outcome.DurationMS,
-		ActualCostMilliCents: outcome.CostMilliCents,
-		Classification:       outcome.Classification,
-		LogsExcerpt:          string(excerpt),
-	}, e.nowFn())
-	switch {
-	case err == nil:
-		if recordErr := e.store.RecordArtifacts(ctx, job.RunID, outcome.Artifacts, e.nowFn()); recordErr != nil {
-			e.logger.Warn("artifact recording failed", slog.String("run_id", job.RunID), slog.String("err", recordErr.Error()))
-		}
-		e.metrics.CounterInc("fleet_completions_total", "Accepted job completions", "status", outcome.Status)
-		e.logger.Info("job completed",
-			slog.String("run_id", job.RunID),
-			slog.String("status", outcome.Status),
-			slog.String("logs_digest", logsDigest))
-	case errors.Is(err, domain.ErrFenceMismatch):
-		e.metrics.CounterInc("fleet_completions_rejected_total", "Completions rejected by the fence gate", "reason", "fence_mismatch")
-		e.logger.Warn("stale fence on internal completion; result discarded",
-			slog.String("run_id", job.RunID), slog.String("err", err.Error()))
-	default:
-		e.metrics.CounterInc("fleet_completions_rejected_total", "Completions rejected by the fence gate", "reason", "already_accepted")
-		e.logger.Warn("completion not accepted", slog.String("run_id", job.RunID), slog.String("err", err.Error()))
-	}
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) {

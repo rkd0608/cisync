@@ -22,7 +22,11 @@ type Config struct {
 	AdminToken    string
 	WebhookSecret string
 	LedgerKeyFile string
-	TenantID      string
+	// JobLeaseKeyFile is the DEDICATED Ed25519 private key for job-lease
+	// tokens (THREAT_MODEL B2/I-04) — never the ledger key: compromise of
+	// either must not cascade into the other trust domain.
+	JobLeaseKeyFile string
+	TenantID        string
 
 	RelayBatchSize    int
 	RelayPollInterval time.Duration
@@ -76,13 +80,14 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 // error out when missing.
 func Load() (*Config, error) {
 	cfg := &Config{
-		PGDSN:         env("SAURON_CTRL_PG_DSN", "postgres://sauron:sauron_dev_only@localhost:5432/sauron"),
-		Addr:          env("SAURON_CTRL_ADDR", ":8081"),
-		FleetURL:      env("SAURON_CTRL_FLEET_URL", "http://localhost:8082"),
-		AdminToken:    env("SAURON_CTRL_ADMIN_TOKEN", ""),
-		WebhookSecret: env("SAURON_CTRL_WEBHOOK_SECRET", env("SAURON_INGEST_WEBHOOK_SECRET", "")),
-		LedgerKeyFile: env("SAURON_CTRL_LEDGER_KEY_FILE", ""),
-		TenantID:      env("SAURON_CTRL_TENANT_ID", DevTenant),
+		PGDSN:           env("SAURON_CTRL_PG_DSN", "postgres://sauron:sauron_dev_only@localhost:5432/sauron"),
+		Addr:            env("SAURON_CTRL_ADDR", ":8081"),
+		FleetURL:        env("SAURON_CTRL_FLEET_URL", "http://localhost:8082"),
+		AdminToken:      env("SAURON_CTRL_ADMIN_TOKEN", ""),
+		WebhookSecret:   env("SAURON_CTRL_WEBHOOK_SECRET", env("SAURON_INGEST_WEBHOOK_SECRET", "")),
+		LedgerKeyFile:   env("SAURON_CTRL_LEDGER_KEY_FILE", ""),
+		JobLeaseKeyFile: env("SAURON_CTRL_JOBLEASE_KEY_FILE", ""),
+		TenantID:        env("SAURON_CTRL_TENANT_ID", DevTenant),
 	}
 	var err error
 	if cfg.RelayBatchSize, err = envInt("SAURON_CTRL_RELAY_BATCH", 100); err != nil {

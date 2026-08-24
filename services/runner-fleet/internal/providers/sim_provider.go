@@ -134,10 +134,21 @@ func simulate(spec domain.JobSpec, rng *rand.Rand) (time.Duration, domain.Outcom
 		status = domain.StatusFailed
 		classification = "unknown_outcome_bias"
 	}
+	// Deterministic census consistent with the bias (P0-2): total derives
+	// from the seeded rng so identical inputs reproduce identical results.
+	total := 6 + rng.Intn(7)
+	results := domain.TestResults{Total: total}
+	if status == domain.StatusSucceeded {
+		results.Passed = total
+	} else {
+		results.Failed = 1 + rng.Intn(total/3+1)
+		results.Passed = total - results.Failed
+	}
 	return duration, domain.Outcome{
 		Status:         status,
 		Classification: classification,
 		DurationMS:     duration.Milliseconds(),
+		Results:        &results,
 	}
 }
 

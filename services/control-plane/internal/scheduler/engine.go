@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"sauron.dev/sauron/control-plane/internal/joblease"
 	policypkg "sauron.dev/sauron/control-plane/internal/policy"
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/store"
@@ -26,51 +27,40 @@ type FleetGateway interface {
 // WIP caps and budgets come from the active policy pack; admission denies
 // overflow instead of overrunning it (I-10).
 type EngineScheduler struct {
-	store    *store.Store
-	fleet    FleetGateway
-	pool     string
-	batch    int
-	policy   PolicySource
-	maxRetry int
+	store       *store.Store
+	fleet       FleetGateway
+	pool        string
+	batch       int
+	policy      PolicySource
+	maxRetry    int
+	leaseSigner *joblease.Signer
 }
 
-// PolicySource supplies the policy-derived admission limits (WIP caps by
-// tier) from the active pack.
-type PolicySource func() (wipByTier map[int]int)
+// PolicySource supplies the resolved active policy: WIP caps by tier AND
+// the budget ceilings the I-06 reservation accounting enforces.
+type PolicySource func() policypkg.ResolvedPolicy
 
-// DefaultPolicySource serves WIP caps from the compiled-in default pack.
-func DefaultPolicySource() map[int]int {
+// DefaultPolicySource serves the compiled-in default pack resolved.
+func DefaultPolicySource() policypkg.ResolvedPolicy {
 	rec := policypkg.DefaultPolicyPack()
-	wip := make(map[int]int, len(rec.Body.Budgets.WIPByTier))
-	for tierText, capValue := range rec.Body.Budgets.WIPByTier {
-		tier := 0
-		for _, c := range tierText {
-			if c < '0' || c > '9' {
-				tier = -1
-				break
-			}
-			tier = tier*10 + int(c-'0')
-		}
-		if tier < 0 || capValue < 0 {
-			continue
-		}
-		wip[tier] = capValue
-	}
-	return wip
+	return policypkg.ResolvedPolicy{PolicyID: rec.ID, Version: rec.Version, Body: rec.Body}
 }
 
 // NewEngine wires the engine scheduler. batch bounds per-tick work.
-func NewEngine(st *store.Store, fleet FleetGateway, pool string, batch int) *EngineScheduler {
+// leaseSigner mints the per-run job-lease credentials required by the fleet's
+// authenticated mutation endpoints (B2/I-04); nil fails closed at dispatch.
+func NewEngine(st *store.Store, fleet FleetGateway, pool string, batch int, leaseSigner *joblease.Signer) *EngineScheduler {
 	if batch <= 0 {
 		batch = 8
 	}
 	return &EngineScheduler{
-		store:    st,
-		fleet:    fleet,
-		pool:     pool,
-		batch:    batch,
-		policy:   DefaultPolicySource,
-		maxRetry: 2,
+		store:       st,
+		fleet:       fleet,
+		pool:        pool,
+		batch:       batch,
+		policy:      DefaultPolicySource,
+		maxRetry:    2,
+		leaseSigner: leaseSigner,
 	}
 }
 

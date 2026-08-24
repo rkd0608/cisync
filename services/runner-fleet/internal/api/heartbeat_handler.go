@@ -7,31 +7,34 @@ import (
 	"time"
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
 
 // HeartbeatHandler serves POST /internal/fleet/jobs/{run_id}/heartbeat.
 type HeartbeatHandler struct {
-	store   store.Store
-	metrics *obs.Metrics
-	nowFn   func() time.Time
+	store    store.Store
+	metrics  *obs.Metrics
+	nowFn    func() time.Time
+	verifier *joblease.Verifier
 }
 
-// NewHeartbeatHandler builds the heartbeat handler.
-func NewHeartbeatHandler(st store.Store, m *obs.Metrics, nowFn func() time.Time) *HeartbeatHandler {
+// NewHeartbeatHandler builds the heartbeat handler. verifier enforces the
+// job-lease credential gate (B2/I-04); nil fails closed.
+func NewHeartbeatHandler(st store.Store, m *obs.Metrics, nowFn func() time.Time, verifier *joblease.Verifier) *HeartbeatHandler {
 	if nowFn == nil {
 		nowFn = time.Now
 	}
-	return &HeartbeatHandler{store: st, metrics: m, nowFn: nowFn}
+	return &HeartbeatHandler{store: st, metrics: m, nowFn: nowFn, verifier: verifier}
 }
 
 type heartbeatRequest struct {
 	FenceToken int64 `json:"fence_token"`
 }
 
-// ServeHTTP implements the heartbeat protocol: 204 fresh · 409 stale fence or
-// non-running state (I-11).
+// ServeHTTP implements the heartbeat protocol: 401 unauthorized lease ·
+// 204 fresh · 409 stale fence or non-running state (I-11).
 func (h *HeartbeatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -41,6 +44,10 @@ func (h *HeartbeatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req heartbeatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "validation_failed", "malformed heartbeat body")
+		return
+	}
+	fence := req.FenceToken
+	if _, ok := authorizeJobMutation(w, r, h.store, h.verifier, &fence); !ok {
 		return
 	}
 	err := h.store.Heartbeat(r.Context(), runID, req.FenceToken, h.nowFn())

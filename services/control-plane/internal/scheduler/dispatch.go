@@ -3,18 +3,24 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
 	"sauron.dev/sauron/control-plane/internal/domain"
+	jobleasepkg "sauron.dev/sauron/control-plane/internal/joblease"
 	policypkg "sauron.dev/sauron/control-plane/internal/policy"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
 
 // dispatchQueued ranks queued runs with the frozen priority formula and
-// admits them under policy WIP caps (I-10/I-13). Admitted runs are pushed to
-// the fleet (§2: the WORKER claims via its own poll loop, so dispatch =
-// enqueue) and flipped to dispatched with the post-claim fence epoch.
+// admits them under policy WIP caps and REAL budget counters (I-06/I-10/
+// I-13). Remaining budget = policy ceiling − used(read from
+// ctrl.budget_counters); no sentinel re-seeding. Admitted runs are pushed
+// to the fleet (dispatch = enqueue; the WORKER claims via its own poll
+// loop) and flipped to dispatched with the post-claim fence epoch — the
+// SAME tx upsert-increments the tenant's budget counters by the reserved
+// amounts, so a crash leaves either both or neither (conservation).
 func (e *EngineScheduler) dispatchQueued(ctx context.Context) (int, error) {
 	queued, err := e.store.QueuedRuns(ctx, e.batch*4)
 	if err != nil {
@@ -24,31 +30,40 @@ func (e *EngineScheduler) dispatchQueued(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
+	resolved := e.policy()
 	ranked := rankBatch(queued)
 	inFlight, err := e.store.InFlightByTier(ctx)
 	if err != nil {
 		return 0, err
 	}
-	caps := capsFromPolicy(e.policy())
-	budgets := tenantBudgets(queued)
+	caps := capsFromPolicy(resolved.Body.Budgets.WIPByTier)
+	usage, err := e.store.BudgetUsageSnapshot(ctx, tenantsOf(queued))
+	if err != nil {
+		return 0, err
+	}
+	budgets := remainingBudgets(resolved.Body.Budgets.PerTenantHour, usage)
 	res := Admit(ranked, caps, WIPSnapshot{InFlightByTier: inFlight}, budgets)
 
-	admittedIDs := make(map[string]struct{}, res.AdmittedCount)
+	admissionsByID := make(map[string]Admission, res.AdmittedCount)
 	for _, a := range res.Admissions {
 		if a.Admitted {
-			admittedIDs[a.RunID] = struct{}{}
+			admissionsByID[a.RunID] = a
 		}
 	}
-	if len(admittedIDs) == 0 {
+	if len(admissionsByID) == 0 {
 		return 0, nil
 	}
 
 	dispatched := 0
 	for i := range queued {
-		if _, ok := admittedIDs[queued[i].ID]; !ok {
+		a, ok := admissionsByID[queued[i].ID]
+		if !ok {
 			continue // denied by admission (I-10): stays queued
 		}
-		n, err := e.dispatchOne(ctx, queued[i].ID)
+		n, err := e.dispatchOne(ctx, queued[i].ID, BudgetReservation{
+			CPUMinutes:           a.ReservedCPU,
+			ConcurrentCandidates: a.ReservedConcurrent,
+		}, resolved)
 		if err != nil {
 			logf("dispatch %s: %v", queued[i].ID, err)
 			continue
@@ -56,6 +71,12 @@ func (e *EngineScheduler) dispatchQueued(ctx context.Context) (int, error) {
 		dispatched += n
 	}
 	return dispatched, nil
+}
+
+// BudgetReservation carries the I-06 amounts one run's dispatch tx commits.
+type BudgetReservation struct {
+	CPUMinutes           int64
+	ConcurrentCandidates int64
 }
 
 // rankBatch computes effective priorities (frozen formula + aging floor).
@@ -85,8 +106,11 @@ func rankBatch(queued []store.QueuedRun) []RankedRun {
 // dispatchOne pushes one admitted run to the fleet and transitions it to
 // dispatched inside its own tx; the conditional UPDATE makes double-dispatch
 // impossible. Fence token stamps the fleet's post-first-claim epoch (0→1) so
-// completion gating compares like-for-like (I-11).
-func (e *EngineScheduler) dispatchOne(ctx context.Context, runID string) (int, error) {
+// completion gating compares like-for-like (I-11). A job-lease token is
+// minted for EVERY run at this boundary (B2/I-04): jti binds
+// run/attempt/fence, exp stays within the 60-minute cap, and the fleet will
+// reject every mutation of the job without it.
+func (e *EngineScheduler) dispatchOne(ctx context.Context, runID string, reservation BudgetReservation, resolved policypkg.ResolvedPolicy) (int, error) {
 	run, err := e.store.GetRunByID(ctx, runID)
 	if err != nil {
 		return 0, err
@@ -94,18 +118,62 @@ func (e *EngineScheduler) dispatchOne(ctx context.Context, runID string) (int, e
 	if run.State != domain.RunQueued {
 		return 0, nil
 	}
-	if err := e.fleet.Enqueue(ctx, relayEnqueueRequest(run)); err != nil {
-		return 0, err
+	if e.leaseSigner == nil {
+		return 0, fmt.Errorf("dispatch %s: no job-lease signer configured", runID)
 	}
 	run.FenceToken = 1 // fleet bumps 0→1 on first worker claim
+	leaseToken, err := e.mintJobLease(run)
+	if err != nil {
+		return 0, err
+	}
+	req := relayEnqueueRequest(run)
+	req.LeaseToken = leaseToken
+	if err := e.fleet.Enqueue(ctx, req); err != nil {
+		return 0, err
+	}
 	err = e.store.ExecTx(ctx, func(tx pgx.Tx) error {
-		_, err := store.DispatchRunTx(ctx, tx, e.store, run)
-		return err
+		ev, err := store.DispatchRunTx(ctx, tx, e.store, run)
+		if err != nil {
+			return err
+		}
+		// I-06: reservation commits with the state flip. The RETURNING-based
+		// reserve re-checks the policy ceiling INSIDE this tx, so concurrent
+		// dispatchers can never overrun (denial rolls back the flip too).
+		return store.ReserveBudgetsTx(ctx, tx, run.TenantID, ev.Seq,
+			store.BudgetDeltas{
+				store.BudgetCPUMinutes:           reservation.CPUMinutes,
+				store.BudgetConcurrentCandidates: reservation.ConcurrentCandidates,
+			},
+			store.BudgetLimits{
+				store.BudgetCPUMinutes:           resolved.Body.Budgets.PerTenantHour.CPUMinutes,
+				store.BudgetConcurrentCandidates: resolved.Body.Budgets.PerTenantHour.ConcurrentCandidates,
+			})
 	})
 	if err != nil {
 		return 0, err
 	}
 	return 1, nil
+}
+
+// mintJobLease signs the dispatch-time credential with the documented 60m
+// TTL ceiling; iat/exp come from the monotonic-enough wall clock — a small
+// skew against fleet verification is tolerated by the exp margin.
+func (e *EngineScheduler) mintJobLease(run *domain.ValidationRun) (string, error) {
+	now := timeNowUTC()
+	attempt := run.Attempt
+	repo := run.JobSpec.Repo
+	tier := run.Tier
+	return e.leaseSigner.Mint(jobleasepkg.Claims{
+		Audience:   jobleasepkg.Audience,
+		ID:         jobleasepkg.JTIBuilds(run.ID, attempt, run.FenceToken),
+		RunID:      run.ID,
+		Attempt:    attempt,
+		FenceToken: run.FenceToken,
+		Repo:       repo,
+		Tier:       tier,
+		IssuedAt:   now.Unix(),
+		ExpiresAt:  now.Add(jobleasepkg.LeaseTTLMax).Unix(),
+	})
 }
 
 // jobSpecToMap renders the typed spec into the wire representation.
@@ -123,10 +191,11 @@ func jobSpecToMap(spec domain.JobSpec) map[string]any {
 
 // capsFromPolicy converts the §8 wip_by_tier JSON map into admission Caps.
 // A tier missing from the pack stays unconfigured ⇒ fail-closed denial.
-func capsFromPolicy(wipByTier map[int]int) Caps {
+func capsFromPolicy(wipByTier map[string]int) Caps {
 	caps := Caps{WIPByTier: make(map[int]int, len(wipByTier))}
-	for tier, capValue := range wipByTier {
-		if capValue < 0 {
+	for tierText, capValue := range wipByTier {
+		tier := parseTier(tierText)
+		if tier < 0 || capValue < 0 {
 			continue
 		}
 		caps.WIPByTier[tier] = capValue
@@ -134,31 +203,43 @@ func capsFromPolicy(wipByTier map[int]int) Caps {
 	return caps
 }
 
-// tenantBudgets seeds per-tenant budget ledgers.
-//
-// WHY static budgets: v1 dev posture enforces the WIP dimension of
-// admission; per-tenant CPU/concurrency reservation accounting lands with
-// the I-06 budget ledger events. Generous sentinels keep Admit's
-// conservation math intact without inventing new schema.
-func tenantBudgets(queued []store.QueuedRun) BudgetLedger {
-	rec := policypkg.DefaultPolicyPack()
-	cpuBudget := rec.Body.Budgets.PerTenantHour.CPUMinutes
-	concBudget := rec.Body.Budgets.PerTenantHour.ConcurrentCandidates
-	if cpuBudget <= 0 {
-		cpuBudget = 5000
-	}
-	if concBudget <= 0 {
-		concBudget = 40
-	}
-	b := BudgetLedger{
-		TenantCPURemaining:        map[string]int64{},
-		TenantConcurrentRemaining: map[string]int64{},
-	}
-	for _, qr := range queued {
-		if _, seen := b.TenantCPURemaining[qr.TenantID]; !seen {
-			b.TenantCPURemaining[qr.TenantID] = cpuBudget
-			b.TenantConcurrentRemaining[qr.TenantID] = concBudget
+// parseTier converts the policy pack's string tier key; non-numeric keys
+// yield -1 and are skipped by the caller.
+func parseTier(tierText string) int {
+	tier := 0
+	for _, c := range tierText {
+		if c < '0' || c > '9' {
+			return -1
 		}
+		tier = tier*10 + int(c-'0')
+	}
+	return tier
+}
+
+// remainingBudgets derives each queued tenant's remaining budget from REAL
+// counter usage against the policy ceilings. Tenants without any counter
+// row have consumed nothing (P0-3: counters start at zero implicitly).
+func remainingBudgets(perTenantHour policypkg.PerTenantHourBudget, usage map[string]map[store.BudgetKind]int64) BudgetLedger {
+	b := BudgetLedger{
+		TenantCPURemaining:        make(map[string]int64, len(usage)),
+		TenantConcurrentRemaining: make(map[string]int64, len(usage)),
+	}
+	for tenantID, used := range usage {
+		b.TenantCPURemaining[tenantID] = perTenantHour.CPUMinutes - used[store.BudgetCPUMinutes]
+		b.TenantConcurrentRemaining[tenantID] = perTenantHour.ConcurrentCandidates - used[store.BudgetConcurrentCandidates]
 	}
 	return b
+}
+
+func tenantsOf(queued []store.QueuedRun) []string {
+	seen := make(map[string]struct{}, len(queued))
+	out := make([]string, 0, len(queued))
+	for _, qr := range queued {
+		if _, ok := seen[qr.TenantID]; ok {
+			continue
+		}
+		seen[qr.TenantID] = struct{}{}
+		out = append(out, qr.TenantID)
+	}
+	return out
 }

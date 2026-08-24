@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -23,6 +24,12 @@ type Config struct {
 	GaugeInterval     time.Duration
 	DockerBin         string
 	DockerImage       string
+	// JobLeasePubKey is the Ed25519 PUBLIC key PEM (SPKI) used to verify
+	// control-plane-minted job-lease tokens (THREAT_MODEL B2/I-04). Loaded
+	// from SAURON_FLEET_JOBLEASYPUB_KEY_FILE or the base64-encoded inline
+	// SAURON_FLEET_JOBLEASE_PUB_B64. Empty disables lease verification and
+	// every mutating endpoint fails closed with 401 unauthorized.
+	JobLeasePubKey []byte
 }
 
 // FromEnv builds a Config from SAURON_FLEET_* variables with documented
@@ -69,7 +76,31 @@ func FromEnv() (Config, error) {
 	if v := os.Getenv("SAURON_FLEET_DOCKER_IMAGE"); v != "" {
 		cfg.DockerImage = v
 	}
+	if cfg.JobLeasePubKey, err = loadJobLeasePubKey(); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+// loadJobLeasePubKey prefers the PEM file env, then the base64 inline env.
+// WHY no default: an unconfigured verifier silently re-opens the P0-1 hole,
+// so absence is surfaced as config error at boot instead of runtime 401s.
+func loadJobLeasePubKey() ([]byte, error) {
+	if path := os.Getenv("SAURON_FLEET_JOBLEASYPUB_KEY_FILE"); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("config: read SAURON_FLEET_JOBLEASYPUB_KEY_FILE: %w", err)
+		}
+		return raw, nil
+	}
+	if inline := os.Getenv("SAURON_FLEET_JOBLEASE_PUB_B64"); inline != "" {
+		raw, err := base64.StdEncoding.DecodeString(inline)
+		if err != nil {
+			return nil, fmt.Errorf("config: decode SAURON_FLEET_JOBLEASE_PUB_B64: %w", err)
+		}
+		return raw, nil
+	}
+	return nil, nil
 }
 
 func intEnv(key string, fallback int) (int, error) {

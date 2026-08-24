@@ -9,6 +9,7 @@ import (
 
 	"sauron.dev/sauron/control-plane/internal/domain"
 	evidencepkg "sauron.dev/sauron/control-plane/internal/evidence"
+	jobleasepkg "sauron.dev/sauron/control-plane/internal/joblease"
 	plannerpkg "sauron.dev/sauron/control-plane/internal/planner"
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/store"
@@ -20,6 +21,12 @@ import (
 func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *domain.ValidationRun, job relay.CompletedJob, seq int64) error {
 	plan, err := e.store.ActivePlanForCandidate(ctx, run.TenantID, run.CandidateID)
 	if err != nil {
+		if err == domain.ErrNotFound {
+			// P1-4: a completed run whose plan vanished can never apply;
+			// typed so the feed row is absorbed instead of poisoning ticks.
+			return fmt.Errorf("load plan for %s: %w", run.CandidateID,
+				permanentCompletion(domain.ErrNotFound))
+		}
 		return fmt.Errorf("load plan: %w", err)
 	}
 	// One run == one producing job == at most one required kind (I-03 keeps
@@ -37,22 +44,23 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 	if !isRequired {
 		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan, nil)
 	}
-	leaseJTI := fmt.Sprintf("fleet:%s:%d", run.ID, job.FenceToken)
+	leaseJTI := jobleasepkg.JTIBuilds(run.ID, run.Attempt, job.FenceToken)
 	prior, err := e.store.AcceptedEvidenceForRun(ctx, run.TenantID, run.ID)
 	if err != nil {
 		return err
 	}
 
+	census := evidenceCensusFromJob(job)
 	rec := domain.NewEvidenceRecord(domain.NewID(domain.PrefixEvidence),
 		run.TenantID, run.ID, run.Attempt, run.CandidateID, kind,
 		evidencepkg.VerdictPass, job.ArtifactDigests, plan.InputsHash,
 		jobSelectionConfidence(plan), job.CostMillicents, leaseJTI, time.Now().UTC())
-	outcome := evidenceEvaluate(rec, evidenceContext(plan, leaseJTI, prior))
+	outcome := evidenceEvaluate(rec, evidenceContext(plan, leaseJTI, prior), census)
 	if outcome.Action != evidencepkg.ActionAccept {
 		logf("evidence %s for run %s rejected: %s", kind, run.ID, outcome.Reason)
 		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan, nil)
 	}
-	ev, err := newEvidenceRecordedEvent(rec)
+	ev, err := newEvidenceRecordedEvent(rec, outcome.Meta)
 	if err != nil {
 		return err
 	}
@@ -74,25 +82,28 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 // required-kind failure / pending repair blocks the verb (decision must
 // reflect ALL completed evidence).
 //
-// extra carries the CURRENT transaction's own accepted record: store reads
-// inside this effect tx go through the pool and cannot see its uncommitted
-// writes, so without it sufficiency would always compute <1 on the completing
-// run and the decision would stall until some later completion re-checked.
+// extra carries the CURRENT transaction's own accepted record: the just-
+// inserted evidence row is invisible to other connections until commit, so
+// sufficiency would always compute <1 without it.
+//
+// P1-5 (W4 audit): ALL four advisory reads run on the caller's tx via the
+// pgxQuerier seam — never on s.Pool while this tx holds
+// pg_advisory_xact_lock (cross-connection starvation stalled decisions).
 func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, tenantID, candidateID string, plan *domain.ValidationPlan, extra *store.EvidenceRef) error {
 	// Decisions are immutable facts; only the FIRST time sufficiency hits 1
 	// renders one (replays of the completion feed must not duplicate).
-	existing, err := e.store.LatestDecisionForCandidate(ctx, tenantID, candidateID)
+	existing, err := store.LatestDecisionForCandidateTx(ctx, tx, tenantID, candidateID)
 	if err == nil && existing != nil {
 		return nil
 	}
 	if err != nil && err != domain.ErrNotFound {
 		return err
 	}
-	failedRequired, err := e.store.CountFailedRequiredRuns(ctx, tenantID, candidateID, plan.RequiredEvidenceKinds)
+	failedRequired, err := store.CountFailedRequiredRunsTx(ctx, tx, tenantID, candidateID, plan.RequiredEvidenceKinds)
 	if err != nil {
 		return fmt.Errorf("count failed required runs: %w", err)
 	}
-	candState, err := e.store.CandidateStateByID(ctx, tenantID, candidateID)
+	candState, err := store.CandidateStateByIDTx(ctx, tx, tenantID, candidateID)
 	if err != nil && err != domain.ErrNotFound {
 		return fmt.Errorf("load candidate state: %w", err)
 	}
@@ -100,7 +111,7 @@ func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, te
 		logf("eligible blocked for %s: %s", candidateID, reason)
 		return nil
 	}
-	accepted, err := e.store.AcceptedEvidenceRefsForCandidate(ctx, tenantID, candidateID)
+	accepted, err := store.AcceptedEvidenceRefsForCandidateTx(ctx, tx, tenantID, candidateID)
 	if err != nil {
 		return err
 	}
@@ -127,6 +138,22 @@ func (e *EngineScheduler) maybeRenderEligible(ctx context.Context, tx pgx.Tx, te
 	})
 }
 
+// evidenceCensusFromJob maps the feed's outcome census onto the validator
+// type. A completion WITHOUT a census fail-closes to zero-executed (P0-2):
+// an unknown outcome can never be positive pass evidence.
+func evidenceCensusFromJob(job relay.CompletedJob) *evidencepkg.TestResults {
+	if job.Results == nil {
+		return &evidencepkg.TestResults{}
+	}
+	return &evidencepkg.TestResults{
+		Total:       job.Results.Total,
+		Passed:      job.Results.Passed,
+		Failed:      job.Results.Failed,
+		Skipped:     job.Results.Skipped,
+		Quarantined: job.Results.Quarantined,
+	}
+}
+
 func jobSelectionConfidence(plan *domain.ValidationPlan) float64 {
 	var conf float64 = 0.9
 	for _, t := range plan.Tiers {
@@ -138,22 +165,28 @@ func jobSelectionConfidence(plan *domain.ValidationPlan) float64 {
 }
 
 // newEvidenceRecordedEvent builds the evidence.recorded CORE event.
-func newEvidenceRecordedEvent(rec *domain.EvidenceRecord) (*domain.Event, error) {
+// outcomeMeta carries accept-time annotations (e.g. skipped_as_non_evidence)
+// so dossiers can show exactly which outcomes were excluded by I-01.
+func newEvidenceRecordedEvent(rec *domain.EvidenceRecord, outcomeMeta map[string]string) (*domain.Event, error) {
 	actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "scheduler"}
+	payload := map[string]any{
+		"ev_id":           rec.ID,
+		"run_id":          rec.RunID,
+		"candidate_id":    rec.CandidateID,
+		"kind":            rec.Kind,
+		"verdict":         rec.Verdict,
+		"digests":         toAnySlice(rec.Digests),
+		"inputs_hash":     rec.InputsHash,
+		"confidence":      rec.Confidence,
+		"cost_millicents": rec.CostMillicents,
+	}
+	if len(outcomeMeta) > 0 {
+		payload["outcome_meta"] = outcomeMeta
+	}
 	return domain.NewEvent(rec.TenantID,
 		domain.AggregateRef{Type: string(domain.AggEvidence), ID: rec.ID},
 		"evidence.recorded", "", domain.NewCorrelationID(), actor,
-		map[string]any{
-			"ev_id":           rec.ID,
-			"run_id":          rec.RunID,
-			"candidate_id":    rec.CandidateID,
-			"kind":            rec.Kind,
-			"verdict":         rec.Verdict,
-			"digests":         toAnySlice(rec.Digests),
-			"inputs_hash":     rec.InputsHash,
-			"confidence":      rec.Confidence,
-			"cost_millicents": rec.CostMillicents,
-		})
+		payload)
 }
 
 var _ = plannerpkg.RequiredKindsCoveredByTier

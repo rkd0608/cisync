@@ -125,6 +125,8 @@ export const fleetClaimResponseSchema = z.object({
       fence_token: z.number().int().min(1),
       tier: z.number().int(),
       pool: z.string(),
+      // P0-1/B2: the dispatch-time credential handed to the claiming worker.
+      lease_token: z.string().optional(),
       job_spec: z.object({
         kind: z.string(),
         repo: z.string(),

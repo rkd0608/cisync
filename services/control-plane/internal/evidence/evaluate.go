@@ -44,6 +44,7 @@ const (
 	ReasonDuplicateAttempt       = "duplicate_run_attempt"                   // I-03a
 	ReasonLeaseAlreadyAccepted   = "lease_jti_already_accepted"              // I-03b
 	ReasonSkipNeverPositive      = "skip_quarantine_never_positive_evidence" // I-01
+	ReasonNoExecutedTests        = "outcome_shows_zero_executed_tests"       // I-01 sufficiency gate
 	ReasonVerdictUnsupported     = "verdict_not_supported_by_outcome"
 	ReasonDigestManifestMismatch = "digest_manifest_mismatch"
 )
@@ -54,11 +55,12 @@ type ProposedRecord struct {
 	RunID       string
 	CandidateID string
 	Kind        string
-	Verdict     string   // pass|fail as claimed by the submitter
-	Outcome     string   // raw runner outcome for the underlying tests
-	Digests     []string // artifact digests, each "sha256:<64 hex>"
-	InputsHash  string   // full reuse key: base SHA + lockfiles + flags + toolchain
-	LeaseJTI    string   // producing job lease identity
+	Verdict     string       // pass|fail as claimed by the submitter
+	Outcome     string       // raw runner outcome for the underlying tests
+	Results     *TestResults // real outcome census; nil keeps the legacy string path
+	Digests     []string     // artifact digests, each "sha256:<64 hex>"
+	InputsHash  string       // full reuse key: base SHA + lockfiles + flags + toolchain
+	LeaseJTI    string       // producing job lease identity
 	Attempt     int
 }
 
@@ -80,7 +82,8 @@ type Context struct {
 // Evaluation is the deterministic ruling for one proposal.
 type Evaluation struct {
 	Action Action
-	Reason string // empty when accepted
+	Reason string            // empty when accepted
+	Meta   map[string]string // accept-time annotations, e.g. skipped_as_non_evidence
 }
 
 // Evaluate validates one proposed record against its acceptance context.
@@ -121,28 +124,13 @@ func Evaluate(p ProposedRecord, ctx Context) Evaluation {
 	default:
 		return Evaluation{Action: ActionReject, Reason: ReasonVerdictUnsupported}
 	}
+	if ruling, ok := checkResults(p); !ok {
+		return ruling
+	}
 	if ctx.ExpectedDigests != nil && !sameDigestSet(p.Digests, ctx.ExpectedDigests) {
 		return Evaluation{Action: ActionQuarantine, Reason: ReasonDigestManifestMismatch}
 	}
-	return Evaluation{Action: ActionAccept}
-}
-
-func checkWellFormed(p ProposedRecord) (string, bool) {
-	if p.ID == "" || p.RunID == "" || p.CandidateID == "" || p.Kind == "" || p.Attempt < 1 {
-		return ReasonMalformed, false
-	}
-	if p.Verdict != VerdictPass && p.Verdict != VerdictFail {
-		return ReasonMalformed, false
-	}
-	for _, d := range p.Digests {
-		if !isSHA256(d) {
-			return ReasonMalformed, false
-		}
-	}
-	if p.InputsHash != "" && !isSHA256(p.InputsHash) {
-		return ReasonMalformed, false
-	}
-	return "", true
+	return Evaluation{Action: ActionAccept, Meta: resultsMeta(p)}
 }
 
 func isSHA256(s string) bool {

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,15 @@ import (
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
+
+// errPermanentCompletion marks typed not-found conditions (unknown run,
+// plan, candidate or intent) that can never succeed on retry; such rows are
+// absorbed as processed diagnostics instead of poisoning the feed (P1-4).
+var errPermanentCompletion = errors.New("permanent completion failure")
+
+func permanentCompletion(cause error) error {
+	return fmt.Errorf("%w: %w", errPermanentCompletion, cause)
+}
 
 // completionConsumer is the I-12 dedupe consumer name for the fleet
 // completion feed.
@@ -37,97 +47,43 @@ func (e *EngineScheduler) IngestCompletions(ctx context.Context) (int, error) {
 	}
 	consumed := 0
 	for _, job := range jobs {
-		if doneKeys[dedupeKey(job.RunID, job.FenceToken)] {
+		key := dedupeKey(job.RunID, job.FenceToken)
+		if doneKeys[key] {
 			continue
 		}
 		applied, err := e.applyCompletion(ctx, job)
-		if err != nil {
-			logf("completion %s@%d: %v", job.RunID, job.FenceToken, err)
+		if err == nil {
+			if applied {
+				consumed++
+			}
 			continue
 		}
-		if applied {
-			consumed++
+		if errors.Is(err, errPermanentCompletion) {
+			// P1-4: typed permanent failures are absorbed exactly like the
+			// unknown-run path so the feed row stops re-surfacing.
+			logf("completion %s@%d absorbed permanently: %v", job.RunID, job.FenceToken, err)
+			if absorbErr := e.absorbCompletionRow(ctx, key); absorbErr != nil {
+				return consumed, absorbErr
+			}
+			continue
 		}
+		attempts, attemptErr := e.recordPoisonAttempt(ctx, key)
+		if attemptErr != nil {
+			return consumed, fmt.Errorf("poison tracking for %s: %w", key, attemptErr)
+		}
+		if attempts >= store.MaxFeedAttempts {
+			logf("completion %s@%d absorbed after %d failed ticks (poison cap)",
+				job.RunID, job.FenceToken, attempts)
+			if absorbErr := e.absorbCompletionRow(ctx, key); absorbErr != nil {
+				return consumed, absorbErr
+			}
+			continue
+		}
+		// Capped backoff skip: retry on a later tick, bounded by the cap.
+		logf("completion %s@%d deferred (attempt %d/%d): %v",
+			job.RunID, job.FenceToken, attempts, store.MaxFeedAttempts, err)
 	}
 	return consumed, nil
-}
-
-// applyCompletion runs the full effect pipeline for one completion inside a
-// single tx: dedupe first (I-12), then the state machine and projections.
-func (e *EngineScheduler) applyCompletion(ctx context.Context, job relay.CompletedJob) (bool, error) {
-	run, err := e.store.GetRunByID(ctx, job.RunID)
-	if err != nil {
-		if err == domain.ErrNotFound {
-			// Unknown run (e.g. a probe job seeded straight into the fleet):
-			// nothing to mutate — absorb as a marked diagnostic so the feed
-			// row stops re-surfacing every tick.
-			logf("unknown-run completion %s@%d absorbed; no effects", job.RunID, job.FenceToken)
-			if err := e.store.ExecTx(ctx, func(tx pgx.Tx) error {
-				_, err := store.MarkProcessedTx(ctx, tx, completionConsumer,
-					dedupeKey(job.RunID, job.FenceToken))
-				return err
-			}); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-		return false, fmt.Errorf("load run: %w", err)
-	}
-	if job.FenceToken != run.FenceToken || job.Attempt != run.Attempt {
-		// Stale epoch (reclaimed/cancelled elsewhere): diagnostics only —
-		// never mutate state from a stale fence holder (I-11).
-		logf("stale completion %s@%d (ctrl fence %d); discarded",
-			job.RunID, job.FenceToken, run.FenceToken)
-		return false, nil
-	}
-	// Decision freshness: a completion for an already-terminal run or a
-	// decided candidate is absorbed as a diagnostic (I-08) and marked
-	// processed so the feed row stops re-surfacing every tick.
-	candState, err := e.store.CandidateStateByID(ctx, run.TenantID, run.CandidateID)
-	if err != nil && err != domain.ErrNotFound {
-		return false, fmt.Errorf("load candidate state: %w", err)
-	}
-	if reason := completionIsDiagnostic(run.State, candState); reason {
-		logf("diagnostic completion %s@%d absorbed (run %s, candidate %s); no effects",
-			job.RunID, job.FenceToken, run.State, candState)
-		if err := e.store.ExecTx(ctx, func(tx pgx.Tx) error {
-			_, err := store.MarkProcessedTx(ctx, tx, completionConsumer,
-				dedupeKey(job.RunID, job.FenceToken))
-			return err
-		}); err != nil {
-			return false, err
-		}
-		return false, nil
-	}
-	var applied bool
-	err = e.store.ExecTx(ctx, func(tx pgx.Tx) error {
-		dedupeKey := dedupeKey(job.RunID, job.FenceToken)
-		first, err := store.MarkProcessedTx(ctx, tx, completionConsumer, dedupeKey)
-		if err != nil {
-			return err
-		}
-		if !first {
-			return nil // replayed feed row; effects already applied (I-12)
-		}
-		seq, err := e.appendCompletedTx(ctx, tx, run, job)
-		if err != nil {
-			return err
-		}
-		switch job.Status {
-		case "succeeded":
-			err = e.onRunSucceeded(ctx, tx, run, job, seq)
-		case "failed", "timed_out":
-			err = e.onRunFailed(ctx, tx, run, job, seq)
-		default:
-			err = nil // cancelled completions are supersede echoes; no effects
-		}
-		if err != nil {
-			return err
-		}
-		applied = true
-		return nil
-	})
-	return applied, err
 }
 
 // appendCompletedTx appends the validation.completed event and advances the
@@ -149,6 +105,7 @@ func (e *EngineScheduler) appendCompletedTx(ctx context.Context, tx pgx.Tx, run 
 			"artifact_digests":       toAnySlice(job.ArtifactDigests),
 			"duration_ms":            job.DurationMS,
 			"actual_cost_millicents": job.CostMillicents,
+			"results_census":         censusPayload(job.Results),
 			// Correlation stamp so the served lifecycle of ONE candidate is
 			// traceable through the public tail (ARCHITECTURE_DRAFT §3a).
 			"candidate_id": run.CandidateID,
@@ -167,6 +124,18 @@ func (e *EngineScheduler) appendCompletedTx(ctx context.Context, tx pgx.Tx, run 
 		return 0, fmt.Errorf("update run projection: %w", err)
 	}
 	return ev.Seq, nil
+}
+
+// censusPayload renders the outcome census for the ledger event payload so
+// served events expose the REAL executed outcome distribution (P0-2/I-01).
+func censusPayload(r *relay.CompletedResults) map[string]any {
+	if r == nil {
+		return nil
+	}
+	return map[string]any{
+		"total": r.Total, "passed": r.Passed, "failed": r.Failed,
+		"skipped": r.Skipped, "quarantined": r.Quarantined,
+	}
 }
 
 func mapFleetStatus(status string) string {

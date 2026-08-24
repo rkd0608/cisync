@@ -21,11 +21,17 @@ import (
  */
 
 func completionFor(runID string, fence int64, attempt int, status string) relay.CompletedJob {
+	// P0-2: succeeded completions carry an honest full-pass census — the
+	// scheduler fail-closes zero-executed outcomes to non-evidence.
+	results := &relay.CompletedResults{Total: 8, Passed: 8}
+	if status != "succeeded" {
+		results = &relay.CompletedResults{Total: 6, Failed: 6}
+	}
 	return relay.CompletedJob{
 		RunID: runID, Attempt: attempt, FenceToken: fence, Tier: 1, Pool: "sim",
 		Status: status, LogsDigest: "sha256:" + fmt.Sprintf("%064d", 4),
 		ArtifactDigests: []string{"sha256:" + fmt.Sprintf("%064d", 5)},
-		DurationMS:      10, CostMillicents: 1,
+		DurationMS:      10, CostMillicents: 1, Results: results,
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"sauron.dev/sauron/github-connector/internal/config"
+	"sauron.dev/sauron/github-connector/internal/redact"
 	"sauron.dev/sauron/github-connector/internal/server"
 	pgstore "sauron.dev/sauron/github-connector/internal/store"
 )
@@ -22,7 +23,9 @@ func main() {
 		slog.Error("configuration invalid", slog.String("err", err.Error()))
 		os.Exit(1)
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	// B3: every log line passes the fail-closed secret scrubber before it
+	// reaches the stdout sink.
+	logger := slog.New(slog.NewJSONHandler(&redact.Writer{Next: os.Stdout}, nil))
 
 	st, err := pgstore.NewPGStore(context.Background(), cfg.PGDSN)
 	if err != nil {

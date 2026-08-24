@@ -5,6 +5,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"time"
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
@@ -22,6 +25,41 @@ type Completion struct {
 	// LogsExcerpt carries a bounded prefix of the run log so control-plane
 	// can classify failures without cross-schema reads. Sim-only today.
 	LogsExcerpt string
+	// Results is the runner-reported outcome census (P0-2/I-01); nil is
+	// tolerated for synthetic probes but real jobs must populate it.
+	Results *domain.TestResults
+}
+
+// ResultRef renders the stored result document for a completion, including
+// the census and its tamper-evident digest when present.
+func (c Completion) ResultRef() map[string]any {
+	ref := map[string]any{
+		"status":          c.Status,
+		"logs_digest":     c.LogsDigest,
+		"duration_ms":     c.DurationMS,
+		"cost_millicents": c.ActualCostMilliCents,
+	}
+	if c.Classification != "" {
+		ref["class"] = c.Classification
+	}
+	if len(c.ArtifactDigests) > 0 {
+		ref["artifact_digests"] = append([]string(nil), c.ArtifactDigests...)
+	}
+	if c.LogsExcerpt != "" {
+		ref["logs_excerpt"] = c.LogsExcerpt
+	}
+	if c.Results != nil {
+		raw, err := json.Marshal(*c.Results)
+		if err == nil {
+			var doc map[string]any
+			if json.Unmarshal(raw, &doc) == nil {
+				ref["results"] = doc
+				sum := sha256.Sum256(raw)
+				ref["results_digest"] = "sha256:" + hex.EncodeToString(sum[:])
+			}
+		}
+	}
+	return ref
 }
 
 // FleetJob is a stored execution job including mutable claim state.
@@ -40,7 +78,10 @@ type FleetJob struct {
 	ResultRef     map[string]any
 	Accepted      bool
 	Spec          domain.JobSpec
-	CreatedAt     time.Time
+	// LeaseToken is the dispatch-time credential (B2); empty only for
+	// synthetic probe jobs, whose mutations are rejected as unauthorized.
+	LeaseToken string
+	CreatedAt  time.Time
 }
 
 // Claim identifies the claiming worker and its capability filter.

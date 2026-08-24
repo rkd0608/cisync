@@ -131,7 +131,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	// Cluster assignment at submission (§2): join iff path-overlap ≥ 0.6 AND
 	// trigram similarity ≥ τ against an active representative; duplicates are
 	// parked as blocked_representative until the representative resolves.
-	assignment, repID := assignCluster(s.store, tenant, intent.Declared.Repo, cand.ID,
+	assignment, repID := assignCluster(r.Context(), s.store, tenant, intent.Declared.Repo, cand.ID,
 		changedPaths, base)
 	cand.ClusterID = assignment.ClusterID
 	if assignment.RelationToRep != "" {

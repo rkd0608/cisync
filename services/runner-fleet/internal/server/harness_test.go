@@ -3,11 +3,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,11 +16,15 @@ import (
 
 	"sauron.dev/sauron/runner-fleet/internal/config"
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	fstore "sauron.dev/sauron/runner-fleet/internal/store"
 )
 
 // harness wires the production mux against a memory store and a fixed clock.
+// It also holds the job-lease test signer: every enqueued job is dispatched
+// with a real credential so protocol tests exercise the same authenticated
+// surface production runners use (THREAT_MODEL B2).
 type harness struct {
 	t       *testing.T
 	svc     *httptest.Server
@@ -31,11 +33,29 @@ type harness struct {
 	now     time.Time
 	mu      sync.Mutex
 	cancels []string
+	signer  *joblease.Signer
+	rogue   *joblease.Signer
+	tokens  map[string]string // run_id -> presented credential
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	h := &harness{t: t, now: time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)}
+	h := &harness{t: t, now: time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC), tokens: map[string]string{}}
+	signer, err := joblease.NewSignerForTesting()
+	if err != nil {
+		t.Fatalf("job lease test signer: %v", err)
+	}
+	rogue, err := joblease.NewSignerForTesting()
+	if err != nil {
+		t.Fatalf("rogue signer: %v", err)
+	}
+	h.signer = signer
+	h.rogue = rogue
+	verifier, err := joblease.NewVerifierFromPublicPEM(signer.PublicPEM())
+	if err != nil {
+		t.Fatalf("verifier wiring: %v", err)
+	}
+	verifier.Now = func() time.Time { return h.clock() }
 	h.st = fstore.NewMemoryStore(func() time.Time { return h.clock() })
 	cfg := config.Config{
 		Pool:              "sim",
@@ -46,7 +66,7 @@ func newHarness(t *testing.T) *harness {
 		GaugeInterval:     time.Hour,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := New(cfg, h.st, h, logger, obs.New(), func() time.Time { return h.clock() })
+	srv := New(cfg, h.st, h, logger, obs.New(), func() time.Time { return h.clock() }, verifier)
 	h.srv = srv
 	h.svc = httptest.NewServer(srv.Mux)
 	t.Cleanup(h.svc.Close)
@@ -91,123 +111,20 @@ func (h *harness) cancelledRuns() []string {
 }
 
 func (h *harness) post(path string, body any) (*http.Response, map[string]any) {
-	h.t.Helper()
-	raw, _ := json.Marshal(body)
-	resp, err := http.Post(h.svc.URL+path, "application/json", bytes.NewReader(raw))
-	if err != nil {
-		h.t.Fatalf("post %s: %v", path, err)
-	}
-	defer resp.Body.Close()
-	var decoded map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil && resp.ContentLength != 0 {
-		decoded = nil
-	}
-	return resp, decoded
-}
-
-type testJobParams struct {
-	runID      string
-	attempt    int
-	tier       int
-	durationMS int64
-	bias       string
-	timeoutMS  int64
-}
-
-func (h *harness) enqueue(p testJobParams) domain.Job {
-	h.t.Helper()
-	if p.runID == "" {
-		p.runID = "run_01JTEST0000000000000000000"
-	}
-	if p.attempt == 0 {
-		p.attempt = 1
-	}
-	if p.durationMS == 0 {
-		p.durationMS = 50
-	}
-	if p.bias == "" {
-		p.bias = "pass"
-	}
-	if p.timeoutMS == 0 {
-		p.timeoutMS = 60000
-	}
-	job := domain.Job{
-		RunID:   p.runID,
-		Attempt: p.attempt,
-		Tier:    p.tier,
-		Pool:    "sim",
-		Spec: domain.JobSpec{
-			Kind:      "selected_unit",
-			Repo:      "acme/payments",
-			BaseSHA:   "1111111111111111111111111111111111111111",
-			HeadSHA:   "2222222222222222222222222222222222222222",
-			TimeoutMS: p.timeoutMS,
-			SimProfile: &domain.SimProfile{
-				DurationMS:  p.durationMS,
-				OutcomeBias: p.bias,
-			},
-		},
-	}
-	if err := h.st.Enqueue(context.Background(), job); err != nil {
-		h.t.Fatalf("enqueue %s: %v", p.runID, err)
-	}
-	return job
-}
-
-type claimedJobView struct {
-	RunID      string
-	FenceToken int64
-	Attempt    int
-	Tier       int
-	Pool       string
-	Spec       domain.JobSpec
-}
-
-func (h *harness) claim(workerID string, limit int) []claimedJobView {
-	h.t.Helper()
-	resp, body := h.post("/internal/fleet/jobs/claim", map[string]any{"pool": "sim", "limit": limit, "worker_id": workerID})
-	if resp.StatusCode != http.StatusOK {
-		h.t.Fatalf("claim must 200, got %d (%v)", resp.StatusCode, body)
-	}
-	jobsAny, _ := body["jobs"].([]any)
-	var out []claimedJobView
-	for _, j := range jobsAny {
-		m := j.(map[string]any)
-		view := claimedJobView{RunID: m["run_id"].(string), FenceToken: int64(m["fence_token"].(float64))}
-		if v, ok := m["attempt"].(float64); ok {
-			view.Attempt = int(v)
-		}
-		if v, ok := m["tier"].(float64); ok {
-			view.Tier = int(v)
-		}
-		if v, ok := m["pool"].(string); ok {
-			view.Pool = v
-		}
-		out = append(out, view)
-	}
-	return out
+	return h.postWithAuth(path, "", body)
 }
 
 func (h *harness) complete(runID string, fence int64, status string) (*http.Response, map[string]any) {
 	h.t.Helper()
-	return h.post("/internal/fleet/jobs/"+runID+"/complete", map[string]any{
-		"fence_token":            fence,
-		"status":                 status,
-		"logs_digest":            digestFor([]byte("logs-" + runID)),
-		"artifact_digests":       []string{digestFor([]byte("art-" + runID))},
-		"duration_ms":            42000,
-		"actual_cost_millicents": 180,
-	})
+	return h.completeWithToken(runID, fence, status, h.tokenFor(runID))
 }
 
 func (h *harness) heartbeat(runID string, fence int64) (*http.Response, map[string]any) {
-	h.t.Helper()
-	return h.post("/internal/fleet/jobs/"+runID+"/heartbeat", map[string]any{"fence_token": fence})
+	return h.heartbeatWithToken(runID, fence, h.tokenFor(runID))
 }
 
 func (h *harness) cancel(runID, reason string) (*http.Response, map[string]any) {
-	h.t.Helper()
-	return h.post("/internal/fleet/jobs/"+runID+"/cancel", map[string]any{"reason": reason})
+	return h.cancelWithToken(runID, reason, h.tokenFor(runID))
 }
 
 func digestFor(data []byte) string {

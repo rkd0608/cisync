@@ -18,7 +18,7 @@ func TestCanonicalJSONSortsStructFieldOrder(t *testing.T) {
 	}
 	in := map[string]any{
 		"conflicts": []any{conflict{IntentID: "int_1", Relation: "overlapping", Owner: "acme/idem", Recommendation: "coordinate"}},
-		"budget":    struct {
+		"budget": struct {
 			CPUMinutes    int64 `json:"cpu_minutes"`
 			RepairAttempt int64 `json:"repair_attempts"`
 		}{CPUMinutes: 120, RepairAttempt: 2},

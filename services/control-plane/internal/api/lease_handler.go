@@ -87,37 +87,34 @@ func (s *Server) handleRenewLease(w http.ResponseWriter, r *http.Request) {
 	if body.TTLSeconds == 0 {
 		body.TTLSeconds = 1500
 	}
-
-	lease, err := s.store.GetLease(r.Context(), tenant, leaseID)
-	if err != nil {
-		WriteDomainError(w, err)
+	// P1-3: domain validation first (bounds check), then the conditional
+	// UPDATE — no GetLease→mutate→persist window; expired/revoked leases
+	// come back as typed conflict from the store.
+	if body.TTLSeconds < 30 || body.TTLSeconds > 3600 {
+		WriteError(w, http.StatusBadRequest, "validation_failed",
+			"ttl_seconds must be within [30,3600]", nil, nil, nil)
 		return
 	}
-	if err := lease.Renew(body.TTLSeconds); err != nil {
-		if errors.Is(err, domain.ErrPostTerminal) {
-			// Post-terminal renewal is a typed conflict per openapi:
-			// conflict_state with details.reason from the frozen vocabulary.
-			reason := "revoked_lease"
-			if lease.State == domain.LeaseExpired {
-				reason = "expired_lease"
-			}
+	ttlExpiresAt, renewalCount, err := s.store.RenewLease(r.Context(), tenant, leaseID, body.TTLSeconds)
+	if err != nil {
+		if errors.Is(err, domain.ErrConflict) {
 			WriteError(w, http.StatusConflict, "conflict_state",
 				"lease is not renewable; request a fresh grant",
-				map[string]any{"reason": reason}, nil, nil)
+				map[string]any{"reason": "expired_lease"}, nil, nil)
 			s.metrics.Inc("sauron_ctrl_http_requests_total", "409")
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			WriteDomainError(w, err)
 			return
 		}
 		WriteDomainError(w, err)
 		return
 	}
-	if err := s.store.RenewLease(r.Context(), lease); err != nil {
-		WriteDomainError(w, err)
-		return
-	}
 	resp, _ := json.Marshal(map[string]any{
-		"lease_id":       lease.ID,
-		"ttl_expires_at": lease.TTLExpiresAt.Format(time.RFC3339),
-		"renewal_count":  lease.RenewalCount,
+		"lease_id":       leaseID,
+		"ttl_expires_at": ttlExpiresAt.Format(time.RFC3339),
+		"renewal_count":  renewalCount,
 	})
 	writeRawJSON(w, http.StatusOK, resp)
 	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")

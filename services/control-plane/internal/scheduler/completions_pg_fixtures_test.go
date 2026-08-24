@@ -24,9 +24,13 @@ import (
 type fakeFleet struct {
 	completed []relay.CompletedJob
 	cancelled []string
+	enqueued  []relay.EnqueueRequest
 }
 
-func (f *fakeFleet) Enqueue(_ context.Context, _ relay.EnqueueRequest) error { return nil }
+func (f *fakeFleet) Enqueue(_ context.Context, req relay.EnqueueRequest) error {
+	f.enqueued = append(f.enqueued, req)
+	return nil
+}
 func (f *fakeFleet) Completed(_ context.Context, _ int) ([]relay.CompletedJob, error) {
 	return f.completed, nil
 }
@@ -50,7 +54,7 @@ func pgScheduler(t *testing.T) (*EngineScheduler, *store.Store, func()) {
 		t.Fatalf("migrate: %v", err)
 	}
 	fleet := &fakeFleet{}
-	engine := NewEngine(st, fleet, "sim", 8)
+	engine := NewEngine(st, fleet, "sim", 8, nil)
 	return engine, st, func() { st.Close() }
 }
 
@@ -125,8 +129,10 @@ func seedValidationCandidate(t *testing.T, st *store.Store, tenantID, tag string
 // the scheduler does, so seeded completions carry the post-claim fence (I-11).
 func dispatchRuns(t *testing.T, engine *EngineScheduler, runIDs []string) {
 	t.Helper()
+	resolved := DefaultPolicySource()
 	for _, id := range runIDs {
-		if _, err := engine.dispatchOne(context.Background(), id); err != nil {
+		if _, err := engine.dispatchOne(context.Background(), id,
+			BudgetReservation{}, resolved); err != nil {
 			t.Fatalf("dispatch %s: %v", id, err)
 		}
 	}

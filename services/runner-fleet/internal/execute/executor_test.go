@@ -12,16 +12,17 @@ import (
 
 func TestProviderUnavailableMarksFailedInfraTransient(t *testing.T) {
 	st := newTestStore(t)
-	job := domain.Job{
+	lease := newTestLease(t)
+	job := lease.mintFor(domain.Job{
 		RunID: "run-infra", Attempt: 1, Tier: 1, Pool: "sim",
 		Spec: domain.JobSpec{Kind: "selected_unit", TimeoutMS: 60000},
-	}
+	})
 	if err := st.Enqueue(context.Background(), job); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	exec := New(st, failingProvider{}, NewRegistry(), obs.New(), quietLogger(),
-		"sim", "sim", 1, time.Hour, 10*time.Millisecond)
+		"sim", "sim", 1, time.Hour, 10*time.Millisecond, lease.verifier)
 	ctx, cancel := context.WithCancel(context.Background())
 	go exec.Run(ctx)
 
@@ -46,21 +47,22 @@ func TestProviderUnavailableMarksFailedInfraTransient(t *testing.T) {
 
 func TestExecutorRunsJobsToEndToEndAccepted(t *testing.T) {
 	st := newTestStore(t)
+	lease := newTestLease(t)
 	for _, id := range []string{"run-e2e-1", "run-e2e-2", "run-e2e-3"} {
-		err := st.Enqueue(context.Background(), domain.Job{
+		job := lease.mintFor(domain.Job{
 			RunID: id, Attempt: 1, Tier: 1, Pool: "sim",
 			Spec: domain.JobSpec{
 				Kind: "selected_unit", TimeoutMS: 60000,
 				SimProfile: &domain.SimProfile{DurationMS: 20, OutcomeBias: "pass"},
 			},
 		})
-		if err != nil {
+		if err := st.Enqueue(context.Background(), job); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
 	}
 
 	exec := New(st, providers.NewSim(), NewRegistry(), obs.New(), quietLogger(),
-		"sim", "sim", 2, 100*time.Millisecond, 5*time.Millisecond)
+		"sim", "sim", 2, 100*time.Millisecond, 5*time.Millisecond, lease.verifier)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go exec.Run(ctx)
@@ -93,17 +95,18 @@ func TestExecutorRunsJobsToEndToEndAccepted(t *testing.T) {
 
 func TestExecutorDiscardsResultAfterReclaimI11(t *testing.T) {
 	st := newTestStore(t)
+	lease := newTestLease(t)
 	scripted := newScriptedProvider()
-	err := st.Enqueue(context.Background(), domain.Job{
+	err := st.Enqueue(context.Background(), lease.mintFor(domain.Job{
 		RunID: "run-stolen", Attempt: 1, Tier: 1, Pool: "sim",
 		Spec: domain.JobSpec{Kind: "selected_unit", TimeoutMS: 600000},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	exec := New(st, scripted, NewRegistry(), obs.New(), quietLogger(),
-		"sim", "sim", 1, time.Hour, 5*time.Millisecond)
+		"sim", "sim", 1, time.Hour, 5*time.Millisecond, lease.verifier)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go exec.Run(ctx)
@@ -140,17 +143,18 @@ func TestExecutorDiscardsResultAfterReclaimI11(t *testing.T) {
 
 func TestHeartbeatKeepsJobFreshDuringExecution(t *testing.T) {
 	st := newTestStore(t)
+	lease := newTestLease(t)
 	scripted := newScriptedProvider()
-	err := st.Enqueue(context.Background(), domain.Job{
+	err := st.Enqueue(context.Background(), lease.mintFor(domain.Job{
 		RunID: "run-hb-live", Attempt: 1, Tier: 1, Pool: "sim",
 		Spec: domain.JobSpec{Kind: "api_compat", TimeoutMS: 600000},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	exec := New(st, scripted, NewRegistry(), obs.New(), quietLogger(),
-		"sim", "sim", 1, 10*time.Millisecond, 5*time.Millisecond)
+		"sim", "sim", 1, 10*time.Millisecond, 5*time.Millisecond, lease.verifier)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go exec.Run(ctx)

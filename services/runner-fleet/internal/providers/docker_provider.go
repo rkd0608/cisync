@@ -99,11 +99,17 @@ func (p *DockerProvider) Submit(ctx context.Context, job domain.Job) (domain.Han
 		switch {
 		case err == nil:
 			o.Status = domain.StatusSucceeded
+			c := censusFromExit(nil)
+			o.Results = &c
 		case deadlinePassed(deadline, runCtx):
 			o.Status = domain.StatusTimedOut
+			c := censusFromExit(err)
+			o.Results = &c
 		default:
 			o.Status = domain.StatusFailed
 			o.Classification = "exit_nonzero"
+			c := censusFromExit(err)
+			o.Results = &c
 		}
 		o.Artifacts = []domain.Artifact{logArtifact(o)}
 		h.outcome = o
@@ -146,6 +152,16 @@ func commandFor(job domain.Job) string {
 
 func deadlinePassed(deadline time.Time, ctx context.Context) bool {
 	return time.Now().After(deadline) || ctx.Err() != nil
+}
+
+// censusFromExit maps the container exit code onto the outcome census
+// (P0-2): docker jobs execute exactly one command, so total=1 and the exit
+// code alone decides passed vs failed.
+func censusFromExit(err error) domain.TestResults {
+	if err == nil {
+		return domain.TestResults{Total: 1, Passed: 1}
+	}
+	return domain.TestResults{Total: 1, Failed: 1}
 }
 
 func costFromDuration(d time.Duration) int64 {

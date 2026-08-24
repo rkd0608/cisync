@@ -9,6 +9,7 @@ import (
 	"sauron.dev/sauron/control-plane/internal/domain"
 	failurepkg "sauron.dev/sauron/control-plane/internal/failure"
 	policypkg "sauron.dev/sauron/control-plane/internal/policy"
+	redact "sauron.dev/sauron/control-plane/internal/redact"
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
@@ -17,9 +18,16 @@ import (
 // infra_transient retries bounded; repairable classes authorize a bounded
 // repair; security violations reject; everything else defers (EC-016/021).
 func (e *EngineScheduler) onRunFailed(ctx context.Context, tx pgx.Tx, run *domain.ValidationRun, job relay.CompletedJob, seq int64) error {
-	fc := failurepkg.Classify(job.LogsExcerpt, failurepkg.Context{})
+	// P1-2/T1/B3: runner log excerpts are untrusted external input — scrub
+	// BEFORE classification so extracted signals (reproduction command,
+	// suspected paths) embedded in ledger events can never carry secrets.
+	fc := failurepkg.Classify(redact.String(job.LogsExcerpt), failurepkg.Context{})
 	intent, err := e.store.GetIntent(ctx, run.TenantID, intentIDForCandidate(ctx, e.store, run.TenantID, run.CandidateID))
 	if err != nil {
+		if err == domain.ErrNotFound {
+			return fmt.Errorf("load intent for routing: %w",
+				permanentCompletion(domain.ErrNotFound))
+		}
 		return fmt.Errorf("load intent for routing: %w", err)
 	}
 

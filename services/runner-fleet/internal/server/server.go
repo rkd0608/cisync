@@ -11,6 +11,7 @@ import (
 	"sauron.dev/sauron/runner-fleet/internal/config"
 	"sauron.dev/sauron/runner-fleet/internal/domain"
 	"sauron.dev/sauron/runner-fleet/internal/execute"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
@@ -33,21 +34,22 @@ type sweeperFunc func(ctx context.Context, threshold, interval time.Duration)
 
 // New wires protocol endpoints, the embedded executor, and metrics from
 // configuration. providerName is sim|docker; provider must match it. nowFn is
-// injectable for deterministic tests.
-func New(cfg config.Config, st store.Store, p domain.Provider, logger *slog.Logger, metrics *obs.Metrics, nowFn func() time.Time) *Server {
+// injectable for deterministic tests. leaseVerifier validates job-lease
+// credentials (B2/I-04); nil fails closed (every mutation 401s).
+func New(cfg config.Config, st store.Store, p domain.Provider, logger *slog.Logger, metrics *obs.Metrics, nowFn func() time.Time, leaseVerifier *joblease.Verifier) *Server {
 	if nowFn == nil {
 		nowFn = time.Now
 	}
 	registry := execute.NewRegistry()
 	exec := execute.New(st, p, registry, metrics, logger, cfg.Pool, cfg.Provider,
-		cfg.SimWorkers, cfg.HeartbeatInterval, cfg.PollInterval)
+		cfg.SimWorkers, cfg.HeartbeatInterval, cfg.PollInterval, leaseVerifier)
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/fleet/jobs/claim", api.NewClaimHandler(st, logger, nowFn))
 	mux.Handle("POST /internal/fleet/jobs", api.NewEnqueueHandler(st, logger, nowFn))
-	mux.Handle("POST /internal/fleet/jobs/{run_id}/heartbeat", api.NewHeartbeatHandler(st, metrics, nowFn))
-	mux.Handle("POST /internal/fleet/jobs/{run_id}/complete", api.NewCompleteHandler(st, metrics, logger, nowFn))
-	mux.Handle("POST /internal/fleet/jobs/{run_id}/cancel", api.NewCancelHandler(st, registry, p, metrics, logger, nowFn))
+	mux.Handle("POST /internal/fleet/jobs/{run_id}/heartbeat", api.NewHeartbeatHandler(st, metrics, nowFn, leaseVerifier))
+	mux.Handle("POST /internal/fleet/jobs/{run_id}/complete", api.NewCompleteHandler(st, metrics, logger, nowFn, leaseVerifier))
+	mux.Handle("POST /internal/fleet/jobs/{run_id}/cancel", api.NewCancelHandler(st, registry, p, metrics, logger, nowFn, leaseVerifier))
 	mux.Handle("GET /internal/fleet/jobs/completed", api.NewCompletedHandler(st, logger))
 	mux.Handle("GET /healthz", api.NewHealthzHandler())
 	mux.Handle("GET /metrics", api.NewMetricsHandler(metrics))

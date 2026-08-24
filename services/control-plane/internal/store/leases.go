@@ -39,29 +39,58 @@ func (s *Store) GetLease(ctx context.Context, tenantID, leaseID string) (*domain
 	return &l, nil
 }
 
-// RenewLease persists a renewed TTL and appends lease.renewed.
-func (s *Store) RenewLease(ctx context.Context, l *domain.Lease) error {
+// RenewLease persists a renewed TTL with ONE conditional UPDATE: the row
+// must still be granted AND its current TTL must not have expired (checked
+// in-tx against now()), so two racing renews serialize on the row lock and
+// the post-check instead of a read-mutate-write window (P1-3). RowsAffected
+// == 0 ⇒ unknown lease OR post-terminal/expired state, surfaced as typed
+// ErrConflict. Ledger event + projection commit in the SAME tx.
+func (s *Store) RenewLease(ctx context.Context, tenantID, leaseID string, ttlSeconds int64) (time.Time, int, error) {
 	corr := domain.NewCorrelationID()
-	actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "control-plane"}
-	ev, err := domain.NewEvent(l.TenantID,
-		domain.AggregateRef{Type: string(domain.AggLease), ID: l.ID},
-		"lease.renewed", "", corr, actor, map[string]any{
-			"lease_id":       l.ID,
-			"ttl_expires_at": l.TTLExpiresAt.Format(time.RFC3339),
-			"renewal_count":  l.RenewalCount,
-		})
-	if err != nil {
-		return err
-	}
-	return s.withTx(ctx, func(tx pgx.Tx) error {
+	var newTTL time.Time
+	var renewalCount int
+	err := s.withTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`UPDATE ctrl.leases SET
+			    ttl_expires_at = now() + make_interval(secs => $3),
+			    renewal_count = renewal_count + 1
+			 WHERE id=$1 AND tenant_id=$2 AND state='granted' AND ttl_expires_at > now()`,
+			leaseID, tenantID, ttlSeconds)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return domain.ErrConflict
+		}
+		if err := tx.QueryRow(ctx,
+			`SELECT ttl_expires_at, renewal_count FROM ctrl.leases WHERE id=$1 AND tenant_id=$2`,
+			leaseID, tenantID,
+		).Scan(&newTTL, &renewalCount); err != nil {
+			return err
+		}
+		actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "control-plane"}
+		ev, err := domain.NewEvent(tenantID,
+			domain.AggregateRef{Type: string(domain.AggLease), ID: leaseID},
+			"lease.renewed", "", corr, actor, map[string]any{
+				"lease_id":       leaseID,
+				"ttl_expires_at": newTTL.Format(time.RFC3339),
+				"renewal_count":  renewalCount,
+			})
+		if err != nil {
+			return err
+		}
 		if err := s.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx,
-			`UPDATE ctrl.leases SET ttl_expires_at=$3, renewal_count=$4, seq=$5 WHERE id=$1 AND tenant_id=$2`,
-			l.ID, l.TenantID, l.TTLExpiresAt, l.RenewalCount, ev.Seq)
+		_, err = tx.Exec(ctx,
+			`UPDATE ctrl.leases SET seq=$3 WHERE id=$1 AND tenant_id=$2`,
+			leaseID, tenantID, ev.Seq)
 		return err
 	})
+	if err != nil {
+		return time.Time{}, 0, err
+	}
+	return newTTL, renewalCount, nil
 }
 
 // ReleaseLease marks a granted lease released (idempotent); standalone form

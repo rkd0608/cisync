@@ -12,5 +12,5 @@ dist/
 coverage/
 bin/
 *.test
-platform/dev-keys/*.key
+platform/dev-keys/*
 tests/scenarios/reports/

@@ -41,13 +41,17 @@ describe('I-11 contract: stale-fence vectors are well-formed refusable attempts'
 
 describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder writes', () => {
   let claimed: ClaimedJob | undefined;
+  // P0-1/B2: the claim response hands the dispatch-time job-lease credential
+  // to the worker; every completion presents it as Authorization: Bearer.
+  let leaseToken: string | undefined;
 
   async function claimWithin(timeoutMs: number): Promise<ClaimedJob | undefined> {
     // WHY the probe pool: claiming from 'sim' steals another suite's live run
     // and double-bumps its fence, stranding that candidate (I-11 regression
     // driver). The seeded job exercises the identical fencing surface.
     const { seedFenceProbeJob, claimFleetJob, FENCE_PROBE_POOL } = await import('./lib/live.js');
-    await seedFenceProbeJob(`i11-${Date.now()}`);
+    const seed = await seedFenceProbeJob(`i11-${Date.now()}`);
+    leaseToken = seed.leaseToken;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const found = await claimFleetJob(FENCE_PROBE_POOL);
@@ -59,16 +63,25 @@ describe.skipIf(!liveModeEnabled())('I-11 live: only the current fence holder wr
 
   it('wrong-token completion → 409 fence_mismatch; correct token → accepted', { timeout: 30_000 }, async () => {
     claimed = await claimWithin(15_000);
-    if (!claimed) return; // dispatch not wired yet
-    const wrong = await completeFleetJob(claimed.run_id, claimed.fence_token + 1_000_000, 'succeeded');
-    if (wrong.status === 409) {
-      expect(wrong.reason).toBe('fence_mismatch');
+    if (!claimed || !leaseToken) return; // dispatch not wired yet
+    // A valid lease presenting a STALE epoch hits the fenced write: 409.
+    const staleEpoch = await completeFleetJob(claimed.run_id, claimed.fence_token + 1_000_000, 'succeeded', leaseToken);
+    if (staleEpoch.status === 409) {
+      expect(staleEpoch.reason).toBe('fence_mismatch');
     } else {
       // Conforming alternative: unknown-token requests may be refused as bad request.
-      expect(wrong.status).toBe(400);
+      expect(staleEpoch.status).toBe(400);
     }
-    const right = await completeFleetJob(claimed.run_id, claimed.fence_token, 'failed');
+    const right = await completeFleetJob(claimed.run_id, claimed.fence_token, 'failed', leaseToken);
     expect(right.status).toBe(200);
     expect(right.accepted).toBe(true);
+  });
+
+  it('completion without the job-lease credential is refused unauthorized (P0-1)', { timeout: 30_000 }, async () => {
+    if (!claimed) return;
+    const unauthed = await completeFleetJob(claimed.run_id, claimed.fence_token, 'failed');
+    expect(unauthed.status).toBe(401);
+    const envelope = await import('./lib/live.js').then((m) => m.expectErrorBody(unauthed.status, JSON.stringify(unauthed.body)));
+    expect(envelope.error.code).toBe('unauthorized');
   });
 });

@@ -210,4 +210,3 @@ func TestRunLifecycleEventsCarryCandidateCorrelation(t *testing.T) {
 		t.Fatalf("validation.started must carry candidate_id=%q, got %v", candidateID, started.Payload["candidate_id"])
 	}
 }
-

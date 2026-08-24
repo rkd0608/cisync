@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/providers"
 	fstore "sauron.dev/sauron/runner-fleet/internal/store"
 )
@@ -88,6 +89,48 @@ func (p *scriptedProvider) releaseWith(runID string, o domain.Outcome) {
 func newTestStore(t *testing.T) *fstore.MemoryStore {
 	t.Helper()
 	return fstore.NewMemoryStore(time.Now)
+}
+
+// testLease mints real job-lease credentials for executor tests: the
+// embedded worker path is gated identically to production (B2/I-04).
+type testLease struct {
+	signer   *joblease.Signer
+	verifier *joblease.Verifier
+}
+
+func newTestLease(t *testing.T) *testLease {
+	t.Helper()
+	signer, err := joblease.NewSignerForTesting()
+	if err != nil {
+		t.Fatalf("test lease signer: %v", err)
+	}
+	verifier, err := joblease.NewVerifierFromPublicPEM(signer.PublicPEM())
+	if err != nil {
+		t.Fatalf("test lease verifier: %v", err)
+	}
+	return &testLease{signer: signer, verifier: verifier}
+}
+
+// mintFor issues the dispatch-time credential and returns a job carrying it.
+func (l *testLease) mintFor(job domain.Job) domain.Job {
+	now := time.Now()
+	token, err := l.signer.Mint(joblease.Claims{
+		Audience:   joblease.Audience,
+		ID:         joblease.JTIBuilds(job.RunID, job.Attempt, 1),
+		RunID:      job.RunID,
+		Attempt:    job.Attempt,
+		FenceToken: 1,
+		Repo:       job.Spec.Repo,
+		Tier:       job.Tier,
+		IssuedAt:   now.Unix(),
+		ExpiresAt:  now.Add(30 * time.Minute).Unix(),
+	})
+	if err != nil {
+		t := &testing.T{}
+		t.Fatalf("mint lease: %v", err)
+	}
+	job.LeaseToken = token
+	return job
 }
 
 func quietLogger() *slog.Logger {

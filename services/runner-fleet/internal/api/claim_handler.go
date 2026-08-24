@@ -41,6 +41,10 @@ type claimedJob struct {
 	Tier       int            `json:"tier"`
 	Pool       string         `json:"pool"`
 	JobSpec    domain.JobSpec `json:"job_spec"`
+	// LeaseToken hands the dispatch-time credential to the claiming worker;
+	// it MUST be presented as Authorization: Bearer on heartbeat/complete
+	// (internal-protocols §2, THREAT_MODEL B2).
+	LeaseToken string `json:"lease_token,omitempty"`
 }
 
 type claimResponse struct {
@@ -92,6 +96,7 @@ func (h *ClaimHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Tier:       j.Tier,
 			Pool:       j.Pool,
 			JobSpec:    j.Spec,
+			LeaseToken: j.LeaseToken,
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)

@@ -50,6 +50,7 @@ func (m *MemoryStore) Enqueue(_ context.Context, job domain.Job) error {
 		Status:     domain.StatusQueued,
 		FenceToken: 0,
 		Spec:       job.Spec,
+		LeaseToken: job.LeaseToken,
 		CreatedAt:  m.nowFn(),
 	}
 	m.order = append(m.order, job.RunID)
@@ -93,6 +94,7 @@ func (m *MemoryStore) ClaimJobs(_ context.Context, c Claim, now time.Time) ([]do
 			Tier:       j.Tier,
 			Pool:       j.Pool,
 			Spec:       j.Spec,
+			LeaseToken: j.LeaseToken,
 		})
 	}
 	return claimed, nil
@@ -144,22 +146,7 @@ func (m *MemoryStore) Complete(_ context.Context, runID string, c Completion, no
 	j.Status = c.Status
 	j.Accepted = true
 	j.FinishedAt = now
-	ref := map[string]any{
-		"status":          c.Status,
-		"logs_digest":     c.LogsDigest,
-		"duration_ms":     c.DurationMS,
-		"cost_millicents": c.ActualCostMilliCents,
-	}
-	if c.Classification != "" {
-		ref["class"] = c.Classification
-	}
-	if len(c.ArtifactDigests) > 0 {
-		ref["artifact_digests"] = append([]string(nil), c.ArtifactDigests...)
-	}
-	if c.LogsExcerpt != "" {
-		ref["logs_excerpt"] = c.LogsExcerpt
-	}
-	j.ResultRef = ref
+	j.ResultRef = c.ResultRef()
 	return nil
 }
 

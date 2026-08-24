@@ -45,10 +45,10 @@ func (s *PGStore) Enqueue(ctx context.Context, job domain.Job) error {
 		return fmt.Errorf("pg store: marshal job spec: %w", err)
 	}
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO fleet.execution_jobs (id, run_id, attempt, pool, tier, status, fence_token, job_spec)
-		VALUES ($7,$1,$2,$3,$4,$5,0,$6)
+		INSERT INTO fleet.execution_jobs (id, run_id, attempt, pool, tier, status, fence_token, job_spec, lease_token)
+		VALUES ($7,$1,$2,$3,$4,$5,0,$6,$8)
 		ON CONFLICT (run_id) DO NOTHING`,
-		job.RunID, job.Attempt, job.Pool, job.Tier, domain.StatusQueued, spec, "job_"+job.RunID)
+		job.RunID, job.Attempt, job.Pool, job.Tier, domain.StatusQueued, spec, "job_"+job.RunID, job.LeaseToken)
 	if err != nil {
 		return fmt.Errorf("pg store: enqueue %s: %w", job.RunID, err)
 	}

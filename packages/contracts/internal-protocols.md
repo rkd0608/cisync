@@ -26,18 +26,64 @@ Responses: `202 accepted` · `200 replay (idempotent)` · `401 bad signature` ·
 
 Base: `SAURON_CTRL_FLEET_URL`. Fleet NEVER reads the ledger; control-plane drives it.
 
+### Job-lease credentials (THREAT_MODEL B2 / I-04)
+
+Control-plane mints ONE Ed25519-signed job-lease token per dispatched run at
+dispatch time (`alg: EdDSA`, compact JWT). Claims:
+
+| claim | value |
+|---|---|
+| `aud` | `"sauron-fleet"` |
+| `jti` | `"fleet:<run_id>:<attempt>:<fence_token>"` |
+| `run_id`, `attempt`, `fence_token`, `repo`, `tier` | the dispatch identity |
+| `iat`, `exp` | RFC 3339 epoch seconds; TTL ≤ **60 minutes** |
+
+The token rides the enqueue payload (`lease_token`), is stored with the job,
+and is handed to the claiming worker in the claim response. Every mutating
+call below REQUIRES `Authorization: Bearer <job-lease-token>`. The fleet
+verifies signature (public key only), audience, expiry, and that claims bind
+to the job (`run_id`, `attempt`; fence currency remains the fenced write's
+409 ruling per I-11). Missing/expired/tampered/misbound credentials get
+
+`401 {"error": {"code": "unauthorized", "message": …}}`.
+
+Fleet public key envs: `SAURON_FLEET_JOBLEASYPUB_KEY_FILE` (PEM file) or
+`SAURON_FLEET_JOBLEASE_PUB_B64` (base64 inline PEM). Control-plane signs with
+its dedicated key from `SAURON_CTRL_JOBLEASE_KEY_FILE`. Unconfigured fleets
+fail closed.
+
+### Endpoints
+
+- `POST /internal/fleet/jobs`
+  `{"run_id": "run_…", "attempt": 1, "tier": 1, "pool": "sim", "job_spec": {…},
+    "lease_token": "<job-lease JWT>"}` → `202 {"accepted": true}`
+  Idempotent insert of a claimable execution job.
 - `POST /internal/fleet/jobs/claim`
   `{"pool": "sim", "limit": 4}` →
-  `{"jobs": [{"run_id": "run_…", "attempt": 1, "fence_token": 7, "tier": 1, "pool": "sim", "job_spec": {…}}]}`
+  `{"jobs": [{"run_id": "run_…", "attempt": 1, "fence_token": 7, "tier": 1,
+    "pool": "sim", "job_spec": {…}, "lease_token": "<JWT>"}]}`
   Claim is atomic server-side; a run is claimed by ≤1 worker at a time.
-- `POST /internal/fleet/jobs/{run_id}/heartbeat` `{"fence_token": 7}` → `204`
+- `POST /internal/fleet/jobs/{run_id}/heartbeat`
+  Headers: `Authorization: Bearer <job-lease-token>` (required).
+  `{"fence_token": 7}` → `204` | `401 unauthorized` | `409 fence_mismatch`
 - `POST /internal/fleet/jobs/{run_id}/complete`
-  `{"fence_token": 7, "status": "succeeded|failed|timed_out", "logs_digest": "sha256:…",
+  Headers: `Authorization: Bearer <job-lease-token>` (required).
+  `{"fence_token": 7, "status": "succeeded|failed|timed_out",
+    "logs_digest": "sha256:…",
     "artifact_digests": ["sha256:…"], "duration_ms": 42000,
-    "actual_cost_millicents": 180}`
-  → `200 {"accepted": true}` | `409 {"accepted": false, "reason": "fence_mismatch|already_accepted"}`
-  Results uploaded BEFORE this call; stale fence tokens never mutate state (I-11).
-- `POST /internal/fleet/jobs/{run_id}/cancel` `{"reason": "superseded"}` → `204` (idempotent)
+    "actual_cost_millicents": 180,
+    "results": {"total": 8, "passed": 8, "failed": 0, "skipped": 0,
+                "quarantined": 0}}`
+  → `200 {"accepted": true}` · `401 unauthorized` ·
+  `409 {"accepted": false, "reason": "fence_mismatch|already_accepted"}`
+  Results are uploaded BEFORE this call; stale fence tokens never mutate
+  state (I-11). The `results` census MUST sum to `total` when present;
+  providers always populate it so control-plane can validate I-01 against
+  REAL executed outcomes (skipped/quarantined are never positive evidence).
+- `POST /internal/fleet/jobs/{run_id}/cancel`
+  Headers: `Authorization: Bearer <job-lease-token>` (required; binds on
+  `run_id`/`attempt` only — no fence is presentable in the cancel body).
+  `{"reason": "superseded"}` → `204` (idempotent)
 
 ## 3. Job spec (inside claim payload)
 
@@ -66,9 +112,12 @@ pushes one envelope per rendered decision via its outbox relay.
 - `GET /internal/fleet/jobs/completed?limit=N` (control-plane → fleet, feed)
   `{"jobs": [{"run_id","attempt","fence_token","tier","pool","status",
    "logs_digest","logs_excerpt?","artifact_digests[]","duration_ms",
-   "actual_cost_millicents","classification?"}]}` — accepted terminal jobs,
+   "actual_cost_millicents","classification?",
+   "results?": {"total","passed","failed","skipped","quarantined"},
+   "results_digest?"}]}` — accepted terminal jobs,
    newest first. Consumers dedupe by `(run_id, fence_token)` inside their
-   effect tx (I-12), so replays are harmless.
+   effect tx (I-12), so replays are harmless. The census mirrors the stored
+   completion and is the I-01 validation input on the control-plane side.
 - `POST /internal/connector/decisions` (control-plane → connector)
   Headers: `Idempotency-Key: <decision_id>`,
   `X-Sauron-Signature: sha256=<hex hmac of raw body with SAURON_CONN_WEBHOOK_SECRET>`,

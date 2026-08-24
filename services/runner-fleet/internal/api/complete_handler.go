@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
@@ -18,18 +19,20 @@ var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // CompleteHandler serves POST /internal/fleet/jobs/{run_id}/complete.
 type CompleteHandler struct {
-	store   store.Store
-	metrics *obs.Metrics
-	logger  *slog.Logger
-	nowFn   func() time.Time
+	store    store.Store
+	metrics  *obs.Metrics
+	logger   *slog.Logger
+	nowFn    func() time.Time
+	verifier *joblease.Verifier
 }
 
-// NewCompleteHandler builds the completion gate handler.
-func NewCompleteHandler(st store.Store, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time) *CompleteHandler {
+// NewCompleteHandler builds the completion gate handler. verifier enforces
+// the job-lease credential gate (B2/I-04); nil fails closed.
+func NewCompleteHandler(st store.Store, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, verifier *joblease.Verifier) *CompleteHandler {
 	if nowFn == nil {
 		nowFn = time.Now
 	}
-	return &CompleteHandler{store: st, metrics: m, logger: logger, nowFn: nowFn}
+	return &CompleteHandler{store: st, metrics: m, logger: logger, nowFn: nowFn, verifier: verifier}
 }
 
 type completeRequest struct {
@@ -39,6 +42,13 @@ type completeRequest struct {
 	ArtifactDigests      []string `json:"artifact_digests"`
 	DurationMS           int64    `json:"duration_ms"`
 	ActualCostMilliCents int64    `json:"actual_cost_millicents"`
+	Results              *struct {
+		Total       int `json:"total"`
+		Passed      int `json:"passed"`
+		Failed      int `json:"failed"`
+		Skipped     int `json:"skipped"`
+		Quarantined int `json:"quarantined"`
+	} `json:"results,omitempty"`
 }
 
 // ServeHTTP implements the fenced completion protocol:
@@ -76,6 +86,23 @@ func (h *CompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_failed", "negative duration or cost")
 		return
 	}
+	var results *domain.TestResults
+	if req.Results != nil {
+		census := domain.TestResults(*req.Results)
+		if census.Total < 0 || census.Passed < 0 || census.Failed < 0 || census.Skipped < 0 || census.Quarantined < 0 {
+			writeError(w, http.StatusBadRequest, "validation_failed", "results census must be non-negative")
+			return
+		}
+		if census.Passed+census.Failed+census.Skipped+census.Quarantined != census.Total {
+			writeError(w, http.StatusBadRequest, "validation_failed", "results census must sum to total")
+			return
+		}
+		results = &census
+	}
+	fence := req.FenceToken
+	if _, ok := authorizeJobMutation(w, r, h.store, h.verifier, &fence); !ok {
+		return
+	}
 
 	err := h.store.Complete(r.Context(), runID, store.Completion{
 		FenceToken:           req.FenceToken,
@@ -84,6 +111,7 @@ func (h *CompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ArtifactDigests:      req.ArtifactDigests,
 		DurationMS:           req.DurationMS,
 		ActualCostMilliCents: req.ActualCostMilliCents,
+		Results:              results,
 	}, h.nowFn())
 	switch {
 	case err == nil:

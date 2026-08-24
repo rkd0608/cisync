@@ -40,6 +40,9 @@ type JobSpec struct {
 }
 
 // Job is one fenced execution instance; run_id is unique per attempt.
+// LeaseToken is the control-plane-minted job-lease JWT (THREAT_MODEL B2):
+// presented as `Authorization: Bearer` on heartbeat/complete/cancel and
+// re-verified by the embedded executor before any internal mutation (I-04).
 type Job struct {
 	RunID      string  `json:"run_id"`
 	Attempt    int     `json:"attempt"`
@@ -47,6 +50,7 @@ type Job struct {
 	Tier       int     `json:"tier"`
 	Pool       string  `json:"pool"`
 	Spec       JobSpec `json:"job_spec"`
+	LeaseToken string  `json:"lease_token,omitempty"`
 }
 
 // Artifact is a digest-addressed output blob.
@@ -58,6 +62,23 @@ type Artifact struct {
 	ContentType string `json:"content_type,omitempty"`
 }
 
+// TestResults is the runner-reported outcome census (internal-protocols §2
+// results object). It rides on every terminal Outcome so control-plane can
+// validate I-01 against REAL executed tests instead of job status.
+type TestResults struct {
+	Total       int `json:"total"`
+	Passed      int `json:"passed"`
+	Failed      int `json:"failed"`
+	Skipped     int `json:"skipped"`
+	Quarantined int `json:"quarantined"`
+}
+
+// Sum returns the total of all counted outcomes; consistency requires it to
+// equal Total exactly.
+func (r TestResults) Sum() int {
+	return r.Passed + r.Failed + r.Skipped + r.Quarantined
+}
+
 // Outcome is a terminal execution result reported through complete.
 type Outcome struct {
 	Status         string // succeeded | failed | timed_out
@@ -66,4 +87,6 @@ type Outcome struct {
 	Artifacts      []Artifact
 	DurationMS     int64
 	CostMilliCents int64
+	// Results is the outcome census; providers MUST populate it (P0-2).
+	Results *TestResults
 }

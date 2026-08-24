@@ -14,18 +14,29 @@ const defaultCompletedLimit = 100
 
 // CompletedJobView is one accepted terminal job in the control-plane feed.
 type CompletedJobView struct {
-	RunID           string   `json:"run_id"`
-	Attempt         int      `json:"attempt"`
-	FenceToken      int64    `json:"fence_token"`
-	Tier            int      `json:"tier"`
-	Pool            string   `json:"pool"`
-	Status          string   `json:"status"`
-	LogsDigest      string   `json:"logs_digest"`
-	LogsExcerpt     string   `json:"logs_excerpt,omitempty"`
-	ArtifactDigests []string `json:"artifact_digests"`
-	DurationMS      int64    `json:"duration_ms"`
-	CostMillicents  int64    `json:"actual_cost_millicents"`
-	Classification  string   `json:"classification,omitempty"`
+	RunID           string       `json:"run_id"`
+	Attempt         int          `json:"attempt"`
+	FenceToken      int64        `json:"fence_token"`
+	Tier            int          `json:"tier"`
+	Pool            string       `json:"pool"`
+	Status          string       `json:"status"`
+	LogsDigest      string       `json:"logs_digest"`
+	LogsExcerpt     string       `json:"logs_excerpt,omitempty"`
+	ArtifactDigests []string     `json:"artifact_digests"`
+	DurationMS      int64        `json:"duration_ms"`
+	CostMillicents  int64        `json:"actual_cost_millicents"`
+	Classification  string       `json:"classification,omitempty"`
+	Results         *resultsView `json:"results,omitempty"`
+	ResultsDigest   string       `json:"results_digest,omitempty"`
+}
+
+// resultsView mirrors the stored census document in result_ref.
+type resultsView struct {
+	Total       int `json:"total"`
+	Passed      int `json:"passed"`
+	Failed      int `json:"failed"`
+	Skipped     int `json:"skipped"`
+	Quarantined int `json:"quarantined"`
 }
 
 // CompletedHandler serves GET /internal/fleet/jobs/completed: the pull-based
@@ -91,11 +102,37 @@ func (h *CompletedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if view.ArtifactDigests == nil {
 			view.ArtifactDigests = []string{}
 		}
+		if doc, ok := j.ResultRef["results"].(map[string]any); ok {
+			view.Results = resultsViewOf(doc)
+		}
+		if v, ok := j.ResultRef["results_digest"].(string); ok {
+			view.ResultsDigest = v
+		}
 		out = append(out, view)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{"jobs": out})
+}
+
+func resultsViewOf(doc map[string]any) *resultsView {
+	out := &resultsView{}
+	if v, ok := doc["total"].(float64); ok {
+		out.Total = int(v)
+	}
+	if v, ok := doc["passed"].(float64); ok {
+		out.Passed = int(v)
+	}
+	if v, ok := doc["failed"].(float64); ok {
+		out.Failed = int(v)
+	}
+	if v, ok := doc["skipped"].(float64); ok {
+		out.Skipped = int(v)
+	}
+	if v, ok := doc["quarantined"].(float64); ok {
+		out.Quarantined = int(v)
+	}
+	return out
 }
 
 func durationOf(ref map[string]any) int64 {

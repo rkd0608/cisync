@@ -12,6 +12,7 @@ import (
 
 	"sauron.dev/sauron/runner-fleet/internal/config"
 	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	"sauron.dev/sauron/runner-fleet/internal/providers"
 	"sauron.dev/sauron/runner-fleet/internal/redact"
@@ -50,10 +51,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Job-lease verification is REQUIRED at boot (THREAT_MODEL B2/I-04):
+	// without the control-plane public key every mutation would 401 anyway,
+	// so refusing to start surfaces the misconfiguration immediately.
+	if len(cfg.JobLeasePubKey) == 0 {
+		logger.Error("job-lease public key not configured (SAURON_FLEET_JOBLEASYPUB_KEY_FILE or SAURON_FLEET_JOBLEASE_PUB_B64)")
+		os.Exit(1)
+	}
+	leaseVerifier, err := joblease.NewVerifierFromPublicPEM(cfg.JobLeasePubKey)
+	if err != nil {
+		logger.Error("job-lease public key invalid", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	srv := server.New(cfg, st, provider, logger, metrics, time.Now)
+	srv := server.New(cfg, st, provider, logger, metrics, time.Now, leaseVerifier)
 
 	go srv.Executor.Run(ctx)
 	go srv.Sweeper(ctx, cfg.WorkerStaleAfter, cfg.PollInterval)

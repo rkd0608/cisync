@@ -8,6 +8,7 @@ import (
 
 	"sauron.dev/sauron/runner-fleet/internal/domain"
 	"sauron.dev/sauron/runner-fleet/internal/execute"
+	"sauron.dev/sauron/runner-fleet/internal/joblease"
 	"sauron.dev/sauron/runner-fleet/internal/obs"
 	"sauron.dev/sauron/runner-fleet/internal/store"
 )
@@ -20,15 +21,17 @@ type CancelHandler struct {
 	metrics  *obs.Metrics
 	logger   *slog.Logger
 	nowFn    func() time.Time
+	verifier *joblease.Verifier
 }
 
 // NewCancelHandler builds the cancel handler; registry provides best-effort
-// provider cancellation for in-flight jobs.
-func NewCancelHandler(st store.Store, reg *execute.Registry, p domain.Provider, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time) *CancelHandler {
+// provider cancellation for in-flight jobs. verifier enforces the job-lease
+// credential gate (B2/I-04); nil fails closed.
+func NewCancelHandler(st store.Store, reg *execute.Registry, p domain.Provider, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, verifier *joblease.Verifier) *CancelHandler {
 	if nowFn == nil {
 		nowFn = time.Now
 	}
-	return &CancelHandler{store: st, registry: reg, provider: p, metrics: m, logger: logger, nowFn: nowFn}
+	return &CancelHandler{store: st, registry: reg, provider: p, metrics: m, logger: logger, nowFn: nowFn, verifier: verifier}
 }
 
 type cancelRequest struct {
@@ -50,6 +53,9 @@ func (h *CancelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := authorizeJobMutation(w, r, h.store, h.verifier, nil); !ok {
+		return
+	}
 	job, err := h.store.Get(r.Context(), runID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "unknown run")

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,8 @@ import (
 
 	"sauron.dev/sauron/control-plane/internal/api"
 	"sauron.dev/sauron/control-plane/internal/config"
+	"sauron.dev/sauron/control-plane/internal/joblease"
+	"sauron.dev/sauron/control-plane/internal/redact"
 	"sauron.dev/sauron/control-plane/internal/relay"
 	"sauron.dev/sauron/control-plane/internal/scheduler"
 	"sauron.dev/sauron/control-plane/internal/store"
@@ -24,6 +27,11 @@ import (
 )
 
 func main() {
+	// B3: every log line passes the fail-closed secret scrubber before it
+	// reaches stdout/stderr sinks.
+	logger := slog.New(slog.NewTextHandler(&redact.Writer{Next: os.Stderr}, nil))
+	slog.SetDefault(logger)
+
 	if len(os.Args) > 1 && os.Args[1] == "verify" {
 		runVerify()
 		return
@@ -70,13 +78,21 @@ func runServer() {
 	srv := api.NewServer(cfg, st, nil)
 	fleet := relay.NewFleetClient(cfg.FleetURL)
 
+	// Job-lease minting is REQUIRED: the fleet rejects unauthenticated
+	// mutations (B2/I-04), so dispatch without a signer would strand runs.
+	if cfg.JobLeaseKeyFile == "" {
+		must(errJobLeaseKeyMissing, "load job-lease key")
+	}
+	leaseSigner, err := joblease.NewSignerFromPEMFile(cfg.JobLeaseKeyFile)
+	must(err, "load job-lease key")
+
 	relayCtx, cancelRelay := context.WithCancel(ctx)
 	defer cancelRelay()
 	outbox := relay.New(st, cfg.RelayBatchSize, cfg.RelayPollInterval)
 
 	// Real engine scheduler: priority ranking + policy-capped admission +
 	// fleet dispatch + completion ingestion (evidence/failure/decisions).
-	engineScheduler := scheduler.NewEngine(st, fleet, "sim", cfg.SchedBatch)
+	engineScheduler := scheduler.NewEngine(st, fleet, "sim", cfg.SchedBatch, leaseSigner)
 
 	outbox.Register("validation.requested", func(ctx context.Context, item store.OutboxItem) error {
 		return st.ExecTx(ctx, func(tx pgx.Tx) error {
@@ -136,6 +152,8 @@ func runVerify() {
 	}
 	fmt.Printf("chain OK: %d entries, %d checkpoints verified\n", rep.Entries, rep.Checkpoints)
 }
+
+var errJobLeaseKeyMissing = fmt.Errorf("SAURON_CTRL_JOBLEASE_KEY_FILE is required")
 
 func must(err error, what string) {
 	if err != nil {

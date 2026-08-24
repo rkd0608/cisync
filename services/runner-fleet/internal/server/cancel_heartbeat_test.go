@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestHeartbeatFreshAndStaleFences(t *testing.T) {
@@ -23,7 +24,9 @@ func TestHeartbeatFreshAndStaleFences(t *testing.T) {
 	if body["reason"] != "fence_mismatch" {
 		t.Fatalf("heartbeat conflict reason wrong: %v", body)
 	}
-	respUnknown, _ := h.heartbeat("run-unknown", token)
+	// Unknown runs: 404 for AUTHENTICATED callers (uniform 404, no
+	// existence leak); unauthenticated callers get the opaque 401.
+	respUnknown, _ := h.heartbeatWithToken("run-unknown", token, h.mintLease("run-unknown", 1, token, time.Minute))
 	if respUnknown.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown run must 404, got %d", respUnknown.StatusCode)
 	}
@@ -101,9 +104,16 @@ func TestCompleteValidationErrors(t *testing.T) {
 	if respBadDigest.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad digest must 400, got %d", respBadDigest.StatusCode)
 	}
-	respUnknown, _ := h.complete("run-none", 9, "succeeded")
-	if respUnknown.StatusCode != http.StatusNotFound {
-		t.Fatalf("unknown run on complete must 404, got %d", respUnknown.StatusCode)
+	// Unknown runs answer 404 to AUTHENTICATED callers (uniform 404, no
+	// cross-tenant existence leak); without a credential it is opaque 401.
+	respUnauthed := h.rawComplete("run-none", 9, "succeeded", "")
+	_ = respUnauthed
+	if respUnauthed.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated complete must 401 before existence checks, got %d", respUnauthed.StatusCode)
+	}
+	respAuthedUnknown, _ := h.completeWithToken("run-none", 9, "succeeded", h.mintLease("run-none", 1, 9, time.Minute))
+	if respAuthedUnknown.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown run on authenticated complete must 404, got %d", respAuthedUnknown.StatusCode)
 	}
 }
 

@@ -12,12 +12,14 @@ import (
 // the candidate itself when unassigned). Unassignable candidates start a
 // fresh singleton cluster; failures degrade to unclustered submission
 // (clustering influences pacing, never correctness).
-func assignCluster(st *store.Store, tenantID, repo, candidateID string, changedPaths []string, priority float64) (cluster.Assignment, string) {
+//
+// ctx is the REQUEST context (P1-8): no context.Background() in request
+// paths — cancellation and deadlines propagate into the store reads.
+func assignCluster(ctx context.Context, st *store.Store, tenantID, repo, candidateID string, changedPaths []string, priority float64) (cluster.Assignment, string) {
 	none := cluster.Assignment{StrategyVersion: cluster.StrategyVersionV0}
 	if st == nil {
 		return none, ""
 	}
-	ctx := context.Background()
 	clusters, err := st.ActiveClustersForRepo(ctx, tenantID, repo)
 	if err != nil {
 		return none, ""

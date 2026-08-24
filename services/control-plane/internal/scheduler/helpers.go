@@ -46,7 +46,11 @@ func evidenceContext(plan *domain.ValidationPlan, leaseJTI string, prior []store
 }
 
 // evidenceEvaluate adapts the pure evaluator to a record + context pair.
-func evidenceEvaluate(rec *domain.EvidenceRecord, ctx evidencepkg.Context) evidencepkg.Evaluation {
+// The REAL runner outcome census is threaded in (P0-2/I-01): the verdict
+// must trace to executed tests, never be synthesized from job status. A nil
+// census fail-closes as zero-executed for succeeded runs — an unknown
+// outcome cannot be positive evidence.
+func evidenceEvaluate(rec *domain.EvidenceRecord, ctx evidencepkg.Context, results *evidencepkg.TestResults) evidencepkg.Evaluation {
 	proposal := evidencepkg.ProposedRecord{
 		ID:          rec.ID,
 		RunID:       rec.RunID,
@@ -58,10 +62,21 @@ func evidenceEvaluate(rec *domain.EvidenceRecord, ctx evidencepkg.Context) evide
 		LeaseJTI:    rec.ProducedByLease,
 		Attempt:     rec.Attempt,
 	}
-	switch rec.Verdict {
-	case evidencepkg.VerdictPass:
+	if results != nil {
+		census := *results
+		proposal.Results = &census
+		if census.Failed > 0 {
+			proposal.Outcome = evidencepkg.OutcomeFailed
+		} else if census.Passed > 0 {
+			proposal.Outcome = evidencepkg.OutcomePassed
+		} else {
+			proposal.Outcome = evidencepkg.OutcomeSkipped
+		}
+	} else if rec.Verdict == evidencepkg.VerdictPass {
+		// Legacy callers without a census keep the string-outcome path; the
+		// scheduler always passes one (nil maps to zero-executed below).
 		proposal.Outcome = evidencepkg.OutcomePassed
-	default:
+	} else {
 		proposal.Outcome = evidencepkg.OutcomeFailed
 	}
 	return evidencepkg.Evaluate(proposal, ctx)

@@ -16,13 +16,16 @@ const maxEnqueueBodyBytes = int64(1 << 20)
 
 // EnqueueRequest is one job pushed by control-plane before dispatch
 // (internal-protocols §2 extension): the fleet-side execution_jobs row that
-// makes the run claimable.
+// makes the run claimable. LeaseToken is the Ed25519 job-lease JWT minted at
+// dispatch (B2); synthetic probe jobs may omit it, but then every mutation
+// on the job is rejected as unauthorized.
 type EnqueueRequest struct {
-	RunID   string         `json:"run_id"`
-	Attempt int            `json:"attempt"`
-	Tier    int            `json:"tier"`
-	Pool    string         `json:"pool"`
-	JobSpec domain.JobSpec `json:"job_spec"`
+	RunID      string         `json:"run_id"`
+	Attempt    int            `json:"attempt"`
+	Tier       int            `json:"tier"`
+	Pool       string         `json:"pool"`
+	JobSpec    domain.JobSpec `json:"job_spec"`
+	LeaseToken string         `json:"lease_token,omitempty"`
 }
 
 // EnqueueHandler serves POST /internal/fleet/jobs: idempotent insert of a
@@ -74,11 +77,12 @@ func (h *EnqueueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		req.Attempt = 1
 	}
 	err := h.store.Enqueue(r.Context(), domain.Job{
-		RunID:   req.RunID,
-		Attempt: req.Attempt,
-		Tier:    req.Tier,
-		Pool:    req.Pool,
-		Spec:    req.JobSpec,
+		RunID:      req.RunID,
+		Attempt:    req.Attempt,
+		Tier:       req.Tier,
+		Pool:       req.Pool,
+		Spec:       req.JobSpec,
+		LeaseToken: req.LeaseToken,
 	})
 	switch {
 	case err == nil:

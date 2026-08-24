@@ -107,22 +107,30 @@ func (s *Store) GetRunByID(ctx context.Context, runID string) (*domain.Validatio
 
 // CancelRunsForCandidateTx cancels all queued/dispatched runs of a candidate
 // (supersede propagation) inside the effect tx, appending one
-// validation.cancelled event per run.
+// validation.cancelled event per run. Dispatched runs release their I-06
+// budget reservation by estimate in the SAME tx (conservation); queued runs
+// reserved nothing.
 func CancelRunsForCandidateTx(ctx context.Context, tx pgx.Tx, st *Store, tenantID, candidateID, reason string) ([]string, error) {
 	rows, err := tx.Query(ctx,
-		`SELECT id FROM ctrl.validation_runs WHERE tenant_id=$1 AND candidate_id=$2 AND state IN ('queued','dispatched')`,
+		`SELECT id, state, est_duration_ms FROM ctrl.validation_runs
+		 WHERE tenant_id=$1 AND candidate_id=$2 AND state IN ('queued','dispatched')`,
 		tenantID, candidateID)
 	if err != nil {
 		return nil, fmt.Errorf("runs for candidate: %w", err)
 	}
-	var runIDs []string
+	type cancelTarget struct {
+		id       string
+		state    string
+		estDurMS int64
+	}
+	var targets []cancelTarget
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var t cancelTarget
+		if err := rows.Scan(&t.id, &t.state, &t.estDurMS); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan run id: %w", err)
 		}
-		runIDs = append(runIDs, id)
+		targets = append(targets, t)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -131,11 +139,11 @@ func CancelRunsForCandidateTx(ctx context.Context, tx pgx.Tx, st *Store, tenantI
 
 	actor := domain.EventActor{Kind: string(domain.ActorSystem), ID: "scheduler"}
 	var cancelled []string
-	for _, runID := range runIDs {
+	for _, target := range targets {
 		ev, err := domain.NewEvent(tenantID,
-			domain.AggregateRef{Type: string(domain.AggRun), ID: runID},
+			domain.AggregateRef{Type: string(domain.AggRun), ID: target.id},
 			"validation.cancelled", "", domain.NewCorrelationID(), actor,
-			map[string]any{"run_ids": toAnySlice([]string{runID}), "reason": reason})
+			map[string]any{"run_ids": toAnySlice([]string{target.id}), "reason": reason})
 		if err != nil {
 			return cancelled, err
 		}
@@ -145,12 +153,20 @@ func CancelRunsForCandidateTx(ctx context.Context, tx pgx.Tx, st *Store, tenantI
 		tag, err := tx.Exec(ctx,
 			`UPDATE ctrl.validation_runs SET state='cancelled', finished_at=now(), seq=$3
 			 WHERE id=$1 AND tenant_id=$2 AND state IN ('queued','dispatched')`,
-			runID, tenantID, ev.Seq)
+			target.id, tenantID, ev.Seq)
 		if err != nil {
-			return cancelled, fmt.Errorf("cancel run %s: %w", runID, err)
+			return cancelled, fmt.Errorf("cancel run %s: %w", target.id, err)
 		}
 		if tag.RowsAffected() == 1 {
-			cancelled = append(cancelled, runID)
+			cancelled = append(cancelled, target.id)
+			if target.state == "dispatched" {
+				if err := ReleaseBudgetsTx(ctx, tx, tenantID, ev.Seq, BudgetDeltas{
+					BudgetCPUMinutes:           ActualCPUMinutes(0, target.estDurMS),
+					BudgetConcurrentCandidates: 1,
+				}); err != nil {
+					return cancelled, err
+				}
+			}
 		}
 	}
 	return cancelled, nil
