@@ -26,6 +26,12 @@ export default function RootLayout({
               <Link href="/" className="hover:text-cyan-300">
                 board
               </Link>
+              <Link href="/installations" className="hover:text-cyan-300">
+                installations
+              </Link>
+              <Link href="/onboarding" className="hover:text-cyan-300">
+                onboarding
+              </Link>
             </nav>
           </div>
         </header>

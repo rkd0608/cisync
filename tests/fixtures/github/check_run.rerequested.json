@@ -1,0 +1,10 @@
+{
+  "action": "rerequested",
+  "check_run": {
+    "id": 987654,
+    "name": "Agent Verification Gate",
+    "external_id": "cand_01JEXAMPLEEXAMPLEEXAMPLEEXAMP"
+  },
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "sender": { "login": "octocat" }
+}

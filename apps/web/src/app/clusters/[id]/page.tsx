@@ -54,7 +54,10 @@ export default async function ClusterPage({
           members · representative first
         </h2>
         {members.length === 0 ? (
-          <EmptyState title="no members" hint="Cluster has no live members." />
+          <EmptyState
+            what="no members"
+            whyEmpty="Clustering forms when ≥2 candidates overlap ≥0.6 path-similarity."
+          />
         ) : (
           <ul className="flex flex-col gap-2">
             {members.map((member) => {

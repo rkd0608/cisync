@@ -89,10 +89,10 @@ export default async function IntentDetailPage({
         </h2>
         {candidates.length === 0 ? (
           <EmptyState
-            title="no candidates"
-            hint={
+            what="no candidates"
+            whyEmpty={
               candidatesResult.ok
-                ? undefined
+                ? 'No candidate has been submitted against this intent yet.'
                 : 'candidate listing failed; showing nothing rather than partial data'
             }
           />

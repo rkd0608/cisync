@@ -92,9 +92,35 @@ services:
       SAURON_CONN_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron
       SAURON_CONN_ADDR: ":8083"
       SAURON_CONN_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
+      # GET /v1/installations/status bearer; unset ⇒ route fails closed 401.
+      SAURON_CONN_ADMIN_TOKEN: dev_admin_token_not_for_prod
+      # Optional GitHub App cred trio for live mode (G14): uncomment ALL
+      # THREE together after `scripts/github-app-manifest.sh` or the manual
+      # runbook emits them into .env.local. Half-configured creds refuse to
+      # boot (all-or-nothing, config.go).
+      # SAURON_CONN_GITHUB_APP_ID: "123456"
+      # SAURON_CONN_GITHUB_PRIVATE_KEY_FILE: /keys/github-app.dev.pem
+      # SAURON_CONN_GITHUB_INSTALLATION_ID: "789012"
+      # Control-plane endpoint + bearer for rerun replan (plan §4.5):
+      # SAURON_CONN_CTRL_URL: http://control-plane:8081
+      # SAURON_CONN_CTRL_TOKEN: dev_admin_token_not_for_prod
+    volumes:
+      - ./dev-keys:/keys:ro
     ports: ["8083:8083"]
     depends_on:
       postgres: { condition: service_healthy }
+
+  # --profile github: zero-account public webhook loopback for real GitHub
+  # Apps in local dev (plan §5.3/§5.4). Quick tunnels print the generated
+  # https://*.trycloudflare.com URL to container logs at boot — point the
+  # App's webhook at <that-url>/hooks/github. Only ingest is exposed; ctrl
+  # and connector stay internal. `ngrok http 8080` documented as alternative.
+  webhook-forwarder:
+    image: cloudflared/cloudflared:latest
+    profiles: ["github"]
+    command: tunnel --no-autoupdate --url http://ingest:8080
+    depends_on:
+      - ingest
 
   web:
     build: ../apps/web

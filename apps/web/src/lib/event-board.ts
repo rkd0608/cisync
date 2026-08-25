@@ -17,6 +17,8 @@ export interface BoardIntent {
   deadline: string | null;
   state: string;
   createdAtSeq: number;
+  repository: string | null;
+  origin: string;
 }
 
 export interface BoardCandidate {
@@ -26,6 +28,7 @@ export interface BoardCandidate {
   state: string;
   clusterId: string | null;
   relationToRep: string | null;
+  origin: string;
 }
 
 export interface BoardState {
@@ -39,6 +42,14 @@ export interface BoardState {
 }
 
 export const TIMELINE_CAP = 100;
+
+// §7 latency contract: >60s without a seq advance ⇒ amber "live feed paused".
+export const FEED_STALE_AFTER_MS = 60_000;
+
+export function isFeedStale(lastAdvancedAtMs: number | null, nowMs: number): boolean {
+  if (lastAdvancedAtMs === null) return false;
+  return nowMs - lastAdvancedAtMs > FEED_STALE_AFTER_MS;
+}
 
 export function emptyBoard(): BoardState {
   return {
@@ -77,6 +88,8 @@ function applyOne(board: BoardState, event: EventEnvelope): void {
         // Declared intents start exploring until a decision says otherwise.
         state: 'exploring',
         createdAtSeq: event.seq,
+        repository: payload.data.repository ?? null,
+        origin: event.actor?.kind ?? 'unknown',
       };
       return;
     }
@@ -93,6 +106,7 @@ function applyOne(board: BoardState, event: EventEnvelope): void {
         state: 'submitted',
         clusterId: null,
         relationToRep: null,
+        origin: event.actor?.kind ?? 'unknown',
       };
       // First admitted candidate moves the intent exploring → validating.
       const intent = board.intents[payload.data.intent_id];

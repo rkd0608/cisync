@@ -91,6 +91,64 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EvidenceDossier' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /candidates/{candidateId}/revalidate:
+    post:
+      operationId: revalidateCandidate
+      description: >
+        Appends a replan for the candidate under the CURRENT policy pack with
+        the candidate's current inputs_hash; increments rerun_count. Budget:
+        max 2 revalidations per candidate; terminal candidates are never
+        revalidated. Served by control-plane (:8081).
+      parameters: [{ $ref: '#/components/parameters/CandidateId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevalidateRequest' }
+      responses:
+        '202':
+          description: Replan queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevalidateAccepted' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: conflict_state — details.reason = rerun_budget_exhausted (cap reached or terminal candidate)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /policies/active:
+    get:
+      operationId: listActivePolicies
+      description: Readonly view of the ctrl.policies projection. ?history=1 returns every version including retired ones.
+      parameters:
+        - { name: history, in: query, required: false, schema: { type: string, enum: ['1'], description: "'1' = include non-active versions" } }
+      responses:
+        '200':
+          description: Policy projections
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PoliciesList' }
+  /installations/status:
+    get:
+      operationId: listInstallationStatus
+      description: >
+        Installation + webhook-health status served by GITHUB-CONNECTOR
+        (:8083, prefix /v1) from its own ghconn tables. webhook_state is
+        derived per repo: receiving when the last observed delivery is <15m
+        old, stalled otherwise, pending when nothing was ever observed.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Installations with per-repo delivery health
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstallationStatusList' }
+        '401':
+          description: Missing or invalid bearer token (fails closed when no admin token is configured)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /clusters/{clusterId}:
     get:
       operationId: getCluster
@@ -451,3 +509,56 @@ components:
             details: { type: object, additionalProperties: true }
             retry_after_s: { type: integer, nullable: true }
             suggestions: { type: array, items: { type: string } }
+    RevalidateRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Free-text trigger (e.g. check_run.rerequested); audit only.
+    RevalidateAccepted:
+      type: object
+      required: [plan_id]
+      properties:
+        plan_id: { type: string, pattern: '^val_[0-9A-HJKMNP-TV-Z]{26}$' }
+    PoliciesList:
+      type: object
+      required: [policies]
+      properties:
+        policies:
+          type: array
+          items:
+            type: object
+            required: [policy_id, version, status]
+            properties:
+              policy_id: { type: string }
+              version: { type: integer, minimum: 1 }
+              status: { type: string, enum: [draft, active, retired] }
+              activated_at: { type: string, format: date-time, nullable: true }
+              body: { type: object, description: Resolved policy pack document }
+    InstallationStatusList:
+      type: object
+      required: [installations]
+      properties:
+        installations:
+          type: array
+          items:
+            type: object
+            required: [installation_id, account, suspended, repos, permissions]
+            properties:
+              installation_id: { type: integer, format: int64 }
+              account: { type: string }
+              suspended: { type: boolean }
+              permissions:
+                type: object
+                additionalProperties: { type: string }
+              repos:
+                type: array
+                items:
+                  type: object
+                  required: [name, webhook_state, last_delivery_seq, last_event_at]
+                  properties:
+                    name: { type: string }
+                    webhook_state: { type: string, enum: [receiving, stalled, pending] }
+                    last_delivery_seq: { type: integer, format: int64 }
+                    last_event_at: { type: string, format: date-time, nullable: true }

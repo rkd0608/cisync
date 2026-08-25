@@ -1,17 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
-import { BoardSummaryStrip } from '@/components/board-summary-strip';
-import { EmptyState } from '@/components/empty-state';
-import { ErrorState, type ApiErrorView } from '@/components/error-state';
-import { EventTimeline } from '@/components/event-timeline';
-import { RelationBadge } from '@/components/relation-badge';
-import { RiskPill } from '@/components/risk-pill';
-import { StateBadge } from '@/components/state-badge';
-import { deriveSummary, type BoardCandidate } from '@/lib/event-board';
+import { BoardSummaryStrip } from './board-summary-strip';
+import { EmptyState } from './empty-state';
+import { ErrorState, type ApiErrorView } from './error-state';
+import { EventTimeline } from './event-timeline';
+import { RelationBadge } from './relation-badge';
+import { RiskPill } from './risk-pill';
+import { StateBadge } from './state-badge';
+import {
+  deriveSummary,
+  type BoardCandidate,
+  type BoardIntent,
+  type BoardState,
+} from '@/lib/event-board';
 import { formatCountdown, shortSha } from '@/lib/format';
-import { useEventBoard } from '@/lib/use-event-board';
+import type { EventEnvelope } from '@/lib/event-schemas';
+import { groupIntents } from '@/lib/board-filters';
+import type { BoardGroupMode } from '@/lib/board-filters';
 
 const COUNTDOWN_TONES: Record<string, string> = {
   overdue: 'text-red-400',
@@ -20,22 +26,18 @@ const COUNTDOWN_TONES: Record<string, string> = {
   none: 'text-zinc-600',
 };
 
-export function IntentBoard(): React.ReactElement {
-  const { phase, board, errorMessage, retry } = useEventBoard();
-  const summary = useMemo(() => deriveSummary(board), [board]);
-  const intents = Object.values(board.intents).sort(
-    (a, b) => a.createdAtSeq - b.createdAtSeq,
-  );
-  const candidates = Object.values(board.candidates);
+export interface IntentBoardProps {
+  phase: 'loading' | 'ready' | 'error';
+  board: BoardState;
+  visibleIntents: BoardIntent[];
+  visibleCandidates: Array<{ candidate: BoardCandidate; parent: BoardIntent | undefined }>;
+  errorMessage: string | null;
+  retry: () => void;
+  groupBy: BoardGroupMode;
+}
 
-  if (phase === 'error') {
-    const view: ApiErrorView = {
-      code: 'sync_failed',
-      message: errorMessage ?? 'ledger sync failed',
-    };
-    return <ErrorState error={view} onRetry={retry} />;
-  }
-
+export function IntentBoard(props: IntentBoardProps): React.ReactElement {
+  const summary = deriveSummary(props.board);
   return (
     <div className="flex flex-col gap-6">
       <BoardSummaryStrip summary={summary} />
@@ -44,52 +46,35 @@ export function IntentBoard(): React.ReactElement {
           <h2 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
             change intents · ledger-derived
           </h2>
-          {phase === 'loading' ? (
+          {props.phase === 'loading' ? (
             <SkeletonRows rows={4} />
-          ) : intents.length === 0 ? (
+          ) : props.phase === 'error' ? (
+            <ErrorState
+              error={{ code: 'sync_failed', message: props.errorMessage ?? 'ledger sync failed' } satisfies ApiErrorView}
+              onRetry={props.retry}
+            />
+          ) : props.visibleIntents.length === 0 ? (
             <EmptyState
-              title="no intents on the board"
-              hint="Intents appear here as intent.declared events land in the ledger."
+              what="no change activity yet"
+              whyEmpty="Open a PR on a connected repo, or POST /v1/change-intents. Intents appear here as intent.declared events land in the ledger."
+              action={{ label: 'connect a repo at /onboarding', href: '/onboarding' }}
             />
           ) : (
-            <ul className="flex flex-col gap-2">
-              {intents.map((intent) => {
-                const countdown = formatCountdown(intent.deadline, Date.now());
-                return (
-                  <li key={intent.id}>
-                    <Link
-                      href={`/intents/${intent.id}`}
-                      className="block rounded border border-zinc-800 bg-zinc-950 px-4 py-3 hover:border-zinc-600"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StateBadge state={intent.state} />
-                        <RiskPill risk={intent.riskClass} />
-                        <span
-                          className={`font-mono text-[11px] ${COUNTDOWN_TONES[countdown.tone] ?? ''}`}
-                        >
-                          {countdown.label}
-                        </span>
-                        <span className="ml-auto font-mono text-[11px] text-zinc-600">
-                          {intent.id}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 truncate text-sm text-zinc-200">{intent.goal}</p>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <IntentSections intents={props.visibleIntents} groupBy={props.groupBy} />
           )}
 
           <h2 className="mt-4 font-mono text-[11px] uppercase tracking-widest text-zinc-500">
-            candidates · {candidates.length}
+            candidates · {props.visibleCandidates.length}
           </h2>
-          {phase === 'loading' ? (
+          {props.phase === 'loading' ? (
             <SkeletonRows rows={3} />
-          ) : candidates.length === 0 ? (
-            <EmptyState title="no candidates submitted" />
+          ) : props.visibleCandidates.length === 0 ? (
+            <EmptyState
+              what="no candidates in view"
+              whyEmpty="Candidates appear when agents submit work against a declared intent (candidate.submitted events)."
+            />
           ) : (
-            <CandidateTable candidates={candidates} />
+            <CandidateTable rows={props.visibleCandidates} />
           )}
         </section>
 
@@ -98,7 +83,7 @@ export function IntentBoard(): React.ReactElement {
             ledger tail
           </h2>
           <div className="rounded border border-zinc-800 bg-zinc-950 p-2">
-            <EventTimeline events={board.timeline.slice(0, 30)} />
+            <EventTimeline events={props.board.timeline.slice(0, 30) as EventEnvelope[]} />
           </div>
         </aside>
       </div>
@@ -106,10 +91,58 @@ export function IntentBoard(): React.ReactElement {
   );
 }
 
-function CandidateTable({
-  candidates,
+function IntentSections({
+  intents,
+  groupBy,
 }: {
-  candidates: BoardCandidate[];
+  intents: BoardIntent[];
+  groupBy: BoardGroupMode;
+}): React.ReactElement {
+  const sections = groupIntents(intents, groupBy);
+  return (
+    <>
+      {sections.map((section) => (
+        <div key={section.key} data-testid={`group-${section.key}`} className="flex flex-col gap-2">
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-600">
+            ── {section.key.replace(/_/g, ' ')} · {section.items.length}
+          </p>
+          <ul className="flex flex-col gap-2">
+            {section.items.map((intent) => (
+              <li key={intent.id}>
+                <IntentCard intent={intent} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function IntentCard({ intent }: { intent: BoardIntent }): React.ReactElement {
+  const countdown = formatCountdown(intent.deadline, Date.now());
+  return (
+    <Link
+      href={`/intents/${intent.id}`}
+      className="block rounded border border-zinc-800 bg-zinc-950 px-4 py-3 hover:border-zinc-600"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <StateBadge state={intent.state} />
+        <RiskPill risk={intent.riskClass} />
+        <span className={`font-mono text-[11px] ${COUNTDOWN_TONES[countdown.tone] ?? ''}`}>
+          {countdown.label}
+        </span>
+        <span className="ml-auto font-mono text-[11px] text-zinc-600">{shortSha(intent.id)}</span>
+      </div>
+      <p className="mt-1.5 truncate text-sm text-zinc-200">{intent.goal}</p>
+    </Link>
+  );
+}
+
+function CandidateTable({
+  rows,
+}: {
+  rows: Array<{ candidate: BoardCandidate; parent: BoardIntent | undefined }>;
 }): React.ReactElement {
   return (
     <table className="w-full border-collapse font-mono text-xs">
@@ -122,7 +155,7 @@ function CandidateTable({
         </tr>
       </thead>
       <tbody>
-        {candidates.map((candidate) => (
+        {rows.map(({ candidate }) => (
           <tr key={candidate.id} className="border-b border-zinc-900 last:border-0">
             <td className="py-1.5 pr-2">
               <StateBadge state={candidate.state} />
@@ -153,10 +186,7 @@ function SkeletonRows({ rows }: { rows: number }): React.ReactElement {
   return (
     <div aria-hidden className="flex flex-col gap-2" data-testid="skeleton-rows">
       {Array.from({ length: rows }, (_, index) => (
-        <div
-          key={index}
-          className="h-14 animate-pulse rounded border border-zinc-900 bg-zinc-900/50"
-        />
+        <div key={index} className="h-14 animate-pulse rounded border border-zinc-900 bg-zinc-900/50" />
       ))}
     </div>
   );

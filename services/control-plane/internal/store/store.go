@@ -19,6 +19,7 @@ import (
 // both standalone and inside a transaction.
 type Queryer interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // Store owns every ctrl-schema persistence access for this process.

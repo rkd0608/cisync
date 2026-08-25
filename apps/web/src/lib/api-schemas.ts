@@ -47,6 +47,9 @@ export const candidateIdSchema = z
 export const clusterIdSchema = z
   .string()
   .regex(/^clus_[0-9A-HJKMNP-TV-Z]{26}$/, 'malformed cluster id');
+export const decisionIdSchema = z
+  .string()
+  .regex(/^dec_[0-9A-HJKMNP-TV-Z]{26}$/, 'malformed decision id');
 
 export const errorEnvelopeSchema = z.object({
   error: z.object({
@@ -131,6 +134,15 @@ export const candidateSchema = candidateSummarySchema.extend({
   est_cost_millicents: z.number().int(),
 });
 
+// Decision.explanation.factors (DOMAIN_MODEL_DRAFT §7): name/value/source
+// triples rendered verbatim in the decision banner (T1 — no UI-invented
+// rationale). Optional: dossiers from before the field lands still parse.
+export const decisionFactorSchema = z.object({
+  name: z.string(),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  source: z.string(),
+});
+
 export const decisionSchema = z.object({
   decision_id: z.string(),
   verb: z.enum(['eligible_for_merge_train', 'rejected', 'deferred']),
@@ -142,6 +154,11 @@ export const decisionSchema = z.object({
     })
     .optional(),
   summary: z.string(),
+  explanation: z
+    .object({
+      factors: z.array(decisionFactorSchema).optional(),
+    })
+    .optional(),
 });
 
 export const evidenceAcceptedSchema = z.object({
@@ -205,6 +222,7 @@ export const leaseRenewalSchema = z.object({
 });
 
 export type ConflictRef = z.infer<typeof conflictRefSchema>;
+export type Decision = z.infer<typeof decisionSchema>;
 export type IntentGrant = z.infer<typeof intentGrantSchema>;
 export type Intent = z.infer<typeof intentSchema>;
 export type CandidateSummary = z.infer<typeof candidateSummarySchema>;
@@ -212,4 +230,5 @@ export type Candidate = z.infer<typeof candidateSchema>;
 export type EvidenceDossier = z.infer<typeof evidenceDossierSchema>;
 export type Cluster = z.infer<typeof clusterSchema>;
 export type ClusterMember = z.infer<typeof clusterMemberSchema>;
+export type DecisionFactor = z.infer<typeof decisionFactorSchema>;
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;

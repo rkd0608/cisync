@@ -1,0 +1,15 @@
+{
+  "action": "closed",
+  "number": 8,
+  "pull_request": {
+    "number": 8,
+    "state": "closed",
+    "title": "Abandoned refactor",
+    "head": { "sha": "5555555555555555555555555555555555555555", "ref": "feature/abandoned" },
+    "base": { "sha": "2222222222222222222222222222222222222222", "ref": "main" },
+    "diff_url": "https://github.com/acme/payments/pull/8.diff",
+    "merged": false
+  },
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "sender": { "login": "octocat" }
+}

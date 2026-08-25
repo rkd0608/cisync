@@ -1,0 +1,8 @@
+{
+  "ref": "refs/heads/agent/int_94f8/candidate_01",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "7777777777777777777777777777777777777777",
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "pusher": { "login": "octocat" },
+  "sender": { "login": "octocat" }
+}

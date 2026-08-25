@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completenessPercent, formatCountdown, shortSha } from './format';
+import { completenessPercent, formatCountdown, relativeAge, shortSha, truncateMiddle } from './format';
 
 describe('completenessPercent (D8 bar math)', () => {
   it('maps 0..1 onto 0..100 with rounding', () => {
@@ -57,5 +57,40 @@ describe('shortSha', () => {
   it('truncates long shas and keeps short ones intact', () => {
     expect(shortSha('a'.repeat(40))).toBe(`${'a'.repeat(8)}…`);
     expect(shortSha('abc')).toBe('abc');
+  });
+});
+
+describe('truncateMiddle', () => {
+  it('keeps head and tail of long ids with an ellipsis between', () => {
+    const id = 'dec_01J8ZC7XK9Q2W3E4R5T6Y70003';
+    expect(truncateMiddle(id)).toBe('dec_01…0003');
+  });
+
+  it('returns short values untouched (no ellipsis for its own sake)', () => {
+    expect(truncateMiddle('dec_1234')).toBe('dec_1234');
+  });
+
+  it('honors custom window sizes', () => {
+    expect(truncateMiddle('abcdefghij', 2, 2)).toBe('ab…ij');
+  });
+});
+
+describe('relativeAge (installation delivery ages)', () => {
+  const now = Date.parse('2026-08-23T12:00:00Z');
+
+  it('formats seconds, minutes, then hours', () => {
+    expect(relativeAge('2026-08-23T11:59:48Z', now)).toBe('12s ago');
+    expect(relativeAge('2026-08-23T11:26:00Z', now)).toBe('34m ago');
+    expect(relativeAge('2026-08-23T09:00:00Z', now)).toBe('3h ago');
+  });
+
+  it('degrades missing and unparseable timestamps honestly', () => {
+    expect(relativeAge(null, now)).toBe('--');
+    expect(relativeAge(undefined, now)).toBe('--');
+    expect(relativeAge('not-a-date', now)).toBe('unknown');
+  });
+
+  it('clamps future timestamps to zero instead of going negative', () => {
+    expect(relativeAge('2026-08-23T12:00:10Z', now)).toBe('0s ago');
   });
 });

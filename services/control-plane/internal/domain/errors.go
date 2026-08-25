@@ -36,4 +36,7 @@ var (
 	ErrChainBroken = errors.New("ledger chain broken")
 	// ErrCheckpointInvalid reports an Ed25519 checkpoint signature mismatch.
 	ErrCheckpointInvalid = errors.New("checkpoint signature invalid")
+	// ErrRerunBudgetExhausted reports a revalidate request beyond the
+	// per-candidate rerun cap (wave-5 ruling #2).
+	ErrRerunBudgetExhausted = errors.New("rerun_budget_exhausted")
 )

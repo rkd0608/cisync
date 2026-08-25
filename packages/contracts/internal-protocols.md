@@ -104,10 +104,12 @@ fail closed.
 `sim_profile` (seeded by run_id hash) — the CI-default provider. `docker` provider runs
 real containers (`--network none --read-only`, resource-capped, NOT-FOR-PRODUCTION).
 
-## 4. control-plane → github-connector (decision push, W2)
+## 4. control-plane → github-connector (decision push, W2; WIDENED W5)
 
-Base: `SAURON_CTRL_CONNECTOR_URL`. The connector is idle-until-fed; control-plane
-pushes one envelope per rendered decision via its outbox relay.
+Base: `SAURON_CTRL_CONNECTOR_URL`. The connector is idle-until-fed;
+control-plane pushes envelopes via its outbox relay. ONE endpoint serves
+THREE envelope kinds discriminated by `kind`; absent `kind` decodes as
+`decision` (v1 relay compatibility).
 
 - `GET /internal/fleet/jobs/completed?limit=N` (control-plane → fleet, feed)
   `{"jobs": [{"run_id","attempt","fence_token","tier","pool","status",
@@ -119,12 +121,15 @@ pushes one envelope per rendered decision via its outbox relay.
    effect tx (I-12), so replays are harmless. The census mirrors the stored
    completion and is the I-01 validation input on the control-plane side.
 - `POST /internal/connector/decisions` (control-plane → connector)
-  Headers: `Idempotency-Key: <decision_id>`,
+  Headers: `Idempotency-Key: <kind-dependent, below>`,
   `X-Sauron-Signature: sha256=<hex hmac of raw body with SAURON_CONN_WEBHOOK_SECRET>`,
-  `Content-Type: application/json`.
+  `Content-Type: application/json`. Body cap 1 MiB.
+
+### 4.1 kind = "decision" (completed verdict)
 
 ```json
 {
+  "kind": "decision",
   "decision_id": "dec_01J…",
   "candidate_id": "cand_01J…",
   "repo": "acme/payments",
@@ -133,14 +138,90 @@ pushes one envelope per rendered decision via its outbox relay.
   "confidence": 0.94,
   "policy": {"policy_id": "pol_…", "policy_version": 4},
   "summary": "explanation summary",
-  "rendered_at": "RFC3339"
+  "rendered_at": "RFC3339",
+  "evidence": {"required": 5, "accepted": 5, "deferred": 2, "failed": 0},
+  "annotations": [{"path":"pkg/x.go","start_line":42,"message":"…","kind":"api_compat"}]
 }
 ```
 
-Responses: `202 accepted` · `200 replay (idempotent by decision_id)` ·
-`400 validation_failed` · `401 bad signature` · `413 too_large`.
-The connector renders exactly one completed "Agent Verification Gate" check
-run per accepted envelope: verb→conclusion is
-`eligible_for_merge_train→success`, `rejected→failure`, `deferred→neutral`;
-unknown verbs fail closed. Without GitHub App credentials the connector runs
-in dry-run mode, logging the would-be payload instead of calling the API.
+W5 deltas (G6/G8): `evidence` counts `{required, accepted, deferred,
+failed}` — EXACT field names above, all non-negative ints, and
+`accepted ≤ required`, `deferred + failed ≤ required` — let the connector
+render the dossier census into the check summary instead of scraping
+projections. `annotations` carries failed-required-kind findings for GitHub
+failure annotations: `path` optional (omitted ⇒ file-level message),
+`start_line` omitted when absent/0, `message` + `kind` REQUIRED.
+`evidence`/`annotations` are OPTIONAL blocks; an envelope without them keeps
+the v1 flat-summary rendering. `Idempotency-Key` MUST equal `decision_id`.
+
+### 4.2 kind = "lifecycle" (queued / in_progress)
+
+```json
+{"kind":"lifecycle","phase":"queued|in_progress","candidate_id":"cand_01J…",
+ "repo":"acme/payments","head_sha":"…40 hex…","at":"RFC3339"}
+```
+
+Emitted from existing outbox events: `candidate.submitted` ⇒ `queued`;
+FIRST `validation.started` per candidate ⇒ `in_progress`. `at` stamps the
+transition time (byte-stable dry-run rendering). `Idempotency-Key` MUST
+equal `"<candidate_id>:<phase>"` — deterministic, so relay redeliveries
+collapse without connector-side state. Effect: the connector creates the
+check run on `queued` and UPDATES THE SAME RUN on `in_progress`
+(`Checks.UpdateCheckRun`) — one check run per candidate revision walking
+`queued → in_progress → completed`. Every check run the connector creates
+or updates carries `external_id = candidate_id` (NOT decision_id) so GitHub
+re-runs map back to the revision regardless of which decision it carried.
+
+### 4.3 kind = "rerun_requested"
+
+```json
+{"kind":"rerun_requested","candidate_id":"cand_01J…","repo":"acme/payments",
+ "head_sha":"…40 hex…","requested_by":"github:<login>?","requested_at":"RFC3339"}
+```
+
+Relayed when a `check_run.rerequested` webhook's `external_id` matches one
+of our candidates. `requested_by` is display-only provenance (§2.2).
+`Idempotency-Key` MUST be the originating GitHub `ext_delivery_id`.
+Connector policy: `SAURON_CONN_RERUN_POLICY ∈ {replan, replay_cached}`
+(default `replan`); caps `SAURON_CONN_RERUN_MAX_PER_CANDIDATE=2`,
+`SAURON_CONN_RERUN_RATE_PER_HOUR=20`. Over-cap or ctrl-unreachable ⇒ the
+check flips to a VISIBLE neutral ("budget exhausted" / "unavailable") — a
+required check never silently ignores a re-run. Unknown candidate ⇒ typed
+`404 unknown_candidate`.
+
+### 4.4 revalidate command (connector → control-plane)
+
+- `POST {ctrl}/v1/candidates/{id}/revalidate`
+  Headers: `Authorization: Bearer <admin token>` (same token model as other
+  admin-auth'd internal routes), `Content-Type: application/json`,
+  `Idempotency-Key: <originating GitHub ext_delivery_id>` (REQUIRED,
+  16..128 chars per openapi `IdempotencyKey` — ctrl dedupes via command_log,
+  replays return the ORIGINAL 202 body), empty `{}` body.
+  → `202 {"plan_id": "plan_…"}` · `400 validation_failed` (missing/short
+  Idempotency-Key, malformed JSON) · `401 unauthorized` ·
+  `404 unknown_candidate` · `409 conflict_state` with
+  `details.reason = "rerun_budget_exhausted"` (per-candidate revalidation
+  cap spent OR candidate already terminal — a permanent verdict, race-safe
+  conditional UPDATE) · `503 unavailable`.
+  Appends a re-plan command under CURRENT policy + current inputs_hash;
+  the SAME candidate revision continues (rerun_count++) so lifecycle
+  envelopes keep `candidate_id` stable and the check run identity holds.
+  When `SAURON_CONN_CTRL_URL` is unset the replan feature is flag-OFF and
+  re-runs surface as neutral "unavailable".
+  Connector-side mapping of non-202 answers: `404` relays as typed
+  `unknown_candidate`; `409` flips the check to a VISIBLE neutral
+  "re-run budget exhausted"; every other failure (network, 401, 5xx)
+  flips it to a VISIBLE neutral "unavailable" — never silent.
+
+Responses for all kinds: `202 accepted` (`{"accepted":true,"dry_run":bool,
+"queued"?,"outcome"?}`) · `200 replay (idempotent)` ·
+`400 validation_failed` · `401 bad signature` · `404 unknown_candidate`
+(rerun) · `413 too_large` · `503 unavailable (storage; redeliver)`.
+The connector renders verb→conclusion `eligible_for_merge_train→success`,
+`rejected→failure`, `deferred->neutral`; unknown verbs fail closed. Without
+GitHub App credentials the connector runs in dry-run mode, logging the
+would-be payload instead of calling the API. Local write budget
+(`SAURON_CONN_WRITE_BUDGET_PER_HOUR=300`/installation/hour) exhaustion
+QUEUES writes outbox-style (`ghconn.pending_writes`) and drains later —
+never silently drops a required check. Stalled non-completed checks older
+than `SAURON_CONN_STALLED_CHECK_AGE` (default 45m) flip to neutral.

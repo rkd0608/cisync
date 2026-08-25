@@ -22,6 +22,24 @@ func extractRepo(raw []byte) string {
 	return probe.Repository.FullName
 }
 
+// composeEventKind joins the X-GitHub-Event header with the payload's action
+// ("pull_request" + "opened" → "pull_request.opened"): control-plane's
+// normalizer keys on event[.action] per plan §3.1 and GitHub carries the
+// action only inside the JSON body, never as a header. Unparsable bodies
+// degrade to the bare event name (still persisted/forwarded).
+func composeEventKind(eventHeader string, raw []byte) string {
+	if eventHeader == "" {
+		return ""
+	}
+	var probe struct {
+		Action string `json:"action"`
+	}
+	if json.Unmarshal(raw, &probe) != nil || probe.Action == "" {
+		return eventHeader
+	}
+	return eventHeader + "." + probe.Action
+}
+
 func outcomeLabel(r forward.Result) string {
 	switch r {
 	case forward.ResultAccepted:

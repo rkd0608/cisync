@@ -1,0 +1,8 @@
+{
+  "ref": "refs/heads/main",
+  "before": "2222222222222222222222222222222222222222",
+  "after": "6666666666666666666666666666666666666666",
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "pusher": { "login": "octocat" },
+  "sender": { "login": "octocat" }
+}

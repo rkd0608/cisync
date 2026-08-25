@@ -1,0 +1,12 @@
+{
+  "action": "created",
+  "installation": {
+    "id": 4242,
+    "account": { "login": "acme" },
+    "permissions": { "metadata": "read", "checks": "write", "pull_requests": "read" }
+  },
+  "repositories": [
+    { "id": 1, "name": "payments", "full_name": "acme/payments" }
+  ],
+  "sender": { "login": "acme-admin" }
+}

@@ -59,7 +59,12 @@ type Candidate struct {
 	PriorityScore     float64
 	ClusterID         string
 	RelationToRep     *Relation
-	CreatedAt         time.Time
+	// Repo/PRNumber bind webhook-sourced candidates to the (repo, pr_number)
+	// projection index the normalizer resolves synchronize/reopen through.
+	Repo       string
+	PRNumber   int
+	RerunCount int
+	CreatedAt  time.Time
 }
 
 // NewCandidate constructs a candidate in the submitted state after checking

@@ -27,7 +27,11 @@ type Server struct {
 // from configuration and the provided store.
 func New(cfg config.Config, st store.Store, logger *slog.Logger, metrics *obs.Metrics) *Server {
 	forwarder := forward.New(cfg.ControlURL, []byte(cfg.WebhookSecret))
-	hook := api.NewGitHubHookHandler(st, forwarder, metrics, logger, time.Now, cfg.MaxBodyBytes, cfg.TimestampSkew)
+	secretBytes := make([][]byte, len(cfg.WebhookSecrets))
+	for i, s := range cfg.WebhookSecrets {
+		secretBytes[i] = []byte(s)
+	}
+	hook := api.NewGitHubHookHandler(st, forwarder, metrics, logger, time.Now, cfg.MaxBodyBytes, cfg.TimestampSkew, secretBytes)
 	retryWorker := retry.NewWorker(st, forwarder, metrics, logger, cfg.RetryInterval, cfg.RetryBase, cfg.MaxAttempts, time.Now)
 
 	mux := http.NewServeMux()

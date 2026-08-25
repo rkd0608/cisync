@@ -6,21 +6,41 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Config carries every tunable for the ingest service.
 type Config struct {
-	Addr          string
-	PGDSN         string
+	Addr  string
+	PGDSN string
+	// WebhookSecret is the PRIMARY secret (first entry of the rotation list):
+	// it still signs the ctrl forwarding hop, whose single-secret verify is
+	// owned by control-plane config.
 	WebhookSecret string
-	ControlURL    string
-	MaxBodyBytes  int64
-	TimestampSkew time.Duration
-	RetryInterval time.Duration
-	RetryBase     time.Duration
-	RetryMaxDelay time.Duration
-	MaxAttempts   int
+	// WebhookSecrets is the ORDERED verification list (EC-010 rotation):
+	// SAURON_INGEST_WEBHOOK_SECRETS="new,old" — first entry is the new
+	// secret; any match verifies. Falls back to the singular var alone.
+	WebhookSecrets []string
+	ControlURL     string
+	MaxBodyBytes   int64
+	TimestampSkew  time.Duration
+	RetryInterval  time.Duration
+	RetryBase      time.Duration
+	RetryMaxDelay  time.Duration
+	MaxAttempts    int
+}
+
+// ParseWebhookSecrets splits the ordered rotation list into verify secrets.
+// Empty segments are dropped so "new,,old" and trailing commas stay usable.
+func ParseWebhookSecrets(list string) []string {
+	var out []string
+	for _, s := range strings.Split(list, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // FromEnv builds a Config from SAURON_INGEST_* variables, applying documented
@@ -40,6 +60,12 @@ func FromEnv() (Config, error) {
 	}
 	if cfg.WebhookSecret == "" {
 		return cfg, fmt.Errorf("config: SAURON_INGEST_WEBHOOK_SECRET is required")
+	}
+	// Rotation list (plan §1.4/§5.1): when present it REPLACES the verify set
+	// but never the primary signing secret, keeping the ctrl hop stable.
+	cfg.WebhookSecrets = ParseWebhookSecrets(os.Getenv("SAURON_INGEST_WEBHOOK_SECRETS"))
+	if len(cfg.WebhookSecrets) == 0 {
+		cfg.WebhookSecrets = []string{cfg.WebhookSecret}
 	}
 	if v := os.Getenv("SAURON_INGEST_MAX_BODY_BYTES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)

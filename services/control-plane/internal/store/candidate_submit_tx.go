@@ -118,14 +118,14 @@ func SubmitCandidateTx(ctx context.Context, tx pgx.Tx, s *Store, cand *domain.Ca
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO ctrl.candidates (tenant_id, id, seq, intent_id, submitter, patch_ref, head_sha,
 		   base_sha, changed_paths, est_cost_millicents, priority_score, cluster_id, relation_to_rep,
-		   state, created_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		   repo, pr_number, state, created_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		 ON CONFLICT (id) DO UPDATE SET seq=EXCLUDED.seq, state=EXCLUDED.state
 		 WHERE ctrl.candidates.seq < EXCLUDED.seq`,
 		cand.TenantID, cand.ID, submittedEvent.Seq, cand.IntentID, cand.Submitter, cand.PatchRef,
 		cand.HeadSHA, cand.BaseSHA, toTextSlice(cand.ChangedPaths), cand.EstCostMillicents,
 		cand.PriorityScore, nullableString(cand.ClusterID), relationOrNull(cand.RelationToRep),
-		string(cand.State), cand.CreatedAt,
+		cand.Repo, cand.PRNumber, string(cand.State), cand.CreatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("insert candidate projection: %w", err)
 	}

@@ -39,6 +39,9 @@ export const intentDeclaredPayloadSchema = z.object({
   owned_surfaces: z.array(z.string()).optional(),
   risk_class: riskClassSchema,
   deadline: z.string().nullable().optional(),
+  // IntentCreate carries repository (openapi.yaml); some early payloads may
+  // omit it — optional keeps them parsing, dashboard repo-filter degrades.
+  repository: z.string().optional(),
 });
 
 export const candidateSubmittedPayloadSchema = z.object({

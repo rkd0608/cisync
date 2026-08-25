@@ -35,11 +35,20 @@ type GitHubHookHandler struct {
 	inflight  map[string]struct{}
 	maxBody   int64
 	skew      time.Duration
+	// secrets is the ordered rotation list (EC-010); the forwarder's own
+	// secret stays the PRIMARY one used to sign the ctrl hop.
+	secrets [][]byte
 }
 
 // NewGitHubHookHandler wires the webhook edge handler. maxBody is the payload
-// size cap; skew is the tolerated timestamp drift.
-func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, maxBody int64, skew time.Duration) *GitHubHookHandler {
+// size cap; skew is the tolerated timestamp drift; secrets is the ordered
+// rotation verification list (any match passes).
+func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, maxBody int64, skew time.Duration, secrets [][]byte) *GitHubHookHandler {
+	if len(secrets) == 0 {
+		// Fail-closed fallback for callers predating rotation wiring: verify
+		// against the forwarder's primary secret alone.
+		secrets = [][]byte{fw.Secret}
+	}
 	return &GitHubHookHandler{
 		store:     st,
 		forwarder: fw,
@@ -49,6 +58,7 @@ func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics,
 		inflight:  make(map[string]struct{}, maxInflight),
 		maxBody:   maxBody,
 		skew:      skew,
+		secrets:   secrets,
 	}
 }
 
@@ -91,8 +101,8 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sigHeader := r.Header.Get("X-Hub-Signature-256")
 	deliveryID := r.Header.Get("X-GitHub-Delivery")
-	eventKind := r.Header.Get("X-GitHub-Event")
-	if sigHeader == "" || !VerifyGitHubSignature(h.forwarder.Secret, raw, sigHeader) {
+	eventKind := composeEventKind(r.Header.Get("X-GitHub-Event"), raw)
+	if sigHeader == "" || !VerifyGitHubSignatureAny(h.secrets, raw, sigHeader) {
 		h.metrics.CounterInc("ingest_webhook_rejected_total", "Webhook requests rejected at the edge", "reason", "bad_signature")
 		h.logger.Warn("webhook signature verification failed",
 			slog.String("ext_delivery_id", deliveryID), slog.String("event_kind", eventKind))

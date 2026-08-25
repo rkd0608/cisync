@@ -28,6 +28,8 @@ export interface EventBoardHandle {
   board: BoardState;
   errorMessage: string | null;
   retry: () => void;
+  // Feed-staleness inputs (§7: >60s without a seq advance ⇒ amber banner).
+  lastAdvancedAtMs: number | null;
 }
 
 export function useEventBoard(): EventBoardHandle {
@@ -41,6 +43,7 @@ export function useEventBoard(): EventBoardHandle {
   const boardRef = useRef<BoardState>(emptyBoard());
   const stoppedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lastAdvancedAtMs, setLastAdvancedAtMs] = useState<number | null>(null);
 
   const poll = useCallback(async () => {
     const result = await getEvents({
@@ -67,6 +70,10 @@ export function useEventBoard(): EventBoardHandle {
     }
 
     boardRef.current = applyEvents(boardRef.current, result.data.events);
+    if (result.data.nextSeq > cursorRef.current) {
+      // Seq advanced — the feed is provably alive as of now.
+      setLastAdvancedAtMs(Date.now());
+    }
     cursorRef.current = Math.max(cursorRef.current, result.data.nextSeq);
     setBoard(boardRef.current);
     setPhase('ready');
@@ -95,5 +102,5 @@ export function useEventBoard(): EventBoardHandle {
     void poll();
   }, [poll]);
 
-  return { phase, board, errorMessage, retry };
+  return { phase, board, errorMessage, retry, lastAdvancedAtMs };
 }

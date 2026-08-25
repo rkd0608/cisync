@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -13,14 +15,17 @@ import (
 // buildDeliveryAcceptedEvent constructs the delivery.accepted CORE event.
 // The aggregate id is a platform-minted dlv_ ULID (events.schema.json
 // prefixedUlid); the external GitHub GUID stays only in payload.ext_delivery_id.
-func buildDeliveryAcceptedEvent(tenantID string, body *deliveryBody) (*domain.Event, error) {
+// normalized MUST be part of the initial payload map: the payload digest is
+// computed inside NewEvent, so ANY post-construction mutation breaks I-07
+// verification of the served ledger (regression caught in W5 smoke).
+func buildDeliveryAcceptedEvent(tenantID string, body *deliveryBody, normalized string) (*domain.Event, error) {
 	return domain.NewEvent(tenantID,
 		domain.AggregateRef{Type: string(domain.AggDelivery), ID: domain.NewID(domain.PrefixDelivery)},
 		"delivery.accepted", "", "", domain.EventActor{Kind: string(domain.ActorGitHub), ID: "github"},
 		map[string]any{
 			"source":          body.Source,
 			"ext_delivery_id": body.ExtDeliveryID,
-			"normalized_kind": body.EventKind,
+			"normalized_kind": normalized,
 			"repo":            body.Repo,
 		})
 }
@@ -70,34 +75,98 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 
 	cached, _ := s.store.LookupCommand(r.Context(), s.cfg.TenantID, "POST /internal/ctrl/deliveries", extID, requestHash(raw))
 	if cached != nil && cached.ResponseCode != 0 {
-		writeRawJSON(w, cached.ResponseCode, []byte(`{"accepted":true,"replay":true}`))
+		// internal-protocols §1: replays answer 200 regardless of the
+		// originally recorded accept code.
+		writeRawJSON(w, http.StatusOK, []byte(`{"accepted":true,"replay":true}`))
 		s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
 		return
 	}
 
-	ev, err := buildDeliveryAcceptedEvent(s.cfg.TenantID, &body)
+	view := normalizeDelivery(body.EventKind, body.Repo, payload, s.cfg.TrackedBaseBranches)
+	ev, err := buildDeliveryAcceptedEvent(s.cfg.TenantID, &body, normalizedLabel(view))
 	if err != nil {
 		WriteDomainError(w, err)
 		return
 	}
+	// The delivery.accepted event carries the normalized kind so the ledger
+	// tail shows the §3.1 mapping without replaying payloads.
+
+	var responseCode int
+	responseBody := []byte(`{"accepted":true}`)
 	err = s.store.ExecTx(r.Context(), func(tx pgx.Tx) error {
+		// I-12: exactly-once effects keyed by ext_delivery_id INSIDE the
+		// effect tx — at-least-once forwarding never double-submits.
+		fresh, err := store.MarkProcessedTx(r.Context(), tx, "delivery-normalizer", extID)
+		if err != nil {
+			return err
+		}
+		if !fresh {
+			responseCode = http.StatusOK
+			responseBody = []byte(`{"accepted":true,"replay":true}`)
+			return nil
+		}
+		// Batch 1: the delivery.accepted anchor. Effect events append in
+		// their own batches because their projections depend on appended
+		// seqs; webhook rates are orders of magnitude below the storm paths
+		// the single-batch rule exists for.
 		if err := s.store.AppendEventsTx(r.Context(), tx, []*domain.Event{ev}); err != nil {
 			return err
 		}
 		s.metrics.Add("sauron_ctrl_events_appended_total", 1)
-		return store.RecordCommandTx(r.Context(), tx, s.cfg.TenantID,
+		if err := s.applyDeliveryEffects(r.Context(), tx, &body, view); err != nil {
+			return err
+		}
+		if err := store.RecordCommandTx(r.Context(), tx, s.cfg.TenantID,
 			"POST /internal/ctrl/deliveries", extID, requestHash(raw), http.StatusAccepted,
-			[]byte(`{"accepted":true}`))
+			[]byte(`{"accepted":true}`)); err != nil {
+			return err
+		}
+		responseCode = http.StatusAccepted
+		return nil
 	})
 	if err != nil {
+		logError("delivery %s effect tx failed: %v", extID, err)
 		retry := 5
 		WriteError(w, http.StatusServiceUnavailable, "unavailable", "storage unavailable; redeliver",
 			nil, &retry, nil)
 		w.Header().Set("Retry-After", "5")
 		return
 	}
-	writeRawJSON(w, http.StatusAccepted, []byte(`{"accepted":true}`))
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "202")
+	writeRawJSON(w, responseCode, responseBody)
+	s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(responseCode))
+}
+
+// applyDeliveryEffects projects §3.1 ledger effects for one delivery inside
+// the caller's transaction. Unknown kinds park record-only (never 4xx).
+func (s *Server) applyDeliveryEffects(ctx context.Context, tx pgx.Tx, body *deliveryBody, view deliveryView) error {
+	tenant := s.cfg.TenantID
+	extID := body.ExtDeliveryID
+	switch view.Kind {
+	case KindPROpened:
+		return s.applyPROpened(ctx, tx, tenant, view)
+	case KindPRSynchronize:
+		return s.applyPRSynchronize(ctx, tx, tenant, extID, view)
+	case KindPRClosed:
+		return s.applyPRClosed(ctx, tx, tenant, extID, view)
+	case KindPushBaseAdv:
+		return s.applyPushBaseAdvanced(ctx, tx, tenant, extID, view)
+	case KindInstallDeleted:
+		return s.applyInstallationDeleted(ctx, tx, tenant, view)
+	default:
+		// push.branch / installation.created / permissions_changed /
+		// check_run.rerequested / unknown.* stay delivery.accepted-only.
+		s.metrics.Add("sauron_ctrl_unknown_event_total", 1, normalizedLabel(view))
+		return nil
+	}
+}
+
+// normalizedLabel returns the ledger-facing kind label (unknown parks as
+// "unknown.<event>[.<action>]").
+func normalizedLabel(view deliveryView) string {
+	if view.Kind == "" && view.Raw != "" {
+		return view.Raw
+	}
+	return string(view.Kind)
 }
 
 // handleGitHubWebhook implements POST /v1/hooks/github (openapi CORE #11);
@@ -123,7 +192,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		ExtDeliveryID: r.Header.Get("X-GitHub-Delivery"),
 		EventKind:     r.Header.Get("X-GitHub-Event"),
 	}
-	ev, err := buildDeliveryAcceptedEvent(s.cfg.TenantID, &body)
+	ev, err := buildDeliveryAcceptedEvent(s.cfg.TenantID, &body, body.EventKind)
 	if err != nil {
 		WriteDomainError(w, err)
 		return

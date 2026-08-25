@@ -46,3 +46,22 @@ function formatSpan(spanMs: number): string {
 export function shortSha(sha: string): string {
   return sha.length > 10 ? `${sha.slice(0, 8)}…` : sha;
 }
+
+// §7 density rule: monospace ids truncated middle with copy affordances.
+export function truncateMiddle(value: string, head = 6, tail = 4): string {
+  if (value.length <= head + tail + 1) return value;
+  return `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+// Relative age for webhook deliveries ("12s ago", "34m ago"); absolute time
+// stays available via the ISO string on hover (title attr at call sites).
+export function relativeAge(iso: string | null | undefined, nowMs: number): string {
+  if (!iso) return '--';
+  const thenMs = Date.parse(iso);
+  if (Number.isNaN(thenMs)) return 'unknown';
+  const seconds = Math.floor(Math.max(0, nowMs - thenMs) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}

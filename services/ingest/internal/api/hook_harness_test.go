@@ -31,10 +31,16 @@ type harness struct {
 }
 
 func newHarness(t *testing.T, ctrlHandler http.HandlerFunc) *harness {
+	return newHarnessSecrets(t, ctrlHandler, "test-webhook-secret")
+}
+
+// newHarnessSecrets builds the harness with an explicit rotation verify list
+// (EC-010); the first entry doubles as the ctrl-hop signing secret.
+func newHarnessSecrets(t *testing.T, ctrlHandler http.HandlerFunc, secrets ...string) *harness {
 	t.Helper()
 	h := &harness{
 		t:         t,
-		secret:    "test-webhook-secret",
+		secret:    secrets[0],
 		ctrlCalls: make(chan forward.Envelope, 64),
 		now:       time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
 	}
@@ -68,7 +74,11 @@ func newHarness(t *testing.T, ctrlHandler http.HandlerFunc) *harness {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	fw := forward.New(h.ctrl.URL, []byte(h.secret))
 	metrics := obs.New()
-	handler := NewGitHubHookHandler(h.st, fw, metrics, logger, func() time.Time { return h.currentTime() }, 1024, 5*time.Minute)
+	secretBytes := make([][]byte, len(secrets))
+	for i, s := range secrets {
+		secretBytes[i] = []byte(s)
+	}
+	handler := NewGitHubHookHandler(h.st, fw, metrics, logger, func() time.Time { return h.currentTime() }, 1024, 5*time.Minute, secretBytes)
 	h.svc = httptest.NewServer(handler)
 	t.Cleanup(func() {
 		h.ctrl.Close()

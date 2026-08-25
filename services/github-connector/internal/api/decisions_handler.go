@@ -1,48 +1,74 @@
+// Package api holds the connector HTTP surface (stdlib ServeMux only).
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"sauron.dev/sauron/github-connector/internal/checks"
 	"sauron.dev/sauron/github-connector/internal/domain"
+	"sauron.dev/sauron/github-connector/internal/emit"
 	"sauron.dev/sauron/github-connector/internal/obs"
-	"sauron.dev/sauron/github-connector/internal/store"
+	"sauron.dev/sauron/github-connector/internal/rerun"
+	"sauron.dev/sauron/github-connector/internal/tracking"
 )
 
-// maxDecisionBodyBytes caps the decision push payload.
+// maxDecisionBodyBytes caps the §4 push payload.
 const maxDecisionBodyBytes = int64(1 << 20)
 
-// DecisionsHandler terminates POST /internal/connector/decisions
-// (internal-protocols.md §4): HMAC verify → validate → dedupe by
-// decision_id → render + publish one GitHub check → persist the report.
+// CheckEmitter is the publication + resolution surface the flows need
+// (satisfied by *emit.Router; tests record instead).
+type CheckEmitter interface {
+	Create(ctx context.Context, repo string, payload checks.CheckPayload) (emit.Result, error)
+	Update(ctx context.Context, repo string, checkRunID int64, payload checks.CheckPayload) (emit.Result, error)
+	InstallationFor(ctx context.Context, repo string) (installationID int64, ok bool)
+}
+
+// HandlerDeps bundles the collaborators of the §4 push endpoint.
+type HandlerDeps struct {
+	Tracker      tracking.Store
+	Router       CheckEmitter
+	Metrics      *obs.Metrics
+	DetailsURL   string
+	RerunPolicy  rerun.Policy
+	RerunBudget  *rerun.Budget
+	RerunControl *rerun.Control
+	RerunSeen    *rerun.Dedupe
+	Now          func() time.Time
+}
+
+// DecisionsHandler terminates POST /internal/connector/decisions (widened
+// internal-protocols §4): HMAC verify → kind dispatch → validate →
+// idempotency → per-kind flow. One door, three envelope kinds.
 type DecisionsHandler struct {
-	store     store.Store
-	publisher checks.Publisher
-	metrics   *obs.Metrics
-	logger    *slog.Logger
-	details   string
-	dryRun    bool
-	secret    []byte
+	deps   HandlerDeps
+	logger *slog.Logger
+	secret []byte
 }
 
-// NewDecisionsHandler wires the decisions endpoint.
-func NewDecisionsHandler(st store.Store, pub checks.Publisher, m *obs.Metrics, logger *slog.Logger, secret string, detailsURL string, dryRun bool) *DecisionsHandler {
-	return &DecisionsHandler{
-		store:     st,
-		publisher: pub,
-		metrics:   m,
-		logger:    logger,
-		secret:    []byte(secret),
-		details:   detailsURL,
-		dryRun:    dryRun,
+// NewDecisionsHandler wires the §4 push endpoint.
+func NewDecisionsHandler(secret string, deps HandlerDeps, logger *slog.Logger) *DecisionsHandler {
+	if deps.Now == nil {
+		deps.Now = time.Now
 	}
+	return &DecisionsHandler{deps: deps, logger: logger, secret: []byte(secret)}
 }
 
-// ServeHTTP implements the §4 protocol:
-// 202 accepted · 200 replay (idempotent) · 401 bad signature ·
-// 400 validation_failed · 413 too large · 503 storage unavailable.
+// pushResponse is the typed accepted/replay body for every envelope kind.
+type pushResponse struct {
+	Accepted bool   `json:"accepted"`
+	DryRun   bool   `json:"dry_run"`
+	Replay   bool   `json:"replay,omitempty"`
+	Queued   bool   `json:"queued,omitempty"`
+	Outcome  string `json:"outcome,omitempty"` // rerun outcomes only
+}
+
+// ServeHTTP implements the widened §4 protocol:
+// 202 accepted · 200 replay · 400 validation_failed · 401 bad signature ·
+// 404 unknown_candidate (rerun) · 413 too large · 503 unavailable.
 func (h *DecisionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -54,80 +80,42 @@ func (h *DecisionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !VerifyHMAC(h.secret, raw, r.Header.Get("X-Sauron-Signature")) {
-		h.metrics.CounterInc("conn_decisions_rejected_total", "Decision pushes rejected at the boundary", "reason", "bad_signature")
+		h.deps.Metrics.CounterInc("conn_decisions_rejected_total", "Decision pushes rejected at the boundary", "reason", "bad_signature")
 		writeJSON(w, http.StatusUnauthorized, errorBody("unauthorized", "bad signature"))
 		return
 	}
-
-	var env domain.DecisionEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorBody("validation_failed", "invalid decision envelope JSON"))
+	var peek struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(raw, &peek); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorBody("validation_failed", "invalid envelope JSON"))
 		return
 	}
-	if err := env.Validate(); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorBody("validation_failed", err.Error()))
-		return
-	}
-	if key := r.Header.Get("Idempotency-Key"); key != env.DecisionID {
-		writeJSON(w, http.StatusBadRequest, errorBody("validation_failed", "Idempotency-Key must equal decision_id"))
-		return
-	}
-
-	existing, err := h.store.GetCheckReport(r.Context(), env.DecisionID)
-	switch {
-	case err == nil:
-		writeJSON(w, http.StatusOK, reportBody(existing))
-		h.metrics.CounterInc("conn_decisions_deduped_total", "Duplicate decision pushes collapsed")
-		return
-	case err != store.ErrNotFound:
-		h.logger.Error("check report lookup failed", slog.String("err", err.Error()))
-		writeJSON(w, http.StatusServiceUnavailable, errorBody("unavailable", "storage unavailable; redeliver"))
-		return
-	}
-
-	payload, err := checks.Render(&env, h.details)
+	kind, err := domain.KindFor(peek.Kind)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorBody("validation_failed", err.Error()))
 		return
 	}
-	checkRunID, err := h.publisher.Publish(r.Context(), env.Repo, payload)
-	if err != nil {
-		h.logger.Error("check publish failed",
-			slog.String("decision_id", env.DecisionID), slog.String("err", err.Error()))
-		h.metrics.CounterInc("conn_check_publish_failures_total", "GitHub check publications that failed")
-		writeJSON(w, http.StatusBadGateway, errorBody("upstream_error", "github check publication failed"))
-		return
+	idemKey := r.Header.Get("Idempotency-Key")
+	switch kind {
+	case domain.KindDecision:
+		h.serveDecision(w, r.Context(), raw, idemKey)
+	case domain.KindLifecycle:
+		h.serveLifecycle(w, r.Context(), raw, idemKey)
+	case domain.KindRerun:
+		h.serveRerun(w, r.Context(), raw, idemKey)
 	}
-	rep := store.CheckReport{
-		DecisionID:  env.DecisionID,
-		CandidateID: env.CandidateID,
-		Repo:        env.Repo,
-		HeadSHA:     env.HeadSHA,
-		Verb:        env.Verb,
-		Conclusion:  payload.Conclusion,
-		CheckRunID:  checkRunID,
-		DryRun:      h.dryRun,
-	}
-	if err := h.store.SaveCheckReport(r.Context(), rep); err != nil && err != store.ErrDuplicate {
-		h.logger.Error("check report persist failed", slog.String("err", err.Error()))
-		writeJSON(w, http.StatusServiceUnavailable, errorBody("unavailable", "storage unavailable; redeliver"))
-		return
-	}
-	h.metrics.CounterInc("conn_checks_rendered_total", "Agent Verification Gate checks rendered", "conclusion", payload.Conclusion)
-	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true, "dry_run": h.dryRun})
 }
 
-func errorBody(code, message string) map[string]any {
-	return map[string]any{"error": map[string]any{"code": code, "message": message}}
+func (h *DecisionsHandler) respond(w http.ResponseWriter, status int, body pushResponse) {
+	h.deps.Metrics.GaugeSet("conn_dry_run_mode", "Whether the connector currently logs instead of publishing",
+		boolGauge(body.DryRun))
+	writeJSON(w, status, body)
 }
 
-func reportBody(rep *store.CheckReport) map[string]any {
-	return map[string]any{
-		"accepted":     true,
-		"replay":       true,
-		"decision_id":  rep.DecisionID,
-		"conclusion":   rep.Conclusion,
-		"check_run_id": rep.CheckRunID,
-		"dry_run":      rep.DryRun,
+func boolGauge(b bool) float64 {
+	if b {
+		return 1
 	}
+	return 0
 }

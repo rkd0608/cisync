@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -50,10 +49,4 @@ func readBody(w http.ResponseWriter, r io.ReadCloser, capBytes int64) ([]byte, e
 		return nil, errors.New("api: body read failed")
 	}
 	return buf, nil
-}
-
-func writeJSON(w http.ResponseWriter, code int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(body)
 }

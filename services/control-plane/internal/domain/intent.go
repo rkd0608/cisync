@@ -102,6 +102,9 @@ type Intent struct {
 	// lease.granted payloads and consumed by the first submission, making
 	// the whole lifecycle traceable from a single candidate id.
 	InitialCandidateID string
+	// PRNumber binds synthetic webhook intents to their pull request for the
+	// (repo, pr_number) → intent projection lookup; 0 = not PR-bound.
+	PRNumber int
 }
 
 // NewIntent constructs an intent in the exploring state.

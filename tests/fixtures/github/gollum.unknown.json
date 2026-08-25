@@ -1,0 +1,8 @@
+{
+  "action": "edited",
+  "pages": [
+    { "page_name": "runbook", "title": "Runbook", "action": "edited" }
+  ],
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "sender": { "login": "octocat" }
+}

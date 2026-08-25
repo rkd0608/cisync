@@ -3,7 +3,29 @@
 // component (charter §2 boundary validation); malformed payloads become error
 // results instead of rendered data.
 import { z } from 'zod';
-import { candidateIdSchema, candidateSchema, clusterIdSchema, clusterSchema, errorEnvelopeSchema, evidenceDossierSchema, intentIdSchema, intentSchema, type Candidate, type Cluster, type EvidenceDossier, type Intent } from './api-schemas';
+import {
+  candidateIdSchema,
+  candidateSchema,
+  clusterIdSchema,
+  clusterSchema,
+  decisionIdSchema,
+  errorEnvelopeSchema,
+  evidenceDossierSchema,
+  intentIdSchema,
+  intentSchema,
+  type Candidate,
+  type Cluster,
+  type EvidenceDossier,
+  type Intent,
+} from './api-schemas';
+import {
+  installationsStatusResponseSchema,
+  type InstallationsStatusResponse,
+} from './installation-schemas';
+import {
+  activePoliciesResponseSchema,
+  type ActivePoliciesResponse,
+} from './policy-schema';
 import { eventsPageSchema, type EventEnvelope } from './event-schemas';
 
 const DEFAULT_BASE_URL = 'http://localhost:8081';
@@ -132,10 +154,29 @@ export function getCandidate(candidateId: string): Promise<ApiResult<Candidate>>
   );
 }
 
-export function getDossier(candidateId: string): Promise<ApiResult<EvidenceDossier>> {
+// G4 dossier pinning: ?at=dec_… requests the decision block pinned to that
+// Decision. Until the backend lands (gap G4) servers ignore the unknown query
+// param and return latest — callers render the pin-mismatch notice, so the
+// permalink degrades gracefully instead of lying.
+export function getDossier(
+  candidateId: string,
+  at?: string,
+): Promise<ApiResult<EvidenceDossier>> {
+  if (at !== undefined && !decisionIdSchema.safeParse(at).success) {
+    return Promise.resolve(apiFailure(400, 'validation_failed', `malformed decision id: ${at}`));
+  }
+  const suffix = at === undefined ? '' : `?at=${encodeURIComponent(at)}`;
   return guard(candidateIdSchema, candidateId, () =>
-    request(evidenceDossierSchema, `/v1/candidates/${candidateId}/dossier`),
+    request(evidenceDossierSchema, `/v1/candidates/${candidateId}/dossier${suffix}`),
   );
+}
+
+export function getInstallationsStatus(): Promise<ApiResult<InstallationsStatusResponse>> {
+  return request(installationsStatusResponseSchema, '/v1/installations/status');
+}
+
+export function getActivePolicies(): Promise<ApiResult<ActivePoliciesResponse>> {
+  return request(activePoliciesResponseSchema, '/v1/policies/active');
 }
 
 export function getCluster(clusterId: string): Promise<ApiResult<Cluster>> {

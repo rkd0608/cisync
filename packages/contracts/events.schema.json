@@ -331,7 +331,7 @@
             "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
             "by_candidate_id": { "$ref": "#/$defs/prefixedUlid" },
             "relation": { "type": "string" },
-            "reason": { "type": "string", "enum": ["dominated_duplicate", "tournament_loser", "intent_solved"] }
+            "reason": { "type": "string", "enum": ["dominated_duplicate", "tournament_loser", "intent_solved", "head_advanced"] }
           }
         },
         "candidate.cancelled": {
@@ -339,7 +339,7 @@
           "required": ["candidate_id", "reason"],
           "properties": {
             "candidate_id": { "$ref": "#/$defs/prefixedUlid" },
-            "reason": { "type": "string", "enum": ["intent_closed", "deadline", "lease_lost", "prerequisite_failed"] }
+            "reason": { "type": "string", "enum": ["intent_closed", "deadline", "lease_lost", "prerequisite_failed", "merged", "closed_without_merge"] }
           }
         },
         "decision.rendered": {

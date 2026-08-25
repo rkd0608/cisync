@@ -21,7 +21,9 @@ func TestHookValidSignatureAcceptedAndForwarded(t *testing.T) {
 
 	select {
 	case env := <-h.ctrlCalls:
-		if env.Source != "github" || env.ExtDeliveryID != "d-1" || env.EventKind != "pull_request" {
+		// Plan §3.1: ingest forwards X-GitHub-Event[.action]; the action is
+		// read from the payload body since GitHub sends no action header.
+		if env.Source != "github" || env.ExtDeliveryID != "d-1" || env.EventKind != "pull_request.opened" {
 			t.Fatalf("unexpected envelope: %+v", env)
 		}
 		if env.Repo != "acme/payments" {

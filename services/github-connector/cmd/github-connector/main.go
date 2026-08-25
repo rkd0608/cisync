@@ -1,7 +1,8 @@
 // Command github-connector is Sauron's idle-until-fed check writer: it
-// renders one "Agent Verification Gate" GitHub Check per decision.rendered
-// pushed by control-plane (internal-protocols.md §4). Without GitHub App
-// credentials it runs in dry-run mode, logging the would-be check payloads.
+// renders and maintains ONE "Agent Verification Gate" GitHub Check per
+// candidate revision across the full queued → in_progress → completed
+// lifecycle (internal-protocols.md §4). Without GitHub App credentials it
+// runs in dry-run mode, logging the would-be check payloads.
 package main
 
 import (
@@ -38,7 +39,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := server.New(cfg, st, logger)
+	// Production wiring is FULLY PG-backed: revision tracking over
+	// ghconn.revision_tracking, the pending-write outbox over
+	// ghconn.pending_writes, repo→installation resolution + status
+	// projection over ghconn.installations (W5-A seams). The in-process
+	// memory stores stay test-only.
+	deps := server.Deps{
+		Tracker: pgstore.NewTracker(st),
+		Pending: pgstore.NewPendingQueue(st),
+		Resolve: st, // store.PGStore satisfies emit's interface structurally
+		Status:  st, // W5-A: GET /v1/installations/status reads ghconn tables
+	}
+
+	srv, err := server.New(cfg, deps, logger)
 	if err != nil {
 		logger.Error("server wiring failed", slog.String("err", err.Error()))
 		os.Exit(1)

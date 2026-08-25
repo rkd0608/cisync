@@ -1,0 +1,16 @@
+{
+  "action": "opened",
+  "number": 7,
+  "pull_request": {
+    "number": 7,
+    "state": "open",
+    "title": "Add idempotency keys to checkout",
+    "user": { "login": "octocat" },
+    "head": { "sha": "1111111111111111111111111111111111111111", "ref": "agent/int_94f8/candidate_01" },
+    "base": { "sha": "2222222222222222222222222222222222222222", "ref": "main" },
+    "diff_url": "https://github.com/acme/payments/pull/7.diff",
+    "merged": false
+  },
+  "repository": { "full_name": "acme/payments", "default_branch": "main" },
+  "sender": { "login": "octocat" }
+}

@@ -56,12 +56,12 @@ func ReserveBudgetsTx(ctx context.Context, tx pgx.Tx, tenantID string, seq int64
 			 VALUES ($1,$2,$3,$4,`+budgetHourBucketSQL+`)
 			 ON CONFLICT (tenant_id, kind)
 			 DO UPDATE SET used = CASE
-			                       WHEN ctrl.budget_counters.window_started_at < ` + budgetHourBucketSQL + `
+			                       WHEN ctrl.budget_counters.window_started_at < `+budgetHourBucketSQL+`
 			                       THEN EXCLUDED.used
 			                       ELSE ctrl.budget_counters.used + EXCLUDED.used
 			                     END,
 			               updated_seq = EXCLUDED.updated_seq,
-			               window_started_at = ` + budgetHourBucketSQL + `
+			               window_started_at = `+budgetHourBucketSQL+`
 			 RETURNING used`,
 			tenantID, string(kind), delta, seq,
 		).Scan(&used)

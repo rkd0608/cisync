@@ -88,7 +88,8 @@ func (s *PGStore) GetCheckReport(ctx context.Context, decisionID string) (*Check
 	return &rep, nil
 }
 
-// SaveCheckReport implements Store.
+// SaveCheckReport implements Store. Kept as the legacy single-insert path;
+// lifecycle-aware callers use RecordCheckReport (update-in-place semantics).
 func (s *PGStore) SaveCheckReport(ctx context.Context, rep CheckReport) error {
 	tag, err := s.pool.Exec(ctx,
 		`INSERT INTO ghconn.check_reports (decision_id, candidate_id, repo, head_sha, verb, conclusion, check_run_id, dry_run)

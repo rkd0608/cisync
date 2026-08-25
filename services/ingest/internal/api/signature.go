@@ -27,6 +27,19 @@ func VerifyGitHubSignature(secret []byte, body []byte, header string) bool {
 	return hmac.Equal(given, mac.Sum(nil))
 }
 
+// VerifyGitHubSignatureAny checks the header against EVERY secret in the
+// rotation list (EC-010): each candidate runs a constant-time compare and ANY
+// match passes, so deliveries signed with the old secret stay valid during
+// the overlap window. An empty list fails closed.
+func VerifyGitHubSignatureAny(secrets [][]byte, body []byte, header string) bool {
+	for _, secret := range secrets {
+		if VerifyGitHubSignature(secret, body, header) {
+			return true
+		}
+	}
+	return false
+}
+
 // VerifyTimestampSkew validates the optional X-Sauron-Timestamp header. When
 // the header is absent verification passes; when present the skew must be
 // within tolerance (replay window).

@@ -43,6 +43,24 @@ type Config struct {
 	// SchedBatch bounds per-tick admission/dispatch work; dev compose raises
 	// it so suite fan-out drains inside harness decision windows.
 	SchedBatch int
+	// TrackedBaseBranches names the push refs that count as base advances
+	// (plan §5.1, ruling #4): default "main,master".
+	TrackedBaseBranches []string
+	// RerunMaxPerCandidate caps POST /candidates/{id}/revalidate per
+	// candidate (ruling #2: default 2).
+	RerunMaxPerCandidate int
+}
+
+// parseList splits a comma-separated env list, trimming whitespace and
+// dropping empties.
+func parseList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func env(key, def string) string {
@@ -113,6 +131,13 @@ func Load() (*Config, error) {
 	}
 	if cfg.SchedBatch, err = envInt("SAURON_CTRL_SCHED_BATCH", 8); err != nil {
 		return nil, err
+	}
+	if cfg.RerunMaxPerCandidate, err = envInt("SAURON_CTRL_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
+		return nil, err
+	}
+	cfg.TrackedBaseBranches = parseList(env("SAURON_CTRL_TRACKED_BASE_BRANCHES", "main,master"))
+	if len(cfg.TrackedBaseBranches) == 0 {
+		return nil, fmt.Errorf("config SAURON_CTRL_TRACKED_BASE_BRANCHES: must not be empty")
 	}
 	if cfg.AdminToken == "" {
 		return nil, fmt.Errorf("config SAURON_CTRL_ADMIN_TOKEN: required")

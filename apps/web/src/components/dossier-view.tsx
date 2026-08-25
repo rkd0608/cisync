@@ -1,11 +1,6 @@
 import type { ReactElement } from 'react';
 import type { EvidenceDossier } from '@/lib/api-schemas';
-
-const VERB_STYLES: Record<string, string> = {
-  eligible_for_merge_train: 'border-emerald-500 bg-emerald-500/10 text-emerald-200',
-  rejected: 'border-red-500 bg-red-500/10 text-red-200',
-  deferred: 'border-amber-500 bg-amber-500/10 text-amber-200',
-};
+import { DecisionBanner } from './decision-banner';
 
 function MetaList({ meta }: { meta: Record<string, unknown> }): ReactElement | null {
   const entries = Object.entries(meta);
@@ -29,19 +24,11 @@ export function DossierView({ dossier }: { dossier: EvidenceDossier }): ReactEle
       : 'unresolved policy';
   return (
     <article className="flex flex-col gap-4" data-testid="dossier-view">
-      <section
-        className={`rounded border px-5 py-4 font-mono ${VERB_STYLES[decision.verb] ?? 'border-zinc-700'}`}
-      >
-        <p className="text-[11px] uppercase tracking-widest opacity-70">decision {decision.decision_id}</p>
-        <p className="mt-1 text-lg">{decision.verb}</p>
-        <p className="mt-1 text-xs opacity-80">
-          confidence {(decision.confidence * 100).toFixed(1)}% · policy {policyLabel}
-        </p>
-        <p className="mt-2 max-w-3xl font-sans text-sm text-zinc-300">{decision.summary}</p>
-        <p className="mt-2 text-[11px] text-zinc-500">
-          inputs_hash {dossier.inputs_hash} · generated {dossier.generated_at}
-        </p>
-      </section>
+      <DecisionBanner decision={decision} />
+      {/* T6 provenance stays one glance away from the decision itself. */}
+      <p className="-mt-3 font-mono text-[11px] text-zinc-500">
+        inputs_hash {dossier.inputs_hash} · generated {dossier.generated_at}
+      </p>
 
       <section className="rounded border border-zinc-800 px-4 py-4">
         <h3 className="font-mono text-[11px] uppercase tracking-widest text-emerald-400">
@@ -76,7 +63,11 @@ export function DossierView({ dossier }: { dossier: EvidenceDossier }): ReactEle
           deferred evidence — with reasons ({dossier.evidence_deferred.length})
         </h3>
         {dossier.evidence_deferred.length === 0 ? (
-          <p className="mt-2 text-xs text-zinc-600">nothing deferred</p>
+          // §2.8: absence of deferral is information — cite the policy that
+          // ran everything required, never a blank section.
+          <p data-testid="deferred-empty" className="mt-2 text-xs text-zinc-600">
+            Nothing deferred — plan ran everything required by {policyLabel}.
+          </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2 text-xs">
             {dossier.evidence_deferred.map((item) => (

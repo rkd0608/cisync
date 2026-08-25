@@ -96,12 +96,24 @@ describe('StateMachineProgress', () => {
 });
 
 describe('honest state components', () => {
-  it('EmptyState renders title and hint', () => {
+  it('EmptyState renders the three-line teaching contract (§2.8)', () => {
     const html = renderToStaticMarkup(
-      <EmptyState title="no intents" hint="they arrive via events" />,
+      <EmptyState
+        what="no change activity yet"
+        whyEmpty="Open a PR on a connected repo, or POST /v1/change-intents."
+        action={{ label: 'connect a repo at /onboarding', href: '/onboarding' }}
+      />,
     );
-    expect(html).toContain('no intents');
-    expect(html).toContain('they arrive via events');
+    expect(html).toContain('no change activity yet');
+    expect(html).toContain('Open a PR on a connected repo');
+    expect(html).toContain('href="/onboarding"');
+    expect(html).toContain('connect a repo at /onboarding');
+  });
+
+  it('EmptyState keeps why/action optional but what mandatory', () => {
+    const bare = renderToStaticMarkup(<EmptyState what="no candidates in view" />);
+    expect(bare).toContain('no candidates in view');
+    expect(bare).not.toContain('href=');
   });
 
   it('ErrorState shows machine-readable code; retry button only when wired', () => {
@@ -152,17 +164,21 @@ describe('EventTimeline', () => {
 });
 
 describe('DossierView (§7 structure)', () => {
-  it('renders verb + confidence + policy version banner', () => {
+  it('renders calibrated verb + confidence + policy version banner', () => {
     const html = renderToStaticMarkup(<DossierView dossier={dossier} />);
-    expect(html).toContain('eligible_for_merge_train');
-    expect(html).toContain('94.0%');
+    // T4: ledger verb verbatim, word + number side by side.
+    expect(html).toContain('data-verb="eligible_for_merge_train"');
+    expect(html).toContain('Eligible for merge train');
+    expect(html).toContain('moderate · 94.0% confidence');
     expect(html).toContain('pol_payments_high_risk v4');
   });
 
-  it('always renders mandatory deferred section, even when empty', () => {
+  it('always renders mandatory deferred section, even when empty (§2.8 copy)', () => {
     const html = renderToStaticMarkup(<DossierView dossier={dossier} />);
     expect(html).toContain('deferred evidence — with reasons (0)');
-    expect(html).toContain('nothing deferred');
+    expect(html).toContain(
+      'Nothing deferred — plan ran everything required by pol_payments_high_risk v4.',
+    );
   });
 
   it('surfaces evidence meta values', () => {
