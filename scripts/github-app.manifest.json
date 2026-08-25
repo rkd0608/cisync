@@ -1,0 +1,25 @@
+{
+  "name": "Sauron Verification Gate (dev)",
+  "url": "http://localhost:3000",
+  "hook_attributes": {
+    "active": true,
+    "url": "REPLACE_WITH_TUNNEL_URL/hooks/github"
+  },
+  "redirect_url": "http://localhost:3000/onboarding",
+  "callback_urls": [],
+  "setup_url": "http://localhost:3000/installations",
+  "setup_on_update": true,
+  "public": true,
+  "default_permissions": {
+    "metadata": "read",
+    "checks": "write",
+    "pull_requests": "read",
+    "contents": "read"
+  },
+  "default_events": [
+    "pull_request",
+    "push",
+    "installation",
+    "check_run"
+  ]
+}
