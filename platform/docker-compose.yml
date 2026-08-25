@@ -125,7 +125,10 @@ services:
   web:
     build: ../apps/web
     environment:
-      NEXT_PUBLIC_SAURON_API_URL: http://localhost:8081
+      # Server-side proxy upstream (next.config.ts rewrites /api/sauron/*).
+      SAURON_API_URL: http://control-plane:8081
+      SAURON_CONNECTOR_URL: http://github-connector:8083
+      SAURON_ADMIN_TOKEN: dev_admin_token_not_for_prod
     ports: ["3000:3000"]
     depends_on: [control-plane]
 

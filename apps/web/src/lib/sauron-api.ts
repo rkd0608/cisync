@@ -28,7 +28,12 @@ import {
 } from './policy-schema';
 import { eventsPageSchema, type EventEnvelope } from './event-schemas';
 
-const DEFAULT_BASE_URL = 'http://localhost:8081';
+// WHY a relative default: the browser bundle cannot rely on NEXT_PUBLIC_*
+// inlining (docker builds bake it before env exists) and direct cross-origin
+// calls to control-plane fail without CORS. The Next.js server proxies
+// /api/sauron/* → SAURON_API_URL (see next.config.ts), so the client talks to
+// its own origin and every deployment works with zero build-time config.
+const DEFAULT_BASE_URL = '/api/sauron';
 
 export type ApiFailure = {
   ok: false;
