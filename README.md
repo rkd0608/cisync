@@ -1,4 +1,4 @@
-# Sauron — Agent-Native Verification & Integration Control Plane
+# CISync — Agent-Native Verification & Integration Control Plane
 
 Converts an unbounded stream of agent-generated code changes into prioritized,
 deduplicated, evidence-backed validation decisions over a tamper-evident ledger.
