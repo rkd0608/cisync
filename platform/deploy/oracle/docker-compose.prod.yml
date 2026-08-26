@@ -1,14 +1,14 @@
-# Sauron Phase-1 production stack — Oracle Cloud Always-Free A1.Flex (arm64).
+# CISync Phase-1 production stack — Oracle Cloud Always-Free A1.Flex (arm64).
 # Standalone (NOT an overlay of the dev file): build ON the box, no registry.
 #
 # WHY single-host direct DNS: v0.2 phase-1 posture; no cloudflared — public
-# ingress is ONLY caddy on 80/443; every other service stays on sauron-net.
+# ingress is ONLY caddy on 80/443; every other service stays on cisync-net.
 # WHY no init.sql: migrations auto-run at boot inside each service binary
 # (SPEC §3, AWS deploy-kit row); schema-per-service makes order irrelevant.
 #
 # Usage (from this directory):
 #   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-name: sauron
+name: cisync
 
 x-go-healthcheck: &go-healthcheck
   # WHY bash /dev/tcp and not curl/wget: runtime images are debian:bookworm-slim
@@ -43,16 +43,16 @@ services:
       - -c
       - wal_compression=on
     environment:
-      POSTGRES_USER: sauron
+      POSTGRES_USER: cisync
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env.prod}
-      POSTGRES_DB: sauron
+      POSTGRES_DB: cisync
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks: [sauron-net] # NOT published: DB is internal-only in prod
+    networks: [cisync-net] # NOT published: DB is internal-only in prod
     mem_limit: 6g
     cpus: 1.0
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sauron -d sauron"]
+      test: ["CMD-SHELL", "pg_isready -U cisync -d cisync"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -61,12 +61,12 @@ services:
     build: ../../../services/ingest
     restart: unless-stopped
     environment:
-      SAURON_INGEST_PG_DSN: postgres://sauron:${POSTGRES_PASSWORD}@postgres:5432/sauron?pool_max_conns=20&statement_timeout=15000
-      SAURON_INGEST_WEBHOOK_SECRET: ${SAURON_INGEST_WEBHOOK_SECRET:?set in .env.prod}
-      SAURON_INGEST_ADDR: ":8080"
+      CISYNC_INGEST_PG_DSN: postgres://cisync:${POSTGRES_PASSWORD}@postgres:5432/cisync?pool_max_conns=20&statement_timeout=15000
+      CISYNC_INGEST_WEBHOOK_SECRET: ${CISYNC_INGEST_WEBHOOK_SECRET:?set in .env.prod}
+      CISYNC_INGEST_ADDR: ":8080"
       PORT: "8080" # consumed by x-go-healthcheck /dev/tcp probe
-      SAURON_INGEST_CTRL_URL: http://control-plane:8081
-    networks: [sauron-net] # reached publicly ONLY via caddy /hooks/github*
+      CISYNC_INGEST_CTRL_URL: http://control-plane:8081
+    networks: [cisync-net] # reached publicly ONLY via caddy /hooks/github*
     mem_limit: 2g
     cpus: 0.5
     healthcheck: { <<: *go-healthcheck }
@@ -77,27 +77,27 @@ services:
     build: ../../../services/control-plane
     restart: unless-stopped
     environment:
-      SAURON_CTRL_PG_DSN: postgres://sauron:${POSTGRES_PASSWORD}@postgres:5432/sauron?pool_max_conns=64&statement_timeout=15000
-      SAURON_CTRL_ADDR: ":8081"
+      CISYNC_CTRL_PG_DSN: postgres://cisync:${POSTGRES_PASSWORD}@postgres:5432/cisync?pool_max_conns=64&statement_timeout=15000
+      CISYNC_CTRL_ADDR: ":8081"
       PORT: "8081" # consumed by x-go-healthcheck /dev/tcp probe
-      SAURON_CTRL_FLEET_URL: http://runner-fleet:8082
-      SAURON_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.key
+      CISYNC_CTRL_FLEET_URL: http://runner-fleet:8082
+      CISYNC_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.key
       # Dedicated job-lease signing key (B2/I-04): never the ledger key.
-      SAURON_CTRL_JOBLEASE_KEY_FILE: /keys/joblease_ed25519.key
-      SAURON_CTRL_ADMIN_TOKEN: ${SAURON_CTRL_ADMIN_TOKEN:?set in .env.prod}
-      SAURON_CTRL_WEBHOOK_SECRET: ${SAURON_CTRL_WEBHOOK_SECRET:?must equal ingest secret}
-      SAURON_CTRL_CONNECTOR_URL: http://github-connector:8083
+      CISYNC_CTRL_JOBLEASE_KEY_FILE: /keys/joblease_ed25519.key
+      CISYNC_CTRL_ADMIN_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN:?set in .env.prod}
+      CISYNC_CTRL_WEBHOOK_SECRET: ${CISYNC_CTRL_WEBHOOK_SECRET:?must equal ingest secret}
+      CISYNC_CTRL_CONNECTOR_URL: http://github-connector:8083
       # I-07 nightly chain verify (H3): same verifier as `verify` subcommand.
-      SAURON_CTRL_VERIFY_INTERVAL: ${SAURON_CTRL_VERIFY_INTERVAL:-24h}
+      CISYNC_CTRL_VERIFY_INTERVAL: ${CISYNC_CTRL_VERIFY_INTERVAL:-24h}
       # B7 audit retention floor is 90d; we keep 180d on the big box.
-      SAURON_CTRL_AUDIT_RETENTION_DAYS: ${SAURON_CTRL_AUDIT_RETENTION_DAYS:-180}
-      SAURON_CTRL_TRACKED_BASE_BRANCHES: ${SAURON_CTRL_TRACKED_BASE_BRANCHES:-main,master}
+      CISYNC_CTRL_AUDIT_RETENTION_DAYS: ${CISYNC_CTRL_AUDIT_RETENTION_DAYS:-180}
+      CISYNC_CTRL_TRACKED_BASE_BRANCHES: ${CISYNC_CTRL_TRACKED_BASE_BRANCHES:-main,master}
       # NOTE: scheduler tick/reconcile/batch/rate-limit stay at CODE DEFAULTS
       # (1s/30s/8/120min) — dev compose overrides were harness-window sizing
       # only (SPEC §3 W3-closer). Prod posture = conservative defaults.
     volumes:
       - ./keys:/keys:ro
-    networks: [sauron-net] # NEVER internet-exposed (D2)
+    networks: [cisync-net] # NEVER internet-exposed (D2)
     mem_limit: 4g
     cpus: 1.0
     healthcheck: { <<: *go-healthcheck }
@@ -108,16 +108,16 @@ services:
     build: ../../../services/runner-fleet
     restart: unless-stopped
     environment:
-      SAURON_FLEET_PG_DSN: postgres://sauron:${POSTGRES_PASSWORD}@postgres:5432/sauron?pool_max_conns=32&statement_timeout=15000
-      SAURON_FLEET_ADDR: ":8082"
+      CISYNC_FLEET_PG_DSN: postgres://cisync:${POSTGRES_PASSWORD}@postgres:5432/cisync?pool_max_conns=32&statement_timeout=15000
+      CISYNC_FLEET_ADDR: ":8082"
       PORT: "8082" # consumed by x-go-healthcheck /dev/tcp probe
       # sim provider: docker provider stays NOT-FOR-PRODUCTION (B5) until
       # THREAT_MODEL graduation; also avoids socket-sharing on the prod host.
-      SAURON_FLEET_PROVIDER: sim
-      SAURON_FLEET_JOBLEASYPUB_KEY_FILE: /keys/joblease_ed25519.pub
+      CISYNC_FLEET_PROVIDER: sim
+      CISYNC_FLEET_JOBLEASYPUB_KEY_FILE: /keys/joblease_ed25519.pub
     volumes:
       - ./keys:/keys:ro
-    networks: [sauron-net]
+    networks: [cisync-net]
     mem_limit: 2g
     cpus: 0.25
     healthcheck: { <<: *go-healthcheck }
@@ -128,22 +128,22 @@ services:
     build: ../../../services/github-connector
     restart: unless-stopped
     environment:
-      SAURON_CONN_PG_DSN: postgres://sauron:${POSTGRES_PASSWORD}@postgres:5432/sauron
-      SAURON_CONN_ADDR: ":8083"
+      CISYNC_CONN_PG_DSN: postgres://cisync:${POSTGRES_PASSWORD}@postgres:5432/cisync
+      CISYNC_CONN_ADDR: ":8083"
       PORT: "8083" # consumed by x-go-healthcheck /dev/tcp probe
-      SAURON_CONN_WEBHOOK_SECRET: ${SAURON_CONN_WEBHOOK_SECRET:?set in .env.prod}
-      SAURON_CONN_ADMIN_TOKEN: ${SAURON_CONN_ADMIN_TOKEN:?set in .env.prod}
-      SAURON_CONN_DETAILS_URL: https://${DOMAIN:?set in .env.prod}
+      CISYNC_CONN_WEBHOOK_SECRET: ${CISYNC_CONN_WEBHOOK_SECRET:?set in .env.prod}
+      CISYNC_CONN_ADMIN_TOKEN: ${CISYNC_CONN_ADMIN_TOKEN:?set in .env.prod}
+      CISYNC_CONN_DETAILS_URL: https://${DOMAIN:?set in .env.prod}
       # Dry-run by default: uncomment ALL THREE GitHub App vars together to
       # go live (config.go refuses half-configured creds).
-      # SAURON_CONN_GITHUB_APP_ID: "123456"
-      # SAURON_CONN_GITHUB_PRIVATE_KEY_FILE: /keys/github-app.pem
-      # SAURON_CONN_GITHUB_INSTALLATION_ID: "789012"
-      # SAURON_CONN_CTRL_URL: http://control-plane:8081
-      # SAURON_CONN_CTRL_TOKEN: ${SAURON_CTRL_ADMIN_TOKEN}
+      # CISYNC_CONN_GITHUB_APP_ID: "123456"
+      # CISYNC_CONN_GITHUB_PRIVATE_KEY_FILE: /keys/github-app.pem
+      # CISYNC_CONN_GITHUB_INSTALLATION_ID: "789012"
+      # CISYNC_CONN_CTRL_URL: http://control-plane:8081
+      # CISYNC_CONN_CTRL_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN}
     volumes:
       - ./keys:/keys:ro
-    networks: [sauron-net]
+    networks: [cisync-net]
     mem_limit: 1g
     cpus: 0.25
     healthcheck: { <<: *go-healthcheck }
@@ -154,12 +154,12 @@ services:
     build: ../../../apps/web
     restart: unless-stopped
     environment:
-      # Server-side proxy upstream (/api/sauron/* route handler injects the
+      # Server-side proxy upstream (/api/cisync/* route handler injects the
       # admin bearer server-side; tokens never reach the bundle).
-      SAURON_API_URL: http://control-plane:8081
-      SAURON_CONNECTOR_URL: http://github-connector:8083
-      SAURON_ADMIN_TOKEN: ${SAURON_CTRL_ADMIN_TOKEN}
-    networks: [sauron-net]
+      CISYNC_API_URL: http://control-plane:8081
+      CISYNC_CONNECTOR_URL: http://github-connector:8083
+      CISYNC_ADMIN_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN}
+    networks: [cisync-net]
     mem_limit: 2g
     cpus: 0.5
     healthcheck:
@@ -185,7 +185,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    networks: [sauron-net]
+    networks: [cisync-net]
     mem_limit: 512m
     cpus: 0.25
     healthcheck:
@@ -199,7 +199,7 @@ services:
       web: { condition: service_started }
 
 networks:
-  sauron-net:
+  cisync-net:
     driver: bridge
 
 volumes:

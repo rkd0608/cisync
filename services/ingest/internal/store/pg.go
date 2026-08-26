@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 // pgErrCodeUnique is the SQLSTATE for unique_violation.

@@ -1,5 +1,5 @@
 #cloud-config
-# Sauron Phase-1 bootstrap for Oracle Always-Free Ubuntu 24.04 ARM64.
+# CISync Phase-1 bootstrap for Oracle Always-Free Ubuntu 24.04 ARM64.
 # Installs docker, clones the repo, writes env skeleton, boots the stack.
 # WHY cloud-init: zero manual ssh steps; the box converges unattended.
 package_update: true
@@ -13,8 +13,8 @@ runcmd:
   - apt-get update -q
   - apt-get install -yq docker-ce docker-ce-cli containerd.io docker-compose-plugin
   - usermod -aG docker ubuntu
-  - git clone ${REPO_URL} /opt/sauron || true
-  - cp /opt/sauron/platform/deploy/oracle/.env.prod.example /opt/sauron/platform/.env.prod
+  - git clone ${REPO_URL} /opt/cisync || true
+  - cp /opt/cisync/platform/deploy/oracle/.env.prod.example /opt/cisync/platform/.env.prod
   # Operator fills secrets next (keys/webhook secret) then runs up.
-  - cd /opt/sauron/platform && SAURON_SKIP_UP=1 ./oracle-up.sh || true
-final_message: "SAURON BOOTSTRAP DONE — fill platform/.env.prod, then: cd /opt/sauron/platform && ./oracle-up.sh"
+  - cd /opt/cisync/platform && CISYNC_SKIP_UP=1 ./oracle-up.sh || true
+final_message: "CISYNC BOOTSTRAP DONE — fill platform/.env.prod, then: cd /opt/cisync/platform && ./oracle-up.sh"

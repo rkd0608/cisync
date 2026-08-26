@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // delivery_audit_seams.go hosts the B7/H2 record-only seams of the delivery
@@ -78,7 +78,7 @@ func (s *Server) applyQuarantineMarker(ctx context.Context, rawHash string, body
 		// internal-protocols §1 replay semantics.
 		return http.StatusOK, []byte(`{"accepted":true,"replay":true}`), nil
 	}
-	s.metrics.Add("sauron_security_audit_total", 1, "kind", string(audit.KindWebhookSignatureFailed))
+	s.metrics.Add("cisync_security_audit_total", 1, "kind", string(audit.KindWebhookSignatureFailed))
 	return http.StatusAccepted, []byte(`{"accepted":true}`), nil
 }
 
@@ -105,7 +105,7 @@ func (s *Server) applyDuplicateSuspect(ctx context.Context, body *deliveryBody, 
 		if !fresh {
 			return nil
 		}
-		s.metrics.Add("sauron_ctrl_duplicate_suspect_total", 1)
+		s.metrics.Add("cisync_ctrl_duplicate_suspect_total", 1)
 		logError("duplicate_suspect delivery %s kind=%s repo=%s flagged by ingest seen-window (record-only)",
 			body.ExtDeliveryID, body.EventKind, body.Repo)
 		return store.RecordCommandTx(ctx, tx, s.cfg.TenantID,

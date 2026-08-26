@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/ghauth"
-	"sauron.dev/sauron/github-connector/internal/obs"
-	"sauron.dev/sauron/github-connector/internal/queue"
-	"sauron.dev/sauron/github-connector/internal/ratelimit"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/ghauth"
+	"cisync.dev/cisync/github-connector/internal/obs"
+	"cisync.dev/cisync/github-connector/internal/queue"
+	"cisync.dev/cisync/github-connector/internal/ratelimit"
 )
 
 // ErrUnknownInstallation reports a repo with no provable installation

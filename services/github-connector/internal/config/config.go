@@ -1,4 +1,4 @@
-// Package config parses all SAURON_CONN_* environment variables. It is the
+// Package config parses all CISYNC_CONN_* environment variables. It is the
 // only place in this service that reads the environment.
 package config
 
@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/rerun"
 )
 
 // Config carries every tunable for the github-connector service.
@@ -50,22 +50,22 @@ type Config struct {
 	DryRun bool
 }
 
-// Load builds a Config from SAURON_CONN_* variables.
+// Load builds a Config from CISYNC_CONN_* variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Addr:                    envOr("SAURON_CONN_ADDR", ":8083"),
-		PGDSN:                   os.Getenv("SAURON_CONN_PG_DSN"),
-		WebhookSecret:           os.Getenv("SAURON_CONN_WEBHOOK_SECRET"),
-		DetailsURL:              envOr("SAURON_CONN_DETAILS_URL", "http://localhost:3000"),
-		AdminToken:              os.Getenv("SAURON_CONN_ADMIN_TOKEN"),
-		GitHubAppID:             os.Getenv("SAURON_CONN_GITHUB_APP_ID"),
-		GitHubAppPrivateKeyFile: os.Getenv("SAURON_CONN_GITHUB_PRIVATE_KEY_FILE"),
+		Addr:                    envOr("CISYNC_CONN_ADDR", ":8083"),
+		PGDSN:                   os.Getenv("CISYNC_CONN_PG_DSN"),
+		WebhookSecret:           os.Getenv("CISYNC_CONN_WEBHOOK_SECRET"),
+		DetailsURL:              envOr("CISYNC_CONN_DETAILS_URL", "http://localhost:3000"),
+		AdminToken:              os.Getenv("CISYNC_CONN_ADMIN_TOKEN"),
+		GitHubAppID:             os.Getenv("CISYNC_CONN_GITHUB_APP_ID"),
+		GitHubAppPrivateKeyFile: os.Getenv("CISYNC_CONN_GITHUB_PRIVATE_KEY_FILE"),
 	}
 	if cfg.GitHubAppPrivateKeyFile == "" {
-		cfg.GitHubAppPrivateKeyFile = os.Getenv("SAURON_CONN_GITHUB_APP_PRIVATE_KEY_FILE")
+		cfg.GitHubAppPrivateKeyFile = os.Getenv("CISYNC_CONN_GITHUB_APP_PRIVATE_KEY_FILE")
 	}
 	if cfg.WebhookSecret == "" {
-		return nil, fmt.Errorf("config: SAURON_CONN_WEBHOOK_SECRET is required")
+		return nil, fmt.Errorf("config: CISYNC_CONN_WEBHOOK_SECRET is required")
 	}
 	if err := cfg.loadInstallation(); err != nil {
 		return nil, err
@@ -86,30 +86,30 @@ func Load() (*Config, error) {
 	case 3:
 		cfg.DryRun = false
 	default:
-		return nil, fmt.Errorf("config: SAURON_CONN_GITHUB_APP_ID, SAURON_CONN_GITHUB_PRIVATE_KEY_FILE and SAURON_CONN_GITHUB_INSTALLATION_ID must be configured together")
+		return nil, fmt.Errorf("config: CISYNC_CONN_GITHUB_APP_ID, CISYNC_CONN_GITHUB_PRIVATE_KEY_FILE and CISYNC_CONN_GITHUB_INSTALLATION_ID must be configured together")
 	}
 
-	policy, err := rerun.ParsePolicy(os.Getenv("SAURON_CONN_RERUN_POLICY"))
+	policy, err := rerun.ParsePolicy(os.Getenv("CISYNC_CONN_RERUN_POLICY"))
 	if err != nil {
 		return nil, err
 	}
 	cfg.RerunPolicy = policy
-	if cfg.RerunMaxPerCandidate, err = envInt("SAURON_CONN_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
+	if cfg.RerunMaxPerCandidate, err = envInt("CISYNC_CONN_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
 		return nil, err
 	}
-	if cfg.RerunRatePerHour, err = envInt("SAURON_CONN_RERUN_RATE_PER_HOUR", 20); err != nil {
+	if cfg.RerunRatePerHour, err = envInt("CISYNC_CONN_RERUN_RATE_PER_HOUR", 20); err != nil {
 		return nil, err
 	}
-	if cfg.WriteBudgetPerHour, err = envInt("SAURON_CONN_WRITE_BUDGET_PER_HOUR", 300); err != nil {
+	if cfg.WriteBudgetPerHour, err = envInt("CISYNC_CONN_WRITE_BUDGET_PER_HOUR", 300); err != nil {
 		return nil, err
 	}
-	if cfg.StalledCheckAge, err = envDuration("SAURON_CONN_STALLED_CHECK_AGE", 45*time.Minute); err != nil {
+	if cfg.StalledCheckAge, err = envDuration("CISYNC_CONN_STALLED_CHECK_AGE", 45*time.Minute); err != nil {
 		return nil, err
 	}
-	if cfg.SweepInterval, err = envDuration("SAURON_CONN_SWEEP_INTERVAL", time.Minute); err != nil {
+	if cfg.SweepInterval, err = envDuration("CISYNC_CONN_SWEEP_INTERVAL", time.Minute); err != nil {
 		return nil, err
 	}
-	if cfg.PendingDrainInterval, err = envDuration("SAURON_CONN_PENDING_DRAIN_INTERVAL", 30*time.Second); err != nil {
+	if cfg.PendingDrainInterval, err = envDuration("CISYNC_CONN_PENDING_DRAIN_INTERVAL", 30*time.Second); err != nil {
 		return nil, err
 	}
 	if cfg.RerunMaxPerCandidate <= 0 || cfg.RerunRatePerHour <= 0 || cfg.WriteBudgetPerHour <= 0 {
@@ -118,19 +118,19 @@ func Load() (*Config, error) {
 	if cfg.StalledCheckAge <= 0 || cfg.SweepInterval <= 0 || cfg.PendingDrainInterval <= 0 {
 		return nil, fmt.Errorf("config: interval knobs must be positive")
 	}
-	cfg.CtrlBaseURL = os.Getenv("SAURON_CONN_CTRL_URL")
-	cfg.CtrlToken = os.Getenv("SAURON_CONN_CTRL_TOKEN")
+	cfg.CtrlBaseURL = os.Getenv("CISYNC_CONN_CTRL_URL")
+	cfg.CtrlToken = os.Getenv("CISYNC_CONN_CTRL_TOKEN")
 	return cfg, nil
 }
 
 func (c *Config) loadInstallation() error {
-	rawInstall := os.Getenv("SAURON_CONN_GITHUB_INSTALLATION_ID")
+	rawInstall := os.Getenv("CISYNC_CONN_GITHUB_INSTALLATION_ID")
 	if rawInstall == "" {
 		return nil
 	}
 	id, err := strconv.ParseInt(rawInstall, 10, 64)
 	if err != nil || id <= 0 {
-		return fmt.Errorf("config: invalid SAURON_CONN_GITHUB_INSTALLATION_ID %q", rawInstall)
+		return fmt.Errorf("config: invalid CISYNC_CONN_GITHUB_INSTALLATION_ID %q", rawInstall)
 	}
 	c.GitHubInstallationID = id
 	return nil

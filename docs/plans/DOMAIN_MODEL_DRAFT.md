@@ -1,4 +1,4 @@
-# Sauron — Domain Model & API Draft (v1)
+# CISync — Domain Model & API Draft (v1)
 
 Status: DRAFT · Owner: Domain Model & API Architect · Inputs: product spec, `ARCHITECTURE_DRAFT.md` (events/envelope/storage), `EDGE_CASES_DRAFT.md` (races/invariants). Freezes aggregates, relations, ladder, priority math, REST v1, event payloads, dossier/decision formats, policy model. Becomes `packages/contracts/openapi.yaml` (§5) + `events.schema.json` (§6) after synthesis.
 

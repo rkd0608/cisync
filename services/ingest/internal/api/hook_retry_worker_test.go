@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
-	"sauron.dev/sauron/ingest/internal/forward"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/retry"
+	"cisync.dev/cisync/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/retry"
 )
 
 func TestRetryWorkerRecoversPendingDeliveries(t *testing.T) {

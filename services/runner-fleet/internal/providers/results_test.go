@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // P0-2 / I-01: providers must report a REAL outcome census on every

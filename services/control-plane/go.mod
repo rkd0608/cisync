@@ -1,4 +1,4 @@
-module sauron.dev/sauron/control-plane
+module cisync.dev/cisync/control-plane
 
 go 1.23
 

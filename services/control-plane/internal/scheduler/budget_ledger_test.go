@@ -3,8 +3,8 @@ package scheduler
 import (
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/policy"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // P0-3 regression: a tenant with NO budget_counters row has consumed nothing,

@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // GetLease loads a lease within tenant (I-14).

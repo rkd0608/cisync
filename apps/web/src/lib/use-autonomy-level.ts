@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { classifyAutonomy, type AutonomyLevelStatus } from './policy-schema';
-import { getActivePolicies } from './sauron-api';
+import { getActivePolicies } from './cisync-api';
 
 export type AutonomyStatus = 'checking' | AutonomyLevelStatus;
 

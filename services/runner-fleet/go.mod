@@ -1,4 +1,4 @@
-module sauron.dev/sauron/runner-fleet
+module cisync.dev/cisync/runner-fleet
 
 go 1.23
 

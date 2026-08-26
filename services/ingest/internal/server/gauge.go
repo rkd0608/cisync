@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 // GaugeDeliveries refreshes the deliveries-by-status gauges on every tick

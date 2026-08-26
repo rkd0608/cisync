@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/config"
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/obs"
-	fstore "sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/config"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/obs"
+	fstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // harness wires the production mux against a memory store and a fixed clock.

@@ -37,7 +37,7 @@ func (s *Server) readRawBody(w http.ResponseWriter, r *http.Request) ([]byte, bo
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			WriteError(w, http.StatusRequestEntityTooLarge, "validation_failed", "payload too large", nil, nil, nil)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "413")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "413")
 			return nil, false
 		}
 		WriteError(w, http.StatusBadRequest, "validation_failed", "unreadable body", nil, nil, nil)

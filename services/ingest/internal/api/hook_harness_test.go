@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/forward"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/seen"
-	"sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/seen"
+	"cisync.dev/cisync/ingest/internal/store"
 )
 
 type harness struct {
@@ -53,7 +53,7 @@ func newHarnessSecrets(t *testing.T, ctrlHandler http.HandlerFunc, secrets ...st
 				return
 			}
 			r.Body = io.NopCloser(strings.NewReader(string(raw)))
-			if sig := r.Header.Get("X-Sauron-Signature"); !verifyCtrlRaw(h.secret, raw, sig) {
+			if sig := r.Header.Get("X-CISync-Signature"); !verifyCtrlRaw(h.secret, raw, sig) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}

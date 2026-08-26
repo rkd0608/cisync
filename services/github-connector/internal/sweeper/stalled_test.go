@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // recordingRouter captures emit calls without any GitHub dependency.

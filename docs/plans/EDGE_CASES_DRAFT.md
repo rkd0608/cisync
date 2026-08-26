@@ -1,4 +1,4 @@
-# Sauron — Edge-Case Matrix Draft (v1)
+# CISync — Edge-Case Matrix Draft (v1)
 
 Status: DRAFT · Companion to `TEST_STRATEGY_DRAFT.md`. Every row must end up either automated-green or explicitly signed off as accepted risk before platform v1 is "trustable".
 

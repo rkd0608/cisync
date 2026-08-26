@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // riskPriority is the §4 static blast-radius seed by intent risk class.

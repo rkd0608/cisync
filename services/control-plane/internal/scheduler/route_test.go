@@ -3,7 +3,7 @@ package scheduler
 import (
 	"testing"
 
-	failurepkg "sauron.dev/sauron/control-plane/internal/failure"
+	failurepkg "cisync.dev/cisync/control-plane/internal/failure"
 )
 
 // The unclassified fallback (no rule matched) carries confidence 0.30 — below

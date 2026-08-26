@@ -14,7 +14,7 @@ import {
 } from './storm-lib.js';
 
 /**
- * Concurrency storm against a RUNNING Sauron stack (compose-up required).
+ * Concurrency storm against a RUNNING CISync stack (compose-up required).
  *   pnpm exec tsx storm.ts --concurrency 500 --repos 8 --dupes 4
  * Drives N intents × M near-duplicate candidates across K repos through the
  * PUBLIC API only; collects latency histograms + error-class counts and runs
@@ -49,10 +49,10 @@ function parseArgs(argv: readonly string[]): CliOptions {
 function envConfig(opts: CliOptions): StormConfig {
   return {
     ...opts,
-    apiBase: (process.env['SAURON_API_URL'] ?? 'http://localhost:8081').replace(/\/$/, ''),
-    ingestBase: (process.env['SAURON_INGEST_URL'] ?? 'http://localhost:8080').replace(/\/$/, ''),
-    adminToken: process.env['SAURON_ADMIN_TOKEN'] ?? 'dev_admin_token_not_for_prod',
-    webhookSecret: process.env['SAURON_WEBHOOK_SECRET'] ?? 'dev_webhook_secret_not_for_prod',
+    apiBase: (process.env['CISYNC_API_URL'] ?? 'http://localhost:8081').replace(/\/$/, ''),
+    ingestBase: (process.env['CISYNC_INGEST_URL'] ?? 'http://localhost:8080').replace(/\/$/, ''),
+    adminToken: process.env['CISYNC_ADMIN_TOKEN'] ?? 'dev_admin_token_not_for_prod',
+    webhookSecret: process.env['CISYNC_WEBHOOK_SECRET'] ?? 'dev_webhook_secret_not_for_prod',
     seed: Number.parseInt(process.env['SCENARIO_SEED'] ?? '', 10) || 42,
   };
 }

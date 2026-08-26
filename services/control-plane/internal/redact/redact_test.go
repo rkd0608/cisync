@@ -9,7 +9,7 @@ import (
 // before persistence.
 
 func TestStringScrubsSecretShapes(t *testing.T) {
-	input := "token=ghp_0123456789abcdef012345678901234567 bearer abcdefghijklmno password=hunter2x postgres://sauron:hunter2@db.example.com/sauron"
+	input := "token=ghp_0123456789abcdef012345678901234567 bearer abcdefghijklmno password=hunter2x postgres://cisync:hunter2@db.example.com/cisync"
 	out := String(input)
 	for _, leak := range []string{"ghp_", "password=hunter2x", "hunter2@"} {
 		if strings.Contains(out, leak) {

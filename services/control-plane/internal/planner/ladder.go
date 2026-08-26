@@ -1,7 +1,7 @@
 package planner
 
 import (
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 // Ladder composition helpers: which jobs each tier carries and how fallback

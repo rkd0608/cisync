@@ -1,4 +1,4 @@
-# Sauron — Test Strategy Draft (v1)
+# CISync — Test Strategy Draft (v1)
 
 Status: DRAFT · Owner: QA & Verification Strategist · Scope: testing the Sauron platform itself.
 

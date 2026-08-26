@@ -23,10 +23,10 @@ db_skip_final_snapshot = false
 
 # --- ALB / DNS (OPERATOR PREREQS) --------------------------------------------
 # ACM cert must already be ISSUED (DNS-validated) in aws_region:
-# aws acm request-certificate --domain-name sauron.example.com \
+# aws acm request-certificate --domain-name cisync.example.com \
 #   --validation-method DNS
 certificate_arn = "arn:aws:acm:us-east-1:111122223333:certificate/REPLACE-ME"
-domain_name = "sauron.example.com"
+domain_name = "cisync.example.com"
 # Set hosted_zone_id to auto-create the alias record; omit to manage DNS yourself.
 hosted_zone_id = "" # e.g. "Z0123456789ABCDEFGHIJ"
 

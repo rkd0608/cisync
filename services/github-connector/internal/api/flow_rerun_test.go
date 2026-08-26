@@ -10,9 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // acceptedCtrl is the frozen revalidate contract: 202 {"accepted":true}.
@@ -42,7 +42,7 @@ func cachedDecision() *domain.DecisionEnvelope {
 		Kind: domain.KindDecision, DecisionID: "dec_01JCACHED", CandidateID: "cand_01JRERUN",
 		Repo: "acme/payments", HeadSHA: "cccccccccccccccccccccccccccccccccccccccc",
 		Verb: domain.VerbEligibleForMergeTrain, Confidence: 0.9,
-		Policy:     domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:     domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		RenderedAt: frozenNow,
 		Evidence:   &domain.EvidenceCounts{Required: 4, Accepted: 4, Deferred: 0, Failed: 0},
 	}

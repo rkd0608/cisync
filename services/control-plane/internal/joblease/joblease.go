@@ -20,7 +20,7 @@ import (
 const LeaseTTLMax = time.Hour
 
 // Audience is the only accepted aud claim value.
-const Audience = "sauron-fleet"
+const Audience = "cisync-fleet"
 
 // Claims are the lease identity fields bound into every token. jti format:
 // "fleet:<run_id>:<attempt>:<fence_token>" so I-03's one-record-per-jti rule
@@ -47,7 +47,7 @@ func JTIBuilds(runID string, attempt int, fence int64) string {
 }
 
 // Signer mints lease tokens; instantiated once at startup from
-// SAURON_CTRL_JOBLEASE_KEY_FILE.
+// CISYNC_CTRL_JOBLEASE_KEY_FILE.
 type Signer struct {
 	priv ed25519.PrivateKey
 }
@@ -86,7 +86,7 @@ func NewSignerFromPEMFile(path string) (*Signer, error) {
 }
 
 // PublicPEM returns the SPKI public key PEM for distribution to verifiers
-// (runner-fleet mounts it via SAURON_FLEET_JOBLEASYPUB_KEY_FILE).
+// (runner-fleet mounts it via CISYNC_FLEET_JOBLEASYPUB_KEY_FILE).
 func (s *Signer) PublicPEM() []byte {
 	pub, ok := s.priv.Public().(ed25519.PublicKey)
 	if !ok {

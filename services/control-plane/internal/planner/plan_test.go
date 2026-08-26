@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 func defaultPolicy() policy.ResolvedPolicy {

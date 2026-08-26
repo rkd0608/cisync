@@ -188,7 +188,7 @@ func installationView(payload map[string]any) installationEventView {
 	return inst
 }
 
-// trackedBranch matches a branch against SAURON_CTRL_TRACKED_BASE_BRANCHES
+// trackedBranch matches a branch against CISYNC_CTRL_TRACKED_BASE_BRANCHES
 // (exact names only in v0.2; comma globs deferred per plan §5.1 note).
 func trackedBranch(bases []string, branch string) bool {
 	for _, b := range bases {

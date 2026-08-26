@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 // ErrInvalidInput reports a candidate input the planner refuses to plan for;

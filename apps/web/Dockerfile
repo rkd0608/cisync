@@ -1,4 +1,4 @@
-# Sauron web — dev/demo image. Build: docker build -t sauron/web apps/web
+# CISync web — dev/demo image. Build: docker build -t cisync/web apps/web
 FROM node:22-alpine AS build
 WORKDIR /src
 RUN corepack enable

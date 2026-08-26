@@ -1,7 +1,7 @@
 package scheduler
 
 import (
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // This file encodes the decision-freshness rules for the completion

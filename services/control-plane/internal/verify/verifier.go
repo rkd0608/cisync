@@ -5,8 +5,8 @@ import (
 	"crypto/ed25519"
 	"fmt"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // Report summarizes one chain-verification pass.

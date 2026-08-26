@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // TestDeliveryAggregateMintsPrefixedUlid pins the events.schema.json

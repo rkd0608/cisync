@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // Compile-time wiring proof: the PG-backed adapter satisfies the tracking
@@ -30,7 +30,7 @@ func cachedDecisionEnvelope() *domain.DecisionEnvelope {
 		CandidateID: "cand_01JPGTEST", Repo: "acme/payments",
 		HeadSHA: "cccccccccccccccccccccccccccccccccccccccc",
 		Verb:    domain.VerbEligibleForMergeTrain, Confidence: 0.9,
-		Policy:     domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:     domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		RenderedAt: time.Now().UTC(),
 		Evidence:   &domain.EvidenceCounts{Required: 4, Accepted: 4, Deferred: 0, Failed: 0},
 	}

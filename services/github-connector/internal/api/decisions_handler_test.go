@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 func validEnvelope() domain.DecisionEnvelope {
@@ -25,7 +25,7 @@ func validEnvelope() domain.DecisionEnvelope {
 		HeadSHA:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Verb:        domain.VerbRejected,
 		Confidence:  0.91,
-		Policy:      domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:      domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		Summary:     "deterministic regression",
 		RenderedAt:  frozenNow,
 		Evidence:    &domain.EvidenceCounts{Required: 5, Accepted: 5, Deferred: 2, Failed: 0},
@@ -36,7 +36,7 @@ func TestDecisionsHMACEnforced(t *testing.T) {
 	h := newHarness(t, rerun.PolicyReplan)
 	raw, _ := json.Marshal(validEnvelope())
 	req, _ := http.NewRequest(http.MethodPost, "/internal/connector/decisions", bytes.NewReader(raw))
-	req.Header.Set("X-Sauron-Signature", signBody([]byte("wrong"), raw))
+	req.Header.Set("X-CISync-Signature", signBody([]byte("wrong"), raw))
 	req.Header.Set("Idempotency-Key", "dec_01JTESTDECISION")
 	rec := httptest.NewRecorder()
 	h.handler.ServeHTTP(rec, req)

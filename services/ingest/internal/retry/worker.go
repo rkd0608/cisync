@@ -8,10 +8,10 @@ import (
 	"math"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
-	"sauron.dev/sauron/ingest/internal/forward"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/store"
 )
 
 // attemptsPerScan bounds the exp-backoff retry burst for one stuck delivery

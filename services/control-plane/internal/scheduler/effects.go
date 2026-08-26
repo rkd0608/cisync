@@ -7,12 +7,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	evidencepkg "sauron.dev/sauron/control-plane/internal/evidence"
-	jobleasepkg "sauron.dev/sauron/control-plane/internal/joblease"
-	plannerpkg "sauron.dev/sauron/control-plane/internal/planner"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	evidencepkg "cisync.dev/cisync/control-plane/internal/evidence"
+	jobleasepkg "cisync.dev/cisync/control-plane/internal/joblease"
+	plannerpkg "cisync.dev/cisync/control-plane/internal/planner"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // onRunSucceeded proposes one evidence record per required kind the tier

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 func simOutcome(t *testing.T, runID string, attempt int, spec domain.JobSpec) domain.Outcome {

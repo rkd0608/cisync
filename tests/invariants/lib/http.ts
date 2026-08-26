@@ -103,5 +103,5 @@ let idempotencyCounter = 0;
 /** Client-generated keys must be unique per logical request (openapi header rule). */
 export function newIdempotencyKey(label: string): string {
   idempotencyCounter += 1;
-  return `sauron-test-${label}-${Date.now()}-${idempotencyCounter}`;
+  return `cisync-test-${label}-${Date.now()}-${idempotencyCounter}`;
 }

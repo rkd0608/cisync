@@ -1,4 +1,4 @@
-# Sauron Oracle Always-Free RUNBOOK (Phase-1, ARM A1.Flex single host)
+# CISync Oracle Always-Free RUNBOOK (Phase-1, ARM A1.Flex single host)
 
 Ordered operator guide: zero → production on Ubuntu 24.04 ARM64,
 4 OCPU / 24GB A1.Flex. Kit: `platform/deploy/oracle/`. Normative:
@@ -56,7 +56,7 @@ signed, unattended-upgrades-compatible, versioned installs on arm64.
 ## 4. Deploy
 
 ```bash
-cd ~ && git clone <your-fork> sauron && cd sauron/platform/deploy/oracle
+cd ~ && git clone <your-fork> cisync && cd cisync/platform/deploy/oracle
 cp .env.prod.example .env.prod && chmod 600 .env.prod   # fill EVERY value
 #   - keygen commands are embedded as comments in .env.prod.example
 #   - sudo apt-get install -y age ; age-keygen -o ~/age.key (chmod 600)
@@ -84,7 +84,7 @@ boot inside each service binary (SPEC §3: schema-per-service ⇒ order-safe).
 curl -fsS https://$DOMAIN/ >/dev/null                 # dashboard loads
 docker compose --env-file .env.prod -f docker-compose.prod.yml \
   exec caddy wget -qO- http://ingest:8080/healthz     # internal probe
-curl -fsS https://$DOMAIN/api/sauron/candidates -H "Authorization: Bearer $SAURON_CTRL_ADMIN_TOKEN"
+curl -fsS https://$DOMAIN/api/cisync/candidates -H "Authorization: Bearer $CISYNC_CTRL_ADMIN_TOKEN"
 curl -s -o /dev/null -w '%{http_code}' https://$DOMAIN/metrics   # expect 403
 curl -s -o /dev/null -w '%{http_code}' https://$DOMAIN/internal/x # expect 403
 ```
@@ -93,8 +93,8 @@ on an installed repo → ledger gains `delivery.accepted → intent.declared →
 candidate.submitted`; PR shows check **Agent Verification Gate** queued.
 Storm-lite loadgen from INSIDE the network (never via published ports):
 ```bash
-docker build -t sauron/loadgen -f tests/loadgen/Dockerfile tests/loadgen
-docker run --rm --network sauron_sauron-net sauron/loadgen \
+docker build -t cisync/loadgen -f tests/loadgen/Dockerfile tests/loadgen
+docker run --rm --network cisync_cisync-net cisync/loadgen \
   -concurrency 50 -units 50 -repos 2 -dupes 1
 ```
 
@@ -102,20 +102,20 @@ docker run --rm --network sauron_sauron-net sauron/loadgen \
 
 ```bash
 sudo crontab -e    # MAILTO=you@example.com above the entry
-0 3 * * * PROJECT_DIR=/home/ubuntu/sauron/platform/deploy/oracle \
-  /home/ubuntu/sauron/platform/deploy/oracle/backup.sh >> /var/log/sauron-backup.log 2>&1
+0 3 * * * PROJECT_DIR=/home/ubuntu/cisync/platform/deploy/oracle \
+  /home/ubuntu/cisync/platform/deploy/oracle/backup.sh >> /var/log/cisync-backup.log 2>&1
 ```
 WEEKLY RESTORE DRILL (calendar it; an untested backup is Schrödinger's):
 ```bash
-AGE_PRIVATE_KEY_FILE=~/age.key ./restore.sh backups/sauron-pg-<newest>.dump.gz.age
+AGE_PRIVATE_KEY_FILE=~/age.key ./restore.sh backups/cisync-pg-<newest>.dump.gz.age
 ```
 Compare printed scratch-db counts vs live (`ctrl.ledger` especially), then
 follow the echoed manual-swap procedure ONLY when doing a real recovery.
-Nightly chain verify runs in-process (`SAURON_CTRL_VERIFY_INTERVAL=24h`);
+Nightly chain verify runs in-process (`CISYNC_CTRL_VERIFY_INTERVAL=24h`);
 also run `docker compose ... exec control-plane /app/control-plane verify`
 after any restore.
 
-**Recoverable-SPOF honesty statement:** Sauron Phase-1 is a deliberate,
+**Recoverable-SPOF honesty statement:** CISync Phase-1 is a deliberate,
 documented single-host SPOF. Losing the box costs at most 24h of deliveries
 (the last backup window) plus ~15min of rebuild time (this runbook, section
 by section, onto a fresh A1 instance). The ledger itself survives: it lives
@@ -126,7 +126,7 @@ managed PG, not promises bolted onto an always-free VM.
 ## 8. Upgrades
 
 ```bash
-cd ~/sauron && git pull
+cd ~/cisync && git pull
 cd platform/deploy/oracle
 docker compose --env-file .env.prod -f docker-compose.prod.yml build
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
@@ -140,8 +140,8 @@ exist per ARCHITECTURE §2, but prefer forward-fix on append-only schemas).
 
 ```bash
 sudo crontab -e
-*/5 * * * * /home/ubuntu/sauron/platform/deploy/oracle/healthcheck-loop.sh \
-  >> /var/log/sauron-health.log 2>&1
+*/5 * * * * /home/ubuntu/cisync/platform/deploy/oracle/healthcheck-loop.sh \
+  >> /var/log/cisync-health.log 2>&1
 ```
 The loop curls every service's `/healthz` through caddy (public) and via
 `docker compose exec caddy wget …` (internal mesh: ingest/fleet/connector/

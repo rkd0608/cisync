@@ -1,10 +1,10 @@
-# Sauron Phase-1 public ingress (Caddy v2).
+# CISync Phase-1 public ingress (Caddy v2).
 # Filled by compose env: DOMAIN + ACME_EMAIL come from .env.prod via the
 # caddy service `environment:` block (Caddyfile {$VAR} substitution).
 #
 # Routing contract (= AWS ALB kit, ARCHITECTURE D2):
 #   /hooks/github*  -> ingest:8080        (webhook ingress, ONLY write surface)
-#   /api/sauron/*   -> web:3000           (web's server-side proxy injects bearer)
+#   /api/cisync/*   -> web:3000           (web's server-side proxy injects bearer)
 #   everything else -> web:3000
 #   /metrics*, /internal/* -> 403         (admin surfaces never publicly routable)
 
@@ -33,7 +33,7 @@ https://{$DOMAIN} {
 	}
 
 	# ---- Dashboard API (web proxies to control-plane internally) ----------
-	handle /api/sauron/* {
+	handle /api/cisync/* {
 		reverse_proxy web:3000
 	}
 

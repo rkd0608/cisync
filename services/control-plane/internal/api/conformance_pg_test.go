@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // Wave-3 conformance regressions: each test pins a frozen-contract behavior

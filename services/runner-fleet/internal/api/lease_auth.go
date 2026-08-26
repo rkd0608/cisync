@@ -3,15 +3,15 @@ package api
 import (
 	"net/http"
 
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // authorizeJobMutation enforces the job-lease credential gate (THREAT_MODEL
 // B2 / I-04) shared by heartbeat/complete/cancel:
 //
 //  1. Authorization: Bearer <job-lease-token> MUST be present and carry a
-//     valid Ed25519 signature, aud="sauron-fleet" and unexpired exp — any
+//     valid Ed25519 signature, aud="cisync-fleet" and unexpired exp — any
 //     failure here is the opaque typed 401 unauthorized (existence of a run
 //     is never revealed to unauthenticated callers).
 //  2. Claims must BIND to the request: run_id equals the path value and

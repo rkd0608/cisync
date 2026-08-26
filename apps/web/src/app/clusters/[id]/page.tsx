@@ -3,9 +3,9 @@ import { EmptyState } from '@/components/empty-state';
 import { ErrorState, type ApiErrorView } from '@/components/error-state';
 import { RelationBadge } from '@/components/relation-badge';
 import { StateBadge } from '@/components/state-badge';
-import { isNotFound } from '@/lib/sauron-api';
+import { isNotFound } from '@/lib/cisync-api';
 import { requireClusterId } from '@/lib/route-guards';
-import { getCluster } from '@/lib/sauron-api';
+import { getCluster } from '@/lib/cisync-api';
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';

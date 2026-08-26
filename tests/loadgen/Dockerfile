@@ -1,5 +1,5 @@
 # Load generator runs INSIDE the compose network: macOS host port-forwarding
-# collapses under per-port concurrency and would measure the proxy, not Sauron.
+# collapses under per-port concurrency and would measure the proxy, not CISync.
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY go.mod ./

@@ -1,6 +1,6 @@
-# Sauron Runbook
+# CISync Runbook
 
-Operational procedures for running Sauron end-to-end. Normative refs:
+Operational procedures for running CISync end-to-end. Normative refs:
 `docs/ARCHITECTURE.md`, `docs/plans/GITHUB_APP_PLAN.md` (§1 registration,
 §1.4 rotation, §3.4 branch protection, §5.4 tunnels).
 
@@ -16,17 +16,17 @@ make hygiene       # charter gate: lint + structure + 250-line cap
 
 Live verification (requires stack):
 ```bash
-export SAURON_API_URL=http://localhost:8081 SAURON_E2E=1 \
-  SAURON_ADMIN_TOKEN=dev_admin_token_not_for_prod \
-  SAURON_WEBHOOK_SECRET=dev_webhook_secret_not_for_prod \
-  SAURON_FLEET_URL=http://localhost:8082
+export CISYNC_API_URL=http://localhost:8081 CISYNC_E2E=1 \
+  CISYNC_ADMIN_TOKEN=dev_admin_token_not_for_prod \
+  CISYNC_WEBHOOK_SECRET=dev_webhook_secret_not_for_prod \
+  CISYNC_FLEET_URL=http://localhost:8082
 cd tests && pnpm exec vitest run          # 74 invariant/e2e suites
-docker build -t sauron/loadgen -f tests/loadgen/Dockerfile tests/loadgen
-docker run --rm --network sauron_default sauron/loadgen -concurrency 100 -units 100 -repos 4 -dupes 2
+docker build -t cisync/loadgen -f tests/loadgen/Dockerfile tests/loadgen
+docker run --rm --network cisync_default cisync/loadgen -concurrency 100 -units 100 -repos 4 -dupes 2
 ```
 
 NOTE (macOS): always load-test from INSIDE the compose network (`--network
-sauron_default`). Host port-forwarding collapses under per-port concurrency and
+cisync_default`). Host port-forwarding collapses under per-port concurrency and
 will falsely fail the system (see SPEC §3, W3 findings).
 
 ## 2. Connecting a real GitHub App (v0.2)
@@ -35,7 +35,7 @@ One-time (~10 min), manual registration per GITHUB_APP_PLAN §1:
 
 1. Create the App: github.com/settings/apps/new
    - Webhook URL: `https://<public-host>/hooks/github` (dev: step 3 tunnel URL)
-   - Webhook secret: generate; set `SAURON_INGEST_WEBHOOK_SECRET`
+   - Webhook secret: generate; set `CISYNC_INGEST_WEBHOOK_SECRET`
    - Permissions (exactly these): Metadata R · Checks RW · Pull requests R · Contents R
    - Subscribe events: pull_request, push, installation, check_run
    - Download the PEM → `platform/dev-keys/github-app.dev.pem` (gitignored)
@@ -47,43 +47,43 @@ One-time (~10 min), manual registration per GITHUB_APP_PLAN §1:
    ```
    For a stable dev URL use an ngrok static domain instead (runbook choice §10.5).
 4. Connector env (enables LIVE check publishing; absent ⇒ dry-run logging):
-   `SAURON_CONN_GITHUB_APP_ID`, `SAURON_CONN_PRIVATE_KEY_FILE`,
-   `SAURON_CONN_INSTALLATION_ID` (default install; multi-install resolves automatically),
-   `SAURON_CONN_DETAILS_URL=http://localhost:3000`.
+   `CISYNC_CONN_GITHUB_APP_ID`, `CISYNC_CONN_PRIVATE_KEY_FILE`,
+   `CISYNC_CONN_INSTALLATION_ID` (default install; multi-install resolves automatically),
+   `CISYNC_CONN_DETAILS_URL=http://localhost:3000`.
 5. Smoke: open a PR on an installed repo → within seconds the ledger gains
    `delivery.accepted → intent.declared(origin=github_webhook) → candidate.submitted`
    and the PR shows check **Agent Verification Gate** in `queued`.
 
 ## 3. Required-check configuration (branch protection)
 
-Admins configure this themselves — Sauron never requests Administration rights:
+Admins configure this themselves — CISync never requests Administration rights:
 
 Settings → Branches → `<base>` → Require pull request before merging →
 Require status checks → select **Agent Verification Gate** (exact string;
 it is a compatibility contract — never rename without a migration note).
-Leave "require branches up-to-date" OFF initially: Sauron's merge-base
+Leave "require branches up-to-date" OFF initially: CISync's merge-base
 invalidation enforces freshness more surgically than strict rebasing.
 
 ## 4. Secret rotation (zero-downtime)
 
 ```bash
 # 1. dual window
-export SAURON_INGEST_WEBHOOK_SECRETS="NEW_SECRET,OLD_SECRET"
+export CISYNC_INGEST_WEBHOOK_SECRETS="NEW_SECRET,OLD_SECRET"
 # restart ingest; old-signed deliveries still verify
 # 2. update the secret in GitHub App settings to NEW_SECRET
 # 3. after ≤24h overlap
-export SAURON_INGEST_WEBHOOK_SECRETS="NEW_SECRET"
+export CISYNC_INGEST_WEBHOOK_SECRETS="NEW_SECRET"
 ```
 Alert if the overlap window exceeds 24h. Internal ctrl↔connector secrets rotate
 independently with the same dual-accept trick.
 
 ## 5. Re-run policy
 
-`SAURON_CONN_RERUN_POLICY=replan|replay_cached` (default replan).
-Caps: `SAURON_CONN_RERUN_MAX_PER_CANDIDATE=2`,
-`SAURON_CONN_RERUN_RATE_PER_HOUR=20`. Over-cap flips the check neutral with
+`CISYNC_CONN_RERUN_POLICY=replan|replay_cached` (default replan).
+Caps: `CISYNC_CONN_RERUN_MAX_PER_CANDIDATE=2`,
+`CISYNC_CONN_RERUN_RATE_PER_HOUR=20`. Over-cap flips the check neutral with
 "budget exhausted" — a required check is never silently ignored.
-Write budget: `SAURON_CONN_WRITE_BUDGET_PER_HOUR=300` per installation;
+Write budget: `CISYNC_CONN_WRITE_BUDGET_PER_HOUR=300` per installation;
 exhaustion queues writes (never drops). Stalled checks (>45m non-terminal)
 flip neutral via sweeper.
 

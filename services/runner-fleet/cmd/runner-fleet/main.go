@@ -11,14 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/config"
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/obs"
-	"sauron.dev/sauron/runner-fleet/internal/providers"
-	"sauron.dev/sauron/runner-fleet/internal/redact"
-	"sauron.dev/sauron/runner-fleet/internal/server"
-	pgstore "sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/config"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/obs"
+	"cisync.dev/cisync/runner-fleet/internal/providers"
+	"cisync.dev/cisync/runner-fleet/internal/redact"
+	"cisync.dev/cisync/runner-fleet/internal/server"
+	pgstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 	// without the control-plane public key every mutation would 401 anyway,
 	// so refusing to start surfaces the misconfiguration immediately.
 	if len(cfg.JobLeasePubKey) == 0 {
-		logger.Error("job-lease public key not configured (SAURON_FLEET_JOBLEASYPUB_KEY_FILE or SAURON_FLEET_JOBLEASE_PUB_B64)")
+		logger.Error("job-lease public key not configured (CISYNC_FLEET_JOBLEASYPUB_KEY_FILE or CISYNC_FLEET_JOBLEASE_PUB_B64)")
 		os.Exit(1)
 	}
 	leaseVerifier, err := joblease.NewVerifierFromPublicPEM(cfg.JobLeasePubKey)

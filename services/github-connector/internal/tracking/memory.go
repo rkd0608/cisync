@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // MemoryStore is the in-process Store used by tests and as the default dev

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 func finding(path string, line int, message, kind string) domain.FindingAnnotation {
@@ -18,7 +18,7 @@ func rejectedEnvelope(findings []domain.FindingAnnotation) *domain.DecisionEnvel
 		DecisionID: "dec_01J", CandidateID: "cand_01J", Repo: "acme/payments",
 		HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Verb:    domain.VerbRejected, Confidence: 0.91,
-		Policy:      domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:      domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		RenderedAt:  goldenRenderedAt,
 		Evidence:    &domain.EvidenceCounts{Required: 3, Accepted: 1, Deferred: 0, Failed: 2},
 		Annotations: findings,

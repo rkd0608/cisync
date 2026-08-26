@@ -2,14 +2,14 @@
 # Tasks SG. Ingress matrix:
 #   - service ports (8080-8083, 3000) from the ALB only
 #   - 8080-8083 self-ingress for INTERNAL hops: ingest->ctrl, ctrl->fleet,
-#     ctrl->connector, web->ctrl/connector via sauron.local (compose parity)
+#     ctrl->connector, web->ctrl/connector via cisync.local (compose parity)
 # Egress all (NAT): ECR pulls, GitHub API, DB via private path.
 ###############################################################################
 
 resource "aws_security_group" "tasks" {
   name_prefix = "${var.name_prefix}-tasks-"
   vpc_id      = var.vpc_id
-  description = "Sauron ECS task ENIs"
+  description = "CISync ECS task ENIs"
 
   ingress {
     description     = "Service ports from public ALB"

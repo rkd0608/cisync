@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"sauron.dev/sauron/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/forward"
 )
 
 func extractRepo(raw []byte) string {

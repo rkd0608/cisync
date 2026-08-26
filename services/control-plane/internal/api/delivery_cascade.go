@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // applyPRClosed and the shared cascade helpers live here to keep
@@ -66,7 +66,7 @@ func (s *Server) appendEventsAndProjectCancels(ctx context.Context, tx pgx.Tx, e
 	if err := s.store.AppendEventsTx(ctx, tx, events); err != nil {
 		return err
 	}
-	s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
+	s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
 	for _, runID := range runIDs {
 		if _, err := tx.Exec(ctx,
 			`UPDATE ctrl.validation_runs SET state='cancelled', finished_at=now() WHERE id=$1 AND state IN ('queued','dispatched')`,

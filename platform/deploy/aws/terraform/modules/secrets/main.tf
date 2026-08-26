@@ -14,7 +14,7 @@
 ###############################################################################
 
 locals {
-  base = "/sauron/${var.environment}"
+  base = "/cisync/${var.environment}"
 }
 
 resource "aws_secretsmanager_secret" "this" {
@@ -22,8 +22,8 @@ resource "aws_secretsmanager_secret" "this" {
     db_dsns                    = "Full postgres:// DSNs per service. JSON keys: ingest_dsn, ctrl_dsn, fleet_dsn, conn_dsn."
     webhook_secret             = "GitHub App webhook HMAC secret; signs BOTH GitHub->ingest and ingest->ctrl hops (compose parity)."
     conn_webhook_secret        = "HMAC key for control-plane -> github-connector decision pushes (internal-protocols §4)."
-    admin_token                = "Control-plane admin bearer; also web SAURON_ADMIN_TOKEN and connector rerun client token."
-    conn_admin_token           = "github-connector installations/status bearer (SAURON_CONN_ADMIN_TOKEN); fails closed if unset."
+    admin_token                = "Control-plane admin bearer; also web CISYNC_ADMIN_TOKEN and connector rerun client token."
+    conn_admin_token           = "github-connector installations/status bearer (CISYNC_CONN_ADMIN_TOKEN); fails closed if unset."
     ledger_key                 = "Ed25519 PRIVATE key PEM signing ledger checkpoints. Control-plane ONLY (B6 custody). Generate: openssl genpkey -algorithm ed25519"
     joblease_key               = "Ed25519 PRIVATE key PEM signing job-lease JWTs (B2). Control-plane only; NEVER reuse ledger key."
     joblease_pub_key           = "Ed25519 PUBLIC key PEM (openssl pkey -pubout of joblease_key); runner-fleet verifies leases with it."
@@ -34,5 +34,5 @@ resource "aws_secretsmanager_secret" "this" {
   description             = each.value
   recovery_window_in_days = 7 # soft-delete safety net for operator mistakes
 
-  tags = { SecretClass = "sauron-runtime" }
+  tags = { SecretClass = "cisync-runtime" }
 }

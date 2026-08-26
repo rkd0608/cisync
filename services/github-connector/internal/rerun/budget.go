@@ -19,7 +19,7 @@ const (
 	PolicyReplayCached Policy = "replay_cached"
 )
 
-// ParsePolicy validates SAURON_CONN_RERUN_POLICY; empty ⇒ default replan.
+// ParsePolicy validates CISYNC_CONN_RERUN_POLICY; empty ⇒ default replan.
 func ParsePolicy(raw string) (Policy, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "":
@@ -29,7 +29,7 @@ func ParsePolicy(raw string) (Policy, error) {
 	case string(PolicyReplayCached):
 		return PolicyReplayCached, nil
 	default:
-		return "", fmt.Errorf("rerun: invalid SAURON_CONN_RERUN_POLICY %q (want replan|replay_cached)", raw)
+		return "", fmt.Errorf("rerun: invalid CISYNC_CONN_RERUN_POLICY %q (want replan|replay_cached)", raw)
 	}
 }
 

@@ -1,4 +1,4 @@
-# Sauron Threat Model & Security Requirements (FROZEN v1)
+# CISync Threat Model & Security Requirements (FROZEN v1)
 
 > Full analysis: `docs/plans/SECURITY_TRUST_DRAFT.md` (informative). This file is the
 > binding subset for builders.

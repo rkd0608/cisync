@@ -1,3 +1,3 @@
-module sauron.dev/sauron/tests/loadgen
+module cisync.dev/cisync/tests/loadgen
 
 go 1.23

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/checks"
 )
 
 // Op discriminates the buffered write shape.

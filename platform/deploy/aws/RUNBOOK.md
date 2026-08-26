@@ -1,6 +1,6 @@
-# Sauron AWS Deployment Kit — Operator RUNBOOK (v0.2, ECS Fargate)
+# CISync AWS Deployment Kit — Operator RUNBOOK (v0.2, ECS Fargate)
 
-Ordered steps to stand up `sauron-<env>` from zero in one AWS account.
+Ordered steps to stand up `cisync-<env>` from zero in one AWS account.
 You run every AWS command; this kit never does. Companion: `ENV_MATRIX.md`
 (every compose var -> prod source). Terraform entrypoint: `terraform/`.
 
@@ -16,10 +16,10 @@ You run every AWS command; this kit never does. Companion: `ENV_MATRIX.md`
 Account-side state you must create BEFORE step 3:
 
 1. **Route53 domain** (or bring your own DNS; then leave `hosted_zone_id=""`).
-2. **ACM cert ISSUED in your target region** for e.g. `sauron.example.com`:
+2. **ACM cert ISSUED in your target region** for e.g. `cisync.example.com`:
 
    ```bash
-   aws acm request-certificate --domain-name sauron.example.com \
+   aws acm request-certificate --domain-name cisync.example.com \
      --validation-method DNS
    # add the CNAME it prints; wait until Status=ISSUED
    ```
@@ -70,7 +70,7 @@ path in `internal/store.LoadSigningKey` expects.
 
 ```bash
 ENV=prod                                   # staging|prod — must match tfvars
-S() { echo "sauron-$ENV/$1"; }
+S() { echo "cisync-$ENV/$1"; }
 
 # --- Ed25519 signing keys (ledger != joblease; NEVER reuse across the two) ---
 openssl genpkey -algorithm ed25519 -out /tmp/l.pem
@@ -114,7 +114,7 @@ read U P < <(aws secretsmanager get-secret-value \
   | jq -r '[.username,.password] | @tsv')
 for svc in ingest ctrl fleet conn; do :; done
 aws secretsmanager put-secret-value --secret-id "$(S db_dsns)" --secret-string "$(jq -n \
-  --arg b "postgres://$U:$P@$EP/sauron" '{
+  --arg b "postgres://$U:$P@$EP/cisync" '{
     ingest_dsn: ($b+"?pool_max_conns=20&statement_timeout=15000"),
     ctrl_dsn:   ($b+"?pool_max_conns=64&statement_timeout=15000"),
     fleet_dsn:  ($b+"?pool_max_conns=32&statement_timeout=15000"),
@@ -123,8 +123,8 @@ aws secretsmanager put-secret-value --secret-id "$(S db_dsns)" --secret-string "
 
 ### How FILE-based keys work on Fargate (flagged design note)
 
-Control-plane consumes **file paths only** (`SAURON_CTRL_LEDGER_KEY_FILE`,
-`SAURON_CTRL_JOBLEASE_KEY_FILE` -> `store.LoadSigningKey(path)` /
+Control-plane consumes **file paths only** (`CISYNC_CTRL_LEDGER_KEY_FILE`,
+`CISYNC_CTRL_JOBLEASE_KEY_FILE` -> `store.LoadSigningKey(path)` /
 `joblease.NewSignerFromPEMFile`). The kit makes this clean without code changes:
 a keystore init container reads PEMs from Secrets Manager (execution-role
 injection) and writes them onto a shared emptyDir volume mounted at `/keys`;
@@ -132,7 +132,7 @@ the app container mounts `/keys` read-only after init SUCCESS. Same pattern for
 fleet's pub key and connector's App PEM. Interim custody per THREAT_MODEL B6;
 graduation target is KMS-held keys behind the existing task role seam.
 Alternative env-var key material exists ONLY in fleet
-(`SAURON_FLEET_JOBLEASE_PUB_B64`) and is deliberately unused here for uniformity.
+(`CISYNC_FLEET_JOBLEASE_PUB_B64`) and is deliberately unused here for uniformity.
 
 ## 5. Turn services on
 
@@ -154,8 +154,8 @@ migration time; the circuit breaker rolls back if a service still fails.
 1. `curl https://<domain>/healthz` -> 200 via ALB->ingest target group.
 2. Web UI loads at `https://<domain>/` (ALB default -> web TG :3000).
 3. Internal mesh healthy:
-   `aws ecs list-services --cluster sauron-$ENV-cluster ...` all RUNNING;
-   CloudMap names resolve (`control-plane.sauron.local` etc.).
+   `aws ecs list-services --cluster cisync-$ENV-cluster ...` all RUNNING;
+   CloudMap names resolve (`control-plane.cisync.local` etc.).
 4. **Signed webhook fixture through the REAL URL** (compose-parity HMAC):
 
    ```bash
@@ -173,8 +173,8 @@ migration time; the circuit breaker rolls back if a service still fails.
 5. PR -> Check flow (only after GitHub App creds live-mode wired): open a PR on
    an installed repo, watch connector write the "Agent Verification Gate"
    check; dry-run mode instead logs would-be payloads to its log group.
-6. Ledger chain verify ran at boot (`sauron_ledger_verify_result{status=ok}`
-   in ctrl logs; SAURON_CTRL_VERIFY_INTERVAL=24h nightly thereafter).
+6. Ledger chain verify ran at boot (`cisync_ledger_verify_result{status=ok}`
+   in ctrl logs; CISYNC_CTRL_VERIFY_INTERVAL=24h nightly thereafter).
 
 ## 8. Rollback
 

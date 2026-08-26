@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"sauron.dev/sauron/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/cluster"
 )
 
 func edge(from, rel, to string) RelationEdge {

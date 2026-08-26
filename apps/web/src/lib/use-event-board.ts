@@ -6,8 +6,8 @@
 // cursor predates retention — we reset to 0 and replay (dedupe by envelope id
 // makes replay safe).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getEvents } from './sauron-api';
-import { isBadCursor } from './sauron-api';
+import { getEvents } from './cisync-api';
+import { isBadCursor } from './cisync-api';
 import {
   applyEvents,
   emptyBoard,

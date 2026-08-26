@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sauron AWS kit — build & push all 5 images to ECR.
+# CISync AWS kit — build & push all 5 images to ECR.
 # Usage: AWS_REGION=us-east-1 ./push-images.sh [--tag <git-sha>]
 #   (default tag: current git short SHA; `latest` also maintained)
 # Requires: docker, aws cli v2, repo checkout at the commit you want shipped.
@@ -11,11 +11,11 @@ TAG="$(git rev-parse --short HEAD)"
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-REPO_PREFIX="sauron-${ENVIRONMENT:-prod}"
+REPO_PREFIX="cisync-${ENVIRONMENT:-prod}"
 
 # service -> build context. Existing Dockerfiles are REUSED verbatim:
 # Go services embed migrations/ (auto-migrate at boot); web needs NO build
-# args — the /api/sauron/* proxy is runtime-configured via env (SPEC §3).
+# args — the /api/cisync/* proxy is runtime-configured via env (SPEC §3).
 readonly IMAGES=(
   "ingest:services/ingest"
   "control-plane:services/control-plane"

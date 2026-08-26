@@ -2,7 +2,7 @@
 # runner-fleet task: 1 vCPU / 2 GB, desired=1.
 #
 # !! NOT-FOR-PRODUCTION BANNER (THREAT_MODEL B5) !!
-# SAURON_FLEET_PROVIDER is pinned to `sim` here. The `docker` provider runs
+# CISYNC_FLEET_PROVIDER is pinned to `sim` here. The `docker` provider runs
 # sibling containers via the host socket — IMPOSSIBLE on Fargate (no socket)
 # and NOT-FOR-PRODUCTION everywhere until the B5 graduation checklist passes
 # (gVisor/Firecracker isolation, egress allowlists). Real-isolation providers
@@ -46,16 +46,16 @@ resource "aws_ecs_task_definition" "runner_fleet" {
       mountPoints  = [{ sourceVolume = "keystore", containerPath = "/keys", readOnly = true }]
 
       environment = [
-        { name = "SAURON_FLEET_ADDR", value = ":8082" },
+        { name = "CISYNC_FLEET_ADDR", value = ":8082" },
         # B2/I-04: lease verification MUST be on in prod — empty key disables
         # it and mutating fleet endpoints would trust unsigned claims.
-        { name = "SAURON_FLEET_JOBLEASYPUB_KEY_FILE", value = "/keys/joblease_ed25519.pub" },
-        { name = "SAURON_FLEET_PROVIDER", value = "sim" }, # NOT-FOR-PRODUCTION posture, see header
+        { name = "CISYNC_FLEET_JOBLEASYPUB_KEY_FILE", value = "/keys/joblease_ed25519.pub" },
+        { name = "CISYNC_FLEET_PROVIDER", value = "sim" }, # NOT-FOR-PRODUCTION posture, see header
         # SIM_WORKERS left at default: compose's 48 was harness-window sizing.
       ]
 
       secrets = [
-        { name = "SAURON_FLEET_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:fleet_dsn::" },
+        { name = "CISYNC_FLEET_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:fleet_dsn::" },
       ]
 
       logConfiguration = local.logs["runner-fleet"]

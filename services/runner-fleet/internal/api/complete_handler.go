@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/obs"
-	"sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/obs"
+	"cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // digestPattern enforces well-formed content digests (sha256:<64 hex>).

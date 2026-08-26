@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/obs"
-	"sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/obs"
+	"cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // Executor claims and executes jobs from one pool via one provider.

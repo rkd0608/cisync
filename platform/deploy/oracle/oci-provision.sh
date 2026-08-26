@@ -12,10 +12,10 @@ set -euo pipefail
 # Private repo? Export REPO_TOKEN with a fine-grained PAT (Contents:Read).
 # WHY token-in-URL: simplest unattended clone on a fresh box; rotate or
 # revoke the token post-deploy if preferred (git remote stays configured).
-REPO_URL="${REPO_URL:-https://github.com/rkd0608/sauron.git}"
+REPO_URL="${REPO_URL:-https://github.com/rkd0608/cisync.git}"
 REPO_TOKEN="${REPO_TOKEN:-}"
 if [ -n "$REPO_TOKEN" ]; then
-  REPO_URL="https://x-access-token:${REPO_TOKEN}@github.com/rkd0608/sauron.git"
+  REPO_URL="https://x-access-token:${REPO_TOKEN}@github.com/rkd0608/cisync.git"
 fi
 SHAPE="${SHAPE:-VM.Standard.A1.Flex}"
 OCPUS="${OCPUS:-4}"
@@ -42,16 +42,16 @@ IMG=$(oci compute image list --compartment-id "$COMP" \
   --query 'data[0].id' --raw-output)
 
 echo "==> rendering cloud-init"
-sed "s|\${REPO_URL}|$REPO_URL|" "$HERE/cloud-init.yaml" > /tmp/sauron-cloud-init.yaml
+sed "s|\${REPO_URL}|$REPO_URL|" "$HERE/cloud-init.yaml" > /tmp/cisync-cloud-init.yaml
 
 echo "==> VCN + networking"
 VCN=$(oci network vcn create --compartment-id "$COMP" --cidr-blocks '["10.0.0.0/16"]' \
-  --display-name sauron-vcn --wait-for-state AVAILABLE --query data.id --raw-output)
+  --display-name cisync-vcn --wait-for-state AVAILABLE --query data.id --raw-output)
 SUB=$(oci network subnet create --compartment-id "$COMP" --vcn-id "$VCN" \
-  --cidr-block "10.0.1.0/24" --display-name sauron-sub --wait-for-state AVAILABLE \
+  --cidr-block "10.0.1.0/24" --display-name cisync-sub --wait-for-state AVAILABLE \
   --query data.id --raw-output)
 IGW=$(oci network internet-gateway create --compartment-id "$COMP" --vcn-id "$VCN" \
-  --enabled true --display-name sauron-igw --query data.id --raw-output)
+  --enabled true --display-name cisync-igw --query data.id --raw-output)
 oci network route-table update --rt-id "$(oci network vcn get --vcn-id "$VCN" \
   --query data.default_route_table_id --raw-output)" \
   --route-rules "[{\"destination\":\"0.0.0.0/0\",\"networkEntityId\":\"$IGW\"}]" >/dev/null
@@ -67,8 +67,8 @@ echo "==> launching $SHAPE (${OCPUS} OCPU / ${MEMORY_GB}GB) — capacity lottery
 INSTANCE=$(oci compute instance launch \
   --availability-domain "$AD" --compartment-id "$COMP" --image-id "$IMG" \
   --shape "$SHAPE" --shape-config '{"ocpus":'"$OCPUS"',"memoryInGBs":'"$MEMORY_GB"'}' \
-  --subnet-id "$SUB" --assign-public-ip true --display-name sauron-p1 \
-  --user-data-file "/tmp/sauron-cloud-init.yaml" \
+  --subnet-id "$SUB" --assign-public-ip true --display-name cisync-p1 \
+  --user-data-file "/tmp/cisync-cloud-init.yaml" \
   --wait-for-state RUNNING --query data.id --raw-output)
 IP=$(oci compute instance list-vnics --compartment-id "$COMP" --instance-id "$INSTANCE" \
   --query 'data[0]."public-ip"' --raw-output)

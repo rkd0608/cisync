@@ -1,4 +1,4 @@
-# Sauron Delivery Roadmap
+# CISync Delivery Roadmap
 
 | Wave | Scope | Agents | Gate to exit |
 |------|-------|--------|--------------|

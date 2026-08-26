@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // serveRerun handles kind=rerun_requested (plan §4.5): policy + budget

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 // MemoryStore is an in-process Store used by tests and hermetic demos. It

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // TestDockerProviderMissingBinaryFailsGracefully verifies the docker adapter

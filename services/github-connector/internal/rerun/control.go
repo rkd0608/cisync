@@ -91,7 +91,7 @@ func (c *Control) Revalidate(ctx context.Context, candidateID, idempotencyKey st
 	case http.StatusConflict:
 		return &ErrBudgetExhausted{CandidateID: candidateID}
 	case http.StatusUnauthorized:
-		return fmt.Errorf("rerun: revalidate rejected (auth); check SAURON_CONN_CTRL_TOKEN")
+		return fmt.Errorf("rerun: revalidate rejected (auth); check CISYNC_CONN_CTRL_TOKEN")
 	default:
 		return fmt.Errorf("rerun: revalidate unexpected status %d", resp.StatusCode)
 	}

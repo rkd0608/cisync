@@ -1,4 +1,4 @@
-# Sauron Internal Protocols (FROZEN v1)
+# CISync Internal Protocols (FROZEN v1)
 
 Inter-service HTTP contracts not exposed in openapi.yaml. Binding for W1/W2 builders.
 
@@ -6,7 +6,7 @@ Inter-service HTTP contracts not exposed in openapi.yaml. Binding for W1/W2 buil
 
 `POST /internal/ctrl/deliveries`
 
-Headers: `Idempotency-Key: <ext_delivery_id>`, `X-Sauron-Signature: sha256=<hex hmac of raw body with shared secret>`, `Content-Type: application/json`.
+Headers: `Idempotency-Key: <ext_delivery_id>`, `X-CISync-Signature: sha256=<hex hmac of raw body with shared secret>`, `Content-Type: application/json`.
 
 ```json
 {
@@ -24,7 +24,7 @@ Responses: `202 accepted` · `200 replay (idempotent)` · `401 bad signature` ·
 
 ## 2. control-plane ↔ runner-fleet (execution protocol)
 
-Base: `SAURON_CTRL_FLEET_URL`. Fleet NEVER reads the ledger; control-plane drives it.
+Base: `CISYNC_CTRL_FLEET_URL`. Fleet NEVER reads the ledger; control-plane drives it.
 
 ### Job-lease credentials (THREAT_MODEL B2 / I-04)
 
@@ -33,7 +33,7 @@ dispatch time (`alg: EdDSA`, compact JWT). Claims:
 
 | claim | value |
 |---|---|
-| `aud` | `"sauron-fleet"` |
+| `aud` | `"cisync-fleet"` |
 | `jti` | `"fleet:<run_id>:<attempt>:<fence_token>"` |
 | `run_id`, `attempt`, `fence_token`, `repo`, `tier` | the dispatch identity |
 | `iat`, `exp` | RFC 3339 epoch seconds; TTL ≤ **60 minutes** |
@@ -47,9 +47,9 @@ to the job (`run_id`, `attempt`; fence currency remains the fenced write's
 
 `401 {"error": {"code": "unauthorized", "message": …}}`.
 
-Fleet public key envs: `SAURON_FLEET_JOBLEASYPUB_KEY_FILE` (PEM file) or
-`SAURON_FLEET_JOBLEASE_PUB_B64` (base64 inline PEM). Control-plane signs with
-its dedicated key from `SAURON_CTRL_JOBLEASE_KEY_FILE`. Unconfigured fleets
+Fleet public key envs: `CISYNC_FLEET_JOBLEASYPUB_KEY_FILE` (PEM file) or
+`CISYNC_FLEET_JOBLEASE_PUB_B64` (base64 inline PEM). Control-plane signs with
+its dedicated key from `CISYNC_CTRL_JOBLEASE_KEY_FILE`. Unconfigured fleets
 fail closed.
 
 ### Endpoints
@@ -106,7 +106,7 @@ real containers (`--network none --read-only`, resource-capped, NOT-FOR-PRODUCTI
 
 ## 4. control-plane → github-connector (decision push, W2; WIDENED W5)
 
-Base: `SAURON_CTRL_CONNECTOR_URL`. The connector is idle-until-fed;
+Base: `CISYNC_CTRL_CONNECTOR_URL`. The connector is idle-until-fed;
 control-plane pushes envelopes via its outbox relay. ONE endpoint serves
 THREE envelope kinds discriminated by `kind`; absent `kind` decodes as
 `decision` (v1 relay compatibility).
@@ -122,7 +122,7 @@ THREE envelope kinds discriminated by `kind`; absent `kind` decodes as
    completion and is the I-01 validation input on the control-plane side.
 - `POST /internal/connector/decisions` (control-plane → connector)
   Headers: `Idempotency-Key: <kind-dependent, below>`,
-  `X-Sauron-Signature: sha256=<hex hmac of raw body with SAURON_CONN_WEBHOOK_SECRET>`,
+  `X-CISync-Signature: sha256=<hex hmac of raw body with CISYNC_CONN_WEBHOOK_SECRET>`,
   `Content-Type: application/json`. Body cap 1 MiB.
 
 ### 4.1 kind = "decision" (completed verdict)
@@ -182,9 +182,9 @@ re-runs map back to the revision regardless of which decision it carried.
 Relayed when a `check_run.rerequested` webhook's `external_id` matches one
 of our candidates. `requested_by` is display-only provenance (§2.2).
 `Idempotency-Key` MUST be the originating GitHub `ext_delivery_id`.
-Connector policy: `SAURON_CONN_RERUN_POLICY ∈ {replan, replay_cached}`
-(default `replan`); caps `SAURON_CONN_RERUN_MAX_PER_CANDIDATE=2`,
-`SAURON_CONN_RERUN_RATE_PER_HOUR=20`. Over-cap or ctrl-unreachable ⇒ the
+Connector policy: `CISYNC_CONN_RERUN_POLICY ∈ {replan, replay_cached}`
+(default `replan`); caps `CISYNC_CONN_RERUN_MAX_PER_CANDIDATE=2`,
+`CISYNC_CONN_RERUN_RATE_PER_HOUR=20`. Over-cap or ctrl-unreachable ⇒ the
 check flips to a VISIBLE neutral ("budget exhausted" / "unavailable") — a
 required check never silently ignores a re-run. Unknown candidate ⇒ typed
 `404 unknown_candidate`.
@@ -206,7 +206,7 @@ required check never silently ignores a re-run. Unknown candidate ⇒ typed
   Appends a re-plan command under CURRENT policy + current inputs_hash;
   the SAME candidate revision continues (rerun_count++) so lifecycle
   envelopes keep `candidate_id` stable and the check run identity holds.
-  When `SAURON_CONN_CTRL_URL` is unset the replan feature is flag-OFF and
+  When `CISYNC_CONN_CTRL_URL` is unset the replan feature is flag-OFF and
   re-runs surface as neutral "unavailable".
   Connector-side mapping of non-202 answers: `404` relays as typed
   `unknown_candidate`; `409` flips the check to a VISIBLE neutral
@@ -221,7 +221,7 @@ The connector renders verb→conclusion `eligible_for_merge_train→success`,
 `rejected→failure`, `deferred->neutral`; unknown verbs fail closed. Without
 GitHub App credentials the connector runs in dry-run mode, logging the
 would-be payload instead of calling the API. Local write budget
-(`SAURON_CONN_WRITE_BUDGET_PER_HOUR=300`/installation/hour) exhaustion
+(`CISYNC_CONN_WRITE_BUDGET_PER_HOUR=300`/installation/hour) exhaustion
 QUEUES writes outbox-style (`ghconn.pending_writes`) and drains later —
 never silently drops a required check. Stalled non-completed checks older
-than `SAURON_CONN_STALLED_CHECK_AGE` (default 45m) flip to neutral.
+than `CISYNC_CONN_STALLED_CHECK_AGE` (default 45m) flip to neutral.

@@ -1,11 +1,11 @@
 ###############################################################################
-# Sauron AWS kit — module wiring. One call per concern; data flows left->right:
+# CISync AWS kit — module wiring. One call per concern; data flows left->right:
 # network -> (alb, ecs) ; ecr -> ecs ; secrets -> ecs ; ecs.sg -> rds ingress.
 # No third-party modules (native-first charter).
 ###############################################################################
 
 locals {
-  name_prefix = "sauron-${var.environment}"
+  name_prefix = "cisync-${var.environment}"
 }
 
 module "network" {

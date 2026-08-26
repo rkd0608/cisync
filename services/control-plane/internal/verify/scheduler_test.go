@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // fakeAuditSink captures security-audit rows emitted by the scheduler.

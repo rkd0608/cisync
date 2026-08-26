@@ -101,65 +101,65 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 	return d, nil
 }
 
-// Load parses SAURON_CTRL_* environment variables into Config; required vars
+// Load parses CISYNC_CTRL_* environment variables into Config; required vars
 // error out when missing.
 func Load() (*Config, error) {
 	cfg := &Config{
-		PGDSN:           env("SAURON_CTRL_PG_DSN", "postgres://sauron:sauron_dev_only@localhost:5432/sauron"),
-		Addr:            env("SAURON_CTRL_ADDR", ":8081"),
-		FleetURL:        env("SAURON_CTRL_FLEET_URL", "http://localhost:8082"),
-		AdminToken:      env("SAURON_CTRL_ADMIN_TOKEN", ""),
-		WebhookSecret:   env("SAURON_CTRL_WEBHOOK_SECRET", env("SAURON_INGEST_WEBHOOK_SECRET", "")),
-		LedgerKeyFile:   env("SAURON_CTRL_LEDGER_KEY_FILE", ""),
-		JobLeaseKeyFile: env("SAURON_CTRL_JOBLEASE_KEY_FILE", ""),
-		TenantID:        env("SAURON_CTRL_TENANT_ID", DevTenant),
+		PGDSN:           env("CISYNC_CTRL_PG_DSN", "postgres://cisync:cisync_dev_only@localhost:5432/cisync"),
+		Addr:            env("CISYNC_CTRL_ADDR", ":8081"),
+		FleetURL:        env("CISYNC_CTRL_FLEET_URL", "http://localhost:8082"),
+		AdminToken:      env("CISYNC_CTRL_ADMIN_TOKEN", ""),
+		WebhookSecret:   env("CISYNC_CTRL_WEBHOOK_SECRET", env("CISYNC_INGEST_WEBHOOK_SECRET", "")),
+		LedgerKeyFile:   env("CISYNC_CTRL_LEDGER_KEY_FILE", ""),
+		JobLeaseKeyFile: env("CISYNC_CTRL_JOBLEASE_KEY_FILE", ""),
+		TenantID:        env("CISYNC_CTRL_TENANT_ID", DevTenant),
 	}
 	var err error
-	if cfg.RelayBatchSize, err = envInt("SAURON_CTRL_RELAY_BATCH", 100); err != nil {
+	if cfg.RelayBatchSize, err = envInt("CISYNC_CTRL_RELAY_BATCH", 100); err != nil {
 		return nil, err
 	}
-	if cfg.RelayPollInterval, err = envDuration("SAURON_CTRL_RELAY_POLL", 500*time.Millisecond); err != nil {
+	if cfg.RelayPollInterval, err = envDuration("CISYNC_CTRL_RELAY_POLL", 500*time.Millisecond); err != nil {
 		return nil, err
 	}
-	if cfg.TickInterval, err = envDuration("SAURON_CTRL_TICK_INTERVAL", time.Second); err != nil {
+	if cfg.TickInterval, err = envDuration("CISYNC_CTRL_TICK_INTERVAL", time.Second); err != nil {
 		return nil, err
 	}
-	if cfg.ReconcileInterval, err = envDuration("SAURON_CTRL_RECONCILE_INTERVAL", 30*time.Second); err != nil {
+	if cfg.ReconcileInterval, err = envDuration("CISYNC_CTRL_RECONCILE_INTERVAL", 30*time.Second); err != nil {
 		return nil, err
 	}
-	if cfg.StaleRunMaxAge, err = envDuration("SAURON_CTRL_STALE_RUN_MAX_AGE", 30*time.Minute); err != nil {
+	if cfg.StaleRunMaxAge, err = envDuration("CISYNC_CTRL_STALE_RUN_MAX_AGE", 30*time.Minute); err != nil {
 		return nil, err
 	}
-	if cfg.DefaultLeaseTTL, err = envDuration("SAURON_CTRL_LEASE_TTL", 1500*time.Second); err != nil {
+	if cfg.DefaultLeaseTTL, err = envDuration("CISYNC_CTRL_LEASE_TTL", 1500*time.Second); err != nil {
 		return nil, err
 	}
-	if cfg.RateLimitPerMin, err = envInt("SAURON_CTRL_RATE_LIMIT_PER_MIN", 120); err != nil {
+	if cfg.RateLimitPerMin, err = envInt("CISYNC_CTRL_RATE_LIMIT_PER_MIN", 120); err != nil {
 		return nil, err
 	}
-	if cfg.SchedBatch, err = envInt("SAURON_CTRL_SCHED_BATCH", 8); err != nil {
+	if cfg.SchedBatch, err = envInt("CISYNC_CTRL_SCHED_BATCH", 8); err != nil {
 		return nil, err
 	}
-	if cfg.RerunMaxPerCandidate, err = envInt("SAURON_CTRL_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
+	if cfg.RerunMaxPerCandidate, err = envInt("CISYNC_CTRL_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
 		return nil, err
 	}
-	if cfg.VerifyInterval, err = envDuration("SAURON_CTRL_VERIFY_INTERVAL", 0); err != nil {
+	if cfg.VerifyInterval, err = envDuration("CISYNC_CTRL_VERIFY_INTERVAL", 0); err != nil {
 		return nil, err
 	}
-	if cfg.AuditRetentionDays, err = envInt("SAURON_CTRL_AUDIT_RETENTION_DAYS", 90); err != nil {
+	if cfg.AuditRetentionDays, err = envInt("CISYNC_CTRL_AUDIT_RETENTION_DAYS", 90); err != nil {
 		return nil, err
 	}
 	if cfg.AuditRetentionDays < 90 {
-		return nil, fmt.Errorf("config SAURON_CTRL_AUDIT_RETENTION_DAYS: %d below the B7 90-day floor", cfg.AuditRetentionDays)
+		return nil, fmt.Errorf("config CISYNC_CTRL_AUDIT_RETENTION_DAYS: %d below the B7 90-day floor", cfg.AuditRetentionDays)
 	}
-	cfg.TrackedBaseBranches = parseList(env("SAURON_CTRL_TRACKED_BASE_BRANCHES", "main,master"))
+	cfg.TrackedBaseBranches = parseList(env("CISYNC_CTRL_TRACKED_BASE_BRANCHES", "main,master"))
 	if len(cfg.TrackedBaseBranches) == 0 {
-		return nil, fmt.Errorf("config SAURON_CTRL_TRACKED_BASE_BRANCHES: must not be empty")
+		return nil, fmt.Errorf("config CISYNC_CTRL_TRACKED_BASE_BRANCHES: must not be empty")
 	}
 	if cfg.AdminToken == "" {
-		return nil, fmt.Errorf("config SAURON_CTRL_ADMIN_TOKEN: required")
+		return nil, fmt.Errorf("config CISYNC_CTRL_ADMIN_TOKEN: required")
 	}
 	if cfg.WebhookSecret == "" {
-		return nil, fmt.Errorf("config SAURON_CTRL_WEBHOOK_SECRET: required")
+		return nil, fmt.Errorf("config CISYNC_CTRL_WEBHOOK_SECRET: required")
 	}
 	return cfg, nil
 }

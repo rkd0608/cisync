@@ -4,9 +4,9 @@ set -euo pipefail
 COMP="ocid1.tenancy.oc1..aaaaaaaa3tskfwx5umodtl34xr5k5sagn25c5bi3pmv74c5zemehx2dlwuuq"
 OCPUS="${OCPUS:-2}"; MEM="${MEM:-12}"
 REPO_TOKEN="${REPO_TOKEN:?export REPO_TOKEN}"
-INIT="$HOME/Desktop/sauron-cloud-init.txt"
-[[ $OCPUS == 4 ]] && INIT="$HOME/Desktop/sauron-cloud-init.txt"
-VCN_ID=$(oci network vcn list --compartment-id "$COMP" 2>/dev/null | jq -r '.data[] | select(."display-name"=="sauron") | .id' | tail -1)
+INIT="$HOME/Desktop/cisync-cloud-init.txt"
+[[ $OCPUS == 4 ]] && INIT="$HOME/Desktop/cisync-cloud-init.txt"
+VCN_ID=$(oci network vcn list --compartment-id "$COMP" 2>/dev/null | jq -r '.data[] | select(."display-name"=="cisync") | .id' | tail -1)
 SUBNET_ID="ocid1.subnet.oc1.us-chicago-1.aaaaaaaa27onh7j5h4kbmllb62f4cybqoquxoucn4sfmyiwnvadk36rgqtja"
 IMAGE_ID=$(oci compute image list --compartment-id "$COMP" --operating-system "Canonical Ubuntu" --operating-system-version "24.04" --shape "VM.Standard.A1.Flex" --sort-by TIMECREATED 2>/dev/null | jq -r '.data[0].id')
 ADS=$(oci iam availability-domain list --compartment-id "$COMP" 2>/dev/null | jq -r '.data[].name')
@@ -17,7 +17,7 @@ for attempt in $(seq 1 72); do
     OUT=$(oci compute instance launch \
       --availability-domain "$AD" --compartment-id "$COMP" --image-id "$IMAGE_ID" \
       --shape VM.Standard.A1.Flex --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEM}" \
-      --subnet-id "$SUBNET_ID" --assign-public-ip true --display-name sauron-p1 \
+      --subnet-id "$SUBNET_ID" --assign-public-ip true --display-name cisync-p1 \
       --user-data-file "$INIT" 2>&1) && {
       ID=$(echo "$OUT" | jq -r '."data"."id" // .id')
       echo "LAUNCHED: $ID — waiting for RUNNING..."

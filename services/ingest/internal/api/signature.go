@@ -40,7 +40,7 @@ func VerifyGitHubSignatureAny(secrets [][]byte, body []byte, header string) bool
 	return false
 }
 
-// VerifyTimestampSkew validates the optional X-Sauron-Timestamp header. When
+// VerifyTimestampSkew validates the optional X-CISync-Timestamp header. When
 // the header is absent verification passes; when present the skew must be
 // within tolerance (replay window).
 func VerifyTimestampSkew(header string, now time.Time, tolerance time.Duration) error {
@@ -52,7 +52,7 @@ func VerifyTimestampSkew(header string, now time.Time, tolerance time.Duration) 
 		if n, perr := parseUnixMillis(header); perr == nil {
 			ts = n
 		} else {
-			return fmt.Errorf("api: malformed X-Sauron-Timestamp: %w", err)
+			return fmt.Errorf("api: malformed X-CISync-Timestamp: %w", err)
 		}
 	}
 	skew := now.Sub(ts)

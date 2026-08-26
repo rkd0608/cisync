@@ -1,5 +1,5 @@
 variable "name_prefix" {
-  description = "Resource name prefix, e.g. sauron-prod."
+  description = "Resource name prefix, e.g. cisync-prod."
   type        = string
 }
 

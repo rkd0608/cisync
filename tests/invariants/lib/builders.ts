@@ -76,7 +76,7 @@ export function buildEnvelope(spec: EventSpec, prevHash: string, seqOverride?: n
     aggregate: { ...spec.aggregate },
     causation_id: prefixedId('evt', `cause:${spec.type}@${seq}`),
     correlation_id: spec.correlationId ?? prefixedId('corr', `corr:${spec.type}@${seq}`),
-    actor: { kind: spec.actorKind ?? 'service', id: 'sauron-test' },
+    actor: { kind: spec.actorKind ?? 'service', id: 'cisync-test' },
     occurred_at: '2026-08-23T00:00:00.000Z',
     payload_sha256: payloadSha256,
     prev_hash: prevHash,

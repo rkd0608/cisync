@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // handleGetCluster implements GET /v1/clusters/{clusterId}.
@@ -33,7 +33,7 @@ func (s *Server) handleGetCluster(w http.ResponseWriter, r *http.Request) {
 		StrategyVersion: cluster.StrategyVersion,
 		Members:         memberOut,
 	})
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 type clusterMemberJSON struct {
@@ -101,7 +101,7 @@ func (s *Server) handleRenewLease(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusConflict, "conflict_state",
 				"lease is not renewable; request a fresh grant",
 				map[string]any{"reason": "expired_lease"}, nil, nil)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "409")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "409")
 			return
 		}
 		if errors.Is(err, domain.ErrNotFound) {
@@ -117,7 +117,7 @@ func (s *Server) handleRenewLease(w http.ResponseWriter, r *http.Request) {
 		"renewal_count":  renewalCount,
 	})
 	writeRawJSON(w, http.StatusOK, resp)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // handleReleaseLease implements DELETE /v1/leases/{leaseId}; idempotent.
@@ -128,7 +128,7 @@ func (s *Server) handleReleaseLease(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == domain.ErrNotFound {
 			w.WriteHeader(http.StatusNoContent)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "204")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "204")
 			return
 		}
 		WriteDomainError(w, err)
@@ -143,5 +143,5 @@ func (s *Server) handleReleaseLease(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "204")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "204")
 }

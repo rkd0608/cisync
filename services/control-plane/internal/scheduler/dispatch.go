@@ -6,10 +6,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	jobleasepkg "sauron.dev/sauron/control-plane/internal/joblease"
-	policypkg "sauron.dev/sauron/control-plane/internal/policy"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	jobleasepkg "cisync.dev/cisync/control-plane/internal/joblease"
+	policypkg "cisync.dev/cisync/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // dispatchQueued ranks queued runs with the frozen priority formula and

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SAURON · change control',
+  title: 'CISYNC · change control',
   description: 'Air traffic control for code changes — intents, candidates, evidence.',
 };
 
@@ -17,7 +17,7 @@ export default function RootLayout({
           <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-3 font-mono text-sm">
             <Link href="/" className="flex items-center gap-2 tracking-widest text-zinc-100">
               <span aria-hidden className="inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-              SAURON
+              CISYNC
             </Link>
             <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-600">
               change control console

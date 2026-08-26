@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
-	"sauron.dev/sauron/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/forward"
 )
 
 // hook_lifecycle.go carries the per-delivery forward attempt and its

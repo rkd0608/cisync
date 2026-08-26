@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/queue"
+	"cisync.dev/cisync/github-connector/internal/queue"
 )
 
 // PGPendingQueue is the durable queue.Store over ghconn.pending_writes

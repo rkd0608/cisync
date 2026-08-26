@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/queue"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/queue"
 )
 
 // Compile-time wiring proof: the PG-backed adapter satisfies the pending

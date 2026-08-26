@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
 )
 
 func (h *harness) rawComplete(runID string, fence int64, status, token string) *http.Response {

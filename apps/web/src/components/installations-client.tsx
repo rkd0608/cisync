@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { InstallationsTable, type ApiErrorLike } from './installations-table';
-import { getInstallationsStatus } from '@/lib/sauron-api';
+import { getInstallationsStatus } from '@/lib/cisync-api';
 import type { InstallationsStatusResponse } from '@/lib/installation-schemas';
 
 // Client shell for /installations: owns the resync refetch (read-only) and the

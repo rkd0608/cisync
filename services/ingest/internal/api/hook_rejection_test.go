@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
-	"sauron.dev/sauron/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/forward"
 )
 
 func TestHookSignatureFailures(t *testing.T) {
@@ -135,7 +135,7 @@ func TestHookTimestampSkewRejected(t *testing.T) {
 
 	old := h.now.Add(-6 * time.Minute).Format(time.RFC3339)
 	resp := h.post("d-skew-old", "push", body, func(r *http.Request) {
-		r.Header.Set("X-Sauron-Timestamp", old)
+		r.Header.Set("X-CISync-Timestamp", old)
 	})
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("stale timestamp must 401, got %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func TestHookTimestampSkewRejected(t *testing.T) {
 
 	fresh := h.now.Format(time.RFC3339)
 	respOK := h.post("d-skew-ok", "push", body, func(r *http.Request) {
-		r.Header.Set("X-Sauron-Timestamp", fresh)
+		r.Header.Set("X-CISync-Timestamp", fresh)
 	})
 	if respOK.StatusCode != http.StatusAccepted {
 		t.Fatalf("fresh timestamp must 202, got %d", respOK.StatusCode)

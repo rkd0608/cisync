@@ -34,7 +34,7 @@ type ResolvedPolicy struct {
 // (DOMAIN_MODEL_DRAFT §8 shape, autonomy level 3 posture).
 func DefaultPolicy() ResolvedPolicy {
 	return ResolvedPolicy{
-		Ref:                    PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Ref:                    PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		Tier3RiskClasses:       []string{"high", "critical"},
 		MinSelectionConfidence: 0.98,
 		ProtectedPaths:         []string{"auth/**", "migrations/**", "infrastructure/prod/**"},

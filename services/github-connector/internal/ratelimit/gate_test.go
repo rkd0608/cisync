@@ -11,7 +11,7 @@ import (
 	"github.com/google/go-github/v66/github"
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/testsupport"
+	"cisync.dev/cisync/github-connector/internal/testsupport"
 )
 
 func TestBucketRefillsContinuouslyAndIsolatesPerInstallation(t *testing.T) {

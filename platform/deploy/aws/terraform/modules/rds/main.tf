@@ -13,7 +13,7 @@ resource "aws_db_subnet_group" "this" {
 resource "aws_security_group" "rds" {
   name_prefix = "${var.name_prefix}-rds-"
   vpc_id      = var.vpc_id
-  description = "Postgres ingress restricted to Sauron ECS tasks"
+  description = "Postgres ingress restricted to CISync ECS tasks"
 
   ingress {
     description     = "5432 from ECS task ENIs only"
@@ -34,8 +34,8 @@ resource "aws_db_instance" "postgres" {
   engine_version = var.engine_version
   instance_class = var.instance_class
 
-  db_name  = "sauron"
-  username = "sauron_admin"
+  db_name  = "cisync"
+  username = "cisync_admin"
 
   # Native Secrets Manager credential custody (no password in tfvars/state-
   # visible plaintext beyond what AWS manages): secret holds {username,password}.

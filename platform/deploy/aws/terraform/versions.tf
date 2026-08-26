@@ -1,4 +1,4 @@
-# Sauron AWS deployment kit — root Terraform (v0.2, ECS Fargate).
+# CISync AWS deployment kit — root Terraform (v0.2, ECS Fargate).
 # Native-first charter: NO third-party modules; only hashicorp/aws provider.
 
 terraform {
@@ -15,11 +15,11 @@ terraform {
 provider "aws" {
   region = var.aws_region
 
-  # Every resource in this kit is tagged Project=sauron (+ Environment) via
+  # Every resource in this kit is tagged Project=cisync (+ Environment) via
   # default_tags so cost reporting and teardown stay one query wide.
   default_tags {
     tags = {
-      Project     = "sauron"
+      Project     = "cisync"
       Environment = var.environment
       ManagedBy   = "terraform"
     }

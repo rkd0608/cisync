@@ -1,5 +1,5 @@
 ###############################################################################
-# ecs: Fargate cluster, CloudMap namespace (sauron.local) + per-service
+# ecs: Fargate cluster, CloudMap namespace (cisync.local) + per-service
 # registry entries, tasks SG. One service per component per ARCHITECTURE §2.
 ###############################################################################
 
@@ -34,7 +34,7 @@ locals {
 }
 
 resource "aws_service_discovery_private_dns_namespace" "this" {
-  name        = "sauron.local"
+  name        = "cisync.local"
   description = "Internal service-to-service DNS (compose parity: http://control-plane:8081 etc.)"
   vpc         = var.vpc_id
 }

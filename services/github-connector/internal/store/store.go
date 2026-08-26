@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // CheckReport is one persisted check publication. Live marks the row that

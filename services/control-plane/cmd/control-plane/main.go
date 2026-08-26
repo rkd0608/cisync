@@ -1,4 +1,4 @@
-// Command control-plane is the Sauron control-plane entrypoint: REST API,
+// Command control-plane is the CISync control-plane entrypoint: REST API,
 // outbox relay, scheduler tick and reconciler. The `verify` subcommand runs
 // the hash-chain verifier and exits non-zero on any mismatch.
 package main
@@ -17,14 +17,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/api"
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/joblease"
-	"sauron.dev/sauron/control-plane/internal/redact"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/scheduler"
-	"sauron.dev/sauron/control-plane/internal/store"
-	"sauron.dev/sauron/control-plane/internal/verify"
+	"cisync.dev/cisync/control-plane/internal/api"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/joblease"
+	"cisync.dev/cisync/control-plane/internal/redact"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/scheduler"
+	"cisync.dev/cisync/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/verify"
 )
 
 func main() {
@@ -81,7 +81,7 @@ func runServer() {
 	// Metric parity: store-side same-tx audit inserts (teardown revocations)
 	// must surface on the SAME counter as streamed emissions.
 	securityAuditCounter := func(kind string) {
-		srv.Metrics().Add("sauron_security_audit_total", 1, "kind", kind)
+		srv.Metrics().Add("cisync_security_audit_total", 1, "kind", kind)
 	}
 	st.AuditObserver = securityAuditCounter
 
@@ -113,9 +113,9 @@ func runServer() {
 			return err
 		})
 	})
-	if connectorURL := envOr("SAURON_CTRL_CONNECTOR_URL", ""); connectorURL != "" {
+	if connectorURL := envOr("CISYNC_CTRL_CONNECTOR_URL", ""); connectorURL != "" {
 		publisher := relay.NewConnectorPublisher(st, connectorURL,
-			cfg.WebhookSecret, envOr("SAURON_CTRL_DETAILS_URL", "http://localhost:3000"))
+			cfg.WebhookSecret, envOr("CISYNC_CTRL_DETAILS_URL", "http://localhost:3000"))
 		outbox.Register("decision.rendered", publisher.ConsumeRendered)
 	}
 	workers.Add(1)
@@ -135,7 +135,7 @@ func runServer() {
 			Run(relayCtx, cfg.ReconcileInterval)
 	}()
 
-	// H3: in-process nightly chain verification (SAURON_CTRL_VERIFY_INTERVAL;
+	// H3: in-process nightly chain verification (CISYNC_CTRL_VERIFY_INTERVAL;
 	// 0 = off, prod 24h). Same verifier as the `verify` subcommand; failures
 	// log structured, bump a metric, and land a security_audit row — but do
 	// NOT halt serving (see verify.Scheduler WHY comment).
@@ -145,7 +145,7 @@ func runServer() {
 		sched := verify.NewScheduler(verify.FromVerifier(verifier), cfg.VerifyInterval,
 			st, cfg.TenantID,
 			func(status string) {
-				srv.Metrics().Add("sauron_ledger_verify_result", 1, "status", status)
+				srv.Metrics().Add("cisync_ledger_verify_result", 1, "status", status)
 			},
 			securityAuditCounter)
 		workers.Add(1)
@@ -220,7 +220,7 @@ func runVerify() {
 	fmt.Printf("chain OK: %d entries, %d checkpoints verified\n", rep.Entries, rep.Checkpoints)
 }
 
-var errJobLeaseKeyMissing = fmt.Errorf("SAURON_CTRL_JOBLEASE_KEY_FILE is required")
+var errJobLeaseKeyMissing = fmt.Errorf("CISYNC_CTRL_JOBLEASE_KEY_FILE is required")
 
 func must(err error, what string) {
 	if err != nil {

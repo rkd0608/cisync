@@ -1,4 +1,4 @@
-// Command github-connector is Sauron's idle-until-fed check writer: it
+// Command github-connector is CISync's idle-until-fed check writer: it
 // renders and maintains ONE "Agent Verification Gate" GitHub Check per
 // candidate revision across the full queued → in_progress → completed
 // lifecycle (internal-protocols.md §4). Without GitHub App credentials it
@@ -12,10 +12,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"sauron.dev/sauron/github-connector/internal/config"
-	"sauron.dev/sauron/github-connector/internal/redact"
-	"sauron.dev/sauron/github-connector/internal/server"
-	pgstore "sauron.dev/sauron/github-connector/internal/store"
+	"cisync.dev/cisync/github-connector/internal/config"
+	"cisync.dev/cisync/github-connector/internal/redact"
+	"cisync.dev/cisync/github-connector/internal/server"
+	pgstore "cisync.dev/cisync/github-connector/internal/store"
 )
 
 func main() {

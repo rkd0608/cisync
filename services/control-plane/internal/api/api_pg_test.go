@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 var idemCounter atomic.Int64

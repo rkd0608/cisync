@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/audit"
 )
 
 // capturingSink records streamed audit events so httptest cases can assert
@@ -109,7 +109,7 @@ func TestSecurityAuditEmissionsTable(t *testing.T) {
 			do: func(t *testing.T, url string) {
 				body := `{"source":"github","ext_delivery_id":"guid-1.sigfailed.01ABC","event_kind":"sig_failed","repo":"a/b","received_at":"2026-01-01T00:00:00Z","payload":{},"quarantine_reason":"signature_verification_failed"}`
 				req, _ := http.NewRequest(http.MethodPost, url+"/internal/ctrl/deliveries", strings.NewReader(body))
-				req.Header.Set("X-Sauron-Signature", "sha256="+signWith(testConfig().WebhookSecret, []byte(body)))
+				req.Header.Set("X-CISync-Signature", "sha256="+signWith(testConfig().WebhookSecret, []byte(body)))
 				req.Header.Set("Idempotency-Key", "guid-1.sigfailed.01ABC")
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {

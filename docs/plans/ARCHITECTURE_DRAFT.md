@@ -1,4 +1,4 @@
-# Sauron — Architecture Draft (v1)
+# CISync — Architecture Draft (v1)
 
 Status: DRAFT · Owner: Chief Systems Architect · Scope: v1 vertical slice + scaling path
 Inputs: product spec (`CI_CD and build systems Most pipelines were design.md`) + working defaults from planning brief.

@@ -1,6 +1,6 @@
 package planner
 
-import "sauron.dev/sauron/control-plane/internal/policy"
+import "cisync.dev/cisync/control-plane/internal/policy"
 
 // Fallback trigger identifiers. The first three reuse the §8 policy
 // vocabulary ("fallback_triggers" array); the remaining four follow the same

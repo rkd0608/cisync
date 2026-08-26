@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // Relay drains ctrl.outbox to in-process consumers using SKIP LOCKED batches,

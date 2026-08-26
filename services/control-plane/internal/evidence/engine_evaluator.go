@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // EngineEvaluator adapts the pure provenance validator to the

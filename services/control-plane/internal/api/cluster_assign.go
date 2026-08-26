@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"sauron.dev/sauron/control-plane/internal/cluster"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // assignCluster runs the clustering engine against the repo's active

@@ -17,7 +17,7 @@ import { StateBadge } from '@/components/state-badge';
 import { shortSha } from '@/lib/format';
 import { parsePermalinkParams } from '@/lib/permalink-params';
 import { requireCandidateId } from '@/lib/route-guards';
-import { getCandidate, getDossier, isNotFound } from '@/lib/sauron-api';
+import { getCandidate, getDossier, isNotFound } from '@/lib/cisync-api';
 
 export const dynamic = 'force-dynamic';
 

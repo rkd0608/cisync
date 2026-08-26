@@ -1,7 +1,7 @@
 package api
 
 import (
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // intentGrantJSON matches openapi IntentGrant key-for-key.

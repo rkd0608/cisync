@@ -1,4 +1,4 @@
-# Sauron github-connector — dev/demo image. Build: docker build -t sauron/github-connector services/github-connector
+# CISync github-connector — dev/demo image. Build: docker build -t cisync/github-connector services/github-connector
 FROM golang:1.23 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -10,10 +10,10 @@ FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --no-create-home sauron
+ && useradd --system --uid 10001 --no-create-home cisync
 WORKDIR /app
 COPY --from=build /out/github-connector /app/github-connector
 COPY migrations/ /app/migrations/
-USER sauron
+USER cisync
 EXPOSE 8083
 ENTRYPOINT ["/app/github-connector"]

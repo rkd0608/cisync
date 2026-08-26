@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 func TestHookValidSignatureAcceptedAndForwarded(t *testing.T) {

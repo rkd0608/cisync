@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/forward"
 )
 
 // TestRotationWindowOldSecretAcceptedEndToEnd signs a delivery with the OLD

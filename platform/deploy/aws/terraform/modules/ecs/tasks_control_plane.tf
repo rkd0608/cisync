@@ -56,24 +56,24 @@ resource "aws_ecs_task_definition" "control_plane" {
       mountPoints  = [{ sourceVolume = "keystore", containerPath = "/keys", readOnly = true }]
 
       environment = [
-        { name = "SAURON_CTRL_ADDR", value = ":8081" },
-        { name = "SAURON_CTRL_FLEET_URL", value = "http://runner-fleet.sauron.local:8082" },
-        { name = "SAURON_CTRL_CONNECTOR_URL", value = "http://github-connector.sauron.local:8083" },
-        { name = "SAURON_CTRL_LEDGER_KEY_FILE", value = "/keys/ledger_ed25519.key" },
-        { name = "SAURON_CTRL_JOBLEASE_KEY_FILE", value = "/keys/joblease_ed25519.key" },
-        { name = "SAURON_CTRL_VERIFY_INTERVAL", value = "24h" },     # SPEC §3 H3: nightly chain verify
-        { name = "SAURON_CTRL_AUDIT_RETENTION_DAYS", value = "90" }, # B7 floor
-        { name = "SAURON_CTRL_TRACKED_BASE_BRANCHES", value = var.tracked_base_branches },
-        { name = "SAURON_CTRL_TENANT_ID", value = "org_01ARZ3NDEKTSV4RRFFQ69G5FAV" },
+        { name = "CISYNC_CTRL_ADDR", value = ":8081" },
+        { name = "CISYNC_CTRL_FLEET_URL", value = "http://runner-fleet.cisync.local:8082" },
+        { name = "CISYNC_CTRL_CONNECTOR_URL", value = "http://github-connector.cisync.local:8083" },
+        { name = "CISYNC_CTRL_LEDGER_KEY_FILE", value = "/keys/ledger_ed25519.key" },
+        { name = "CISYNC_CTRL_JOBLEASE_KEY_FILE", value = "/keys/joblease_ed25519.key" },
+        { name = "CISYNC_CTRL_VERIFY_INTERVAL", value = "24h" },     # SPEC §3 H3: nightly chain verify
+        { name = "CISYNC_CTRL_AUDIT_RETENTION_DAYS", value = "90" }, # B7 floor
+        { name = "CISYNC_CTRL_TRACKED_BASE_BRANCHES", value = var.tracked_base_branches },
+        { name = "CISYNC_CTRL_TENANT_ID", value = "org_01ARZ3NDEKTSV4RRFFQ69G5FAV" },
         # Dev-tuned knobs (RATE_LIMIT_PER_MIN/SCHED_BATCH/TICK_INTERVAL/
         # RECONCILE_INTERVAL/STALE_RUN_MAX_AGE/RELAY_*) deliberately LEFT AT
         # PROD DEFAULTS: compose values were harness-window sizing only.
       ]
 
       secrets = [
-        { name = "SAURON_CTRL_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:ctrl_dsn::" },
-        { name = "SAURON_CTRL_ADMIN_TOKEN", valueFrom = var.secret_arns["admin_token"] },
-        { name = "SAURON_CTRL_WEBHOOK_SECRET", valueFrom = var.secret_arns["webhook_secret"] },
+        { name = "CISYNC_CTRL_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:ctrl_dsn::" },
+        { name = "CISYNC_CTRL_ADMIN_TOKEN", valueFrom = var.secret_arns["admin_token"] },
+        { name = "CISYNC_CTRL_WEBHOOK_SECRET", valueFrom = var.secret_arns["webhook_secret"] },
       ]
 
       logConfiguration = local.logs["control-plane"]

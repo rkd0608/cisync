@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // Queryer is the common surface of pgxpool.Pool and pgx.Tx so helpers work
@@ -27,7 +27,7 @@ type Store struct {
 	Pool   *pgxpool.Pool
 	signer *Signer
 	// AuditObserver, when wired (main), is invoked after each successful
-	// security-audit INSERT so the sauron_security_audit_total{kind} metric
+	// security-audit INSERT so the cisync_security_audit_total{kind} metric
 	// stays consistent across BOTH persistence paths (streamed and
 	// same-tx). Optional: nil keeps store-side emission metric-free.
 	AuditObserver func(kind string)

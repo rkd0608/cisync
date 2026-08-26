@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boots (or upgrades) the Sauron stack from platform/.env.prod secrets.
+# Boots (or upgrades) the CISync stack from platform/.env.prod secrets.
 # WHY a wrapper: compose reads env-file relative paths consistently and
 # migrations auto-run at boot per service, so upgrade == rebuild == this.
 set -euo pipefail

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // handleGetCandidate implements GET /v1/candidates/{candidateId}.
@@ -29,7 +29,7 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 		EstCostMillicents int64  `json:"est_cost_millicents"`
 	}{candidateSummaryJSON: out, IntentID: cand.IntentID, QueuePosition: pos, EstCostMillicents: cand.EstCostMillicents}
 	WriteJSON(w, http.StatusOK, resp)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // handleGetDossier implements GET /v1/candidates/{candidateId}/dossier; it
@@ -53,7 +53,7 @@ func (s *Server) handleGetDossier(w http.ResponseWriter, r *http.Request) {
 			retry := 30
 			WriteError(w, http.StatusNotFound, "not_found",
 				"no decision rendered yet for this candidate", nil, &retry, nil)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "404")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "404")
 			return
 		}
 		WriteDomainError(w, err)
@@ -94,7 +94,7 @@ func (s *Server) handleGetDossier(w http.ResponseWriter, r *http.Request) {
 		RequiredPostMerge: []map[string]any{},
 	}
 	WriteJSON(w, http.StatusOK, dossier)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // dossierPolicyJSON matches openapi EvidenceDossier.decision.policy

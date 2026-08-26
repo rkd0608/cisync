@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // ClaimJobs implements Store. The single UPDATE ... WHERE id IN (SELECT ...

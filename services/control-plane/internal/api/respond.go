@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // ErrorBody mirrors openapi.yaml ErrorEnvelope.error.

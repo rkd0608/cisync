@@ -10,8 +10,8 @@ import (
 	"os"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // Shared helpers for the wave-3 conformance regression tests

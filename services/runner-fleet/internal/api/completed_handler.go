@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	fstore "sauron.dev/sauron/runner-fleet/internal/store"
+	fstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // defaultCompletedLimit caps the completion feed page size.

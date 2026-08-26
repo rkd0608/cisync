@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/joblease"
-	"sauron.dev/sauron/runner-fleet/internal/providers"
-	fstore "sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/joblease"
+	"cisync.dev/cisync/runner-fleet/internal/providers"
+	fstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // failingProvider simulates an unavailable substrate (docker daemon down…).

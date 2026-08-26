@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // intentCreate mirrors openapi IntentCreate.
@@ -73,7 +73,7 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("Idempotency-Key")
 	if len(key) < 16 || len(key) > 128 {
 		WriteError(w, http.StatusBadRequest, "validation_failed", "Idempotency-Key must be 16..128 chars", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "400")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "400")
 		return
 	}
 	reqHash := requestHash(raw)
@@ -81,12 +81,12 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 	cached, err := s.store.LookupCommand(r.Context(), tenant, "POST /v1/change-intents", key, reqHash)
 	if err != nil {
 		WriteDomainError(w, err)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "409")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "409")
 		return
 	}
 	if cached != nil {
 		writeRawJSON(w, cached.ResponseCode, cached.ResponseBody)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(cached.ResponseCode))
+		s.metrics.Inc("cisync_ctrl_http_requests_total", fmt.Sprint(cached.ResponseCode))
 		return
 	}
 
@@ -98,7 +98,7 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		retry := int(retryAfter.Seconds())
 		WriteError(w, http.StatusTooManyRequests, "rate_limited", "intent creation rate exceeded", nil, &retry, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "429")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "429")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateIntentCreate(&in); err != nil {
 		WriteDomainError(w, err)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "400")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "400")
 		return
 	}
 
@@ -169,17 +169,17 @@ func (s *Server) handleCreateIntent(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
+		s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
 		return store.RecordCommandTx(r.Context(), tx, tenant, "POST /v1/change-intents", key, reqHash, http.StatusOK, body)
 	})
 	if err != nil {
 		WriteDomainError(w, err)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "500")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "500")
 		return
 	}
 	body, _ := json.Marshal(grant)
 	writeRawJSON(w, http.StatusOK, body)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // baseSnapshot derives a deterministic pseudo snapshot tag for the dev slice

@@ -1,5 +1,5 @@
 {
-  "name": "Sauron Verification Gate (dev)",
+  "name": "CISync Verification Gate (dev)",
   "url": "http://localhost:3000",
   "hook_attributes": {
     "active": true,

@@ -12,11 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/obs"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/obs"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 const testSecret = "test_conn_secret"
@@ -113,7 +113,7 @@ func (h *harness) post(t *testing.T, body any, idemKey string) *httptest.Respons
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodPost, "/internal/connector/decisions", bytes.NewReader(raw))
-	req.Header.Set("X-Sauron-Signature", signBody([]byte(testSecret), raw))
+	req.Header.Set("X-CISync-Signature", signBody([]byte(testSecret), raw))
 	req.Header.Set("Idempotency-Key", idemKey)
 	rec := httptest.NewRecorder()
 	h.handler.ServeHTTP(rec, req)

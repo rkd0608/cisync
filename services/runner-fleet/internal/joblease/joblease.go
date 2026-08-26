@@ -21,7 +21,7 @@ import (
 const LeaseTTLMax = time.Hour
 
 // Audience is the only accepted aud claim value.
-const Audience = "sauron-fleet"
+const Audience = "cisync-fleet"
 
 // ErrInvalid is the single failure shape returned by Verify; callers map it
 // to the typed unauthorized error, never leaking the internal cause.

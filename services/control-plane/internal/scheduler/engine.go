@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/joblease"
-	policypkg "sauron.dev/sauron/control-plane/internal/policy"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/joblease"
+	policypkg "cisync.dev/cisync/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // FleetGateway is the runner-fleet surface the engine scheduler needs

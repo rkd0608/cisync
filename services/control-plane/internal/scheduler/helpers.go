@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	evidencepkg "sauron.dev/sauron/control-plane/internal/evidence"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	evidencepkg "cisync.dev/cisync/control-plane/internal/evidence"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 func logf(format string, args ...any) {

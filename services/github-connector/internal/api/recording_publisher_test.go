@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/checks"
 )
 
 // recordingPublisher captures payloads so tests can assert exactly what the

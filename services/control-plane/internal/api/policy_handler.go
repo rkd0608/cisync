@@ -42,5 +42,5 @@ func (s *Server) handlePoliciesActive(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	WriteJSON(w, http.StatusOK, policiesResponse{Policies: policies})
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }

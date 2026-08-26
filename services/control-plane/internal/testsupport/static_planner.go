@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // StaticPlanner is a deterministic two-tier Planner double: it always

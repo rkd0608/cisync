@@ -1,5 +1,5 @@
 variable "environment" {
-  description = "Environment slug used in the secret path prefix /sauron/<env>/...."
+  description = "Environment slug used in the secret path prefix /cisync/<env>/...."
   type        = string
 }
 

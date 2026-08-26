@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // Live W4 regression: RequeueStale purges fleet.workers rows whose

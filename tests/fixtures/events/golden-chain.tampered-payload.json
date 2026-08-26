@@ -13,7 +13,7 @@
     "correlation_id": "corr_0F9WQZE8VPC01HSTZGG9HN5FNM",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:9bb0fe785217e155708a6fd1db255fc3cd59d2df75f090b7ef1876a04b751e63",
@@ -52,7 +52,7 @@
     "correlation_id": "corr_0F9WQZE8VPKBA74C46WRS9FEBV",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:8379132b78abd68fc5d4b54a5c1a8837a783908000e9ee697a5a69b9b8ad2cda",
@@ -94,7 +94,7 @@
     "correlation_id": "corr_0F9WQZE8VPYQK4RAP0GRCSNQPR",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:099197c3318c8438c4aa84af1f32de5a8c24274bfc9aa646ab6a947093b9922b",
@@ -127,7 +127,7 @@
     "correlation_id": "corr_0F9WQZE8VPNQS5Q3DHJRBRQVQA",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:2fbd78fb2c3979ec759745f0d9f0daad5790da78d16422326ca23bdb742831b5",
@@ -169,7 +169,7 @@
     "correlation_id": "corr_0F9WQZE8VPR8J44CGX5CPFYRNN",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:4cc7066c4d82d95aca723354762ab4284ad34945137f30066f16fafca7737d93",
@@ -204,7 +204,7 @@
     "correlation_id": "corr_0F9WQZE8VPBB45TBCJ5CPYFFBN",
     "actor": {
       "kind": "service",
-      "id": "sauron-test"
+      "id": "cisync-test"
     },
     "occurred_at": "2026-08-23T00:00:00.000Z",
     "payload_sha256": "sha256:722ce8a1325d140735867f8a3263e69368a10d9c957bc34906db52348f86bad3",

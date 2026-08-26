@@ -3,7 +3,7 @@ package execute
 import (
 	"log/slog"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // authorizeInternal re-verifies the dispatch-time job-lease credential before

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/audit"
 )
 
 // TestSecurityAuditMarkerExactlyOnce drives the ingest sig-failed marker

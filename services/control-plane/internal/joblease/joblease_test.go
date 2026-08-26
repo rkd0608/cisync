@@ -26,7 +26,7 @@ func mustSigner(t *testing.T) (*Signer, *Verifier) {
 func validClaims() Claims {
 	now := time.Now()
 	return Claims{
-		Audience:   "sauron-fleet",
+		Audience:   "cisync-fleet",
 		ID:         "fleet:run_abc:1:1",
 		RunID:      "run_abc",
 		Attempt:    1,

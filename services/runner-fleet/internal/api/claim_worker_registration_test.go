@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	fstore "sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	fstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // P0 regression (live W4): external claims arrive with a worker_id that has

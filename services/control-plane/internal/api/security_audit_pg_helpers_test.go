@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // countSecurityAudit reads the number of persisted security_audit rows for
@@ -32,7 +32,7 @@ func postMarker(t *testing.T, ts *httptest.Server, cfg *config.Config, extID str
 		`"repo":"acme/payments","received_at":"2026-01-01T00:00:00Z","payload":{},` +
 		`"quarantine_reason":"signature_verification_failed"}`
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/internal/ctrl/deliveries", strings.NewReader(body))
-	req.Header.Set("X-Sauron-Signature", "sha256="+signWith(cfg.WebhookSecret, []byte(body)))
+	req.Header.Set("X-CISync-Signature", "sha256="+signWith(cfg.WebhookSecret, []byte(body)))
 	req.Header.Set("Idempotency-Key", extID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

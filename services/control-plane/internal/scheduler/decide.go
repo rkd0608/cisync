@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/cluster"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // renderRequest carries everything a rendered decision needs (I-09 stamp

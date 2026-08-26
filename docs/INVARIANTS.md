@@ -1,4 +1,4 @@
-# Sauron Executable Invariants (FROZEN v1)
+# CISync Executable Invariants (FROZEN v1)
 
 Every invariant: enforced in code at the named point AND covered by an automated test
 (W1e owns suites under `tests/invariants/`; builders own unit-level property tests).

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/store"
+	"cisync.dev/cisync/github-connector/internal/store"
 )
 
 // stalledAfter is the receiving→stalled threshold for webhook_state.

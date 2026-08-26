@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // serveDecision handles kind=decision: dedupe by decision_id → render the

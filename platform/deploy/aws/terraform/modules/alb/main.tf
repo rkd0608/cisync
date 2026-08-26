@@ -2,10 +2,10 @@
 # alb: public edge. HTTPS 443 (ACM var) + HTTP->HTTPS redirect.
 # Routing contract (ARCHITECTURE D2: ingest is GitHub-webhooks-ONLY):
 #   /hooks/github*   -> ingest TG (:8080)   [the only ingest exposure]
-#   /api/sauron/*    -> web TG (:3000)      [same-origin proxy path]
+#   /api/cisync/*    -> web TG (:3000)      [same-origin proxy path]
 #   default          -> web TG              [UI]
 # control-plane/fleet/connector are NEVER internet-exposed; they are reached
-# internally via CloudMap sauron.local.
+# internally via CloudMap cisync.local.
 ###############################################################################
 
 resource "aws_security_group" "alb" {
@@ -138,7 +138,7 @@ resource "aws_lb_listener_rule" "api_proxy" {
 
   condition {
     path_pattern {
-      values = ["/api/sauron/*"]
+      values = ["/api/cisync/*"]
     }
   }
 }

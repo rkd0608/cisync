@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	plannerengine "cisync.dev/cisync/control-plane/internal/planner"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // revalidateRequest matches the openapi RevalidateRequest body.
@@ -44,7 +44,7 @@ func (s *Server) handleRevalidate(w http.ResponseWriter, r *http.Request) {
 	}
 	if cached != nil {
 		writeRawJSON(w, cached.ResponseCode, cached.ResponseBody)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "202")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "202")
 		return
 	}
 	var in revalidateRequest
@@ -71,7 +71,7 @@ func (s *Server) handleRevalidate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
+		s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
 		// Budget gate LAST inside the tx: a conditional bump makes
 		// concurrent revalidations race-safe — only winners below cap commit.
 		tag, err := tx.Exec(r.Context(),
@@ -97,7 +97,7 @@ func (s *Server) handleRevalidate(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusConflict, "conflict_state",
 			"re-run budget exhausted for this candidate",
 			map[string]any{"reason": "rerun_budget_exhausted"}, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "409")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "409")
 		return
 	}
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Server) handleRevalidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRawJSON(w, http.StatusAccepted, mustMarshal(map[string]any{"plan_id": planID}))
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "202")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "202")
 }
 
 // buildReplan plans afresh under CURRENT policy with the candidate's CURRENT

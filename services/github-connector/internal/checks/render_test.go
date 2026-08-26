@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 var (
@@ -47,13 +47,13 @@ func TestGoldenDecisionSummaries(t *testing.T) {
 			CandidateID: "cand_01JTESTCANDIDATE", Repo: "acme/payments",
 			HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Verb:    verb, Confidence: 0.94,
-			Policy:     domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+			Policy:     domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 			Summary:    "explanation summary",
 			RenderedAt: goldenRenderedAt, Evidence: goldenEvidence(),
 		}
 		payload, err := RenderDecision(env, detailsBase)
 		require.NoError(t, err, verb)
-		want := headline + " · confidence 0.94 · policy pol_sauron_default v1\n" +
+		want := headline + " · confidence 0.94 · policy pol_cisync_default v1\n" +
 			"Evidence: 5/5 required accepted · 2 deferred (reason-linked) · 0 failed\n" +
 			"→ Full dossier: http://localhost:3000/candidates/cand_01JTESTCANDIDATE\n" +
 			"_decision dec_01JTESTDECISION · candidate cand_01JTESTCANDIDATE · rendered 2026-08-23T03:41:00Z_"
@@ -86,7 +86,7 @@ func TestGoldenCachedSummary(t *testing.T) {
 		DecisionID: "dec_01J", CandidateID: "cand_01J", Repo: "acme/payments",
 		HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Verb:    domain.VerbDeferred, Confidence: 0.5,
-		Policy:     domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:     domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		RenderedAt: goldenRenderedAt, Evidence: goldenEvidence(),
 	}
 	payload, err := RenderCached(env, detailsBase)
@@ -104,7 +104,7 @@ func TestGoldenLifecycleSummaries(t *testing.T) {
 	}
 	payload, err := RenderLifecycle(queued, detailsBase)
 	require.NoError(t, err)
-	want := "**Queued** · Sauron accepted candidate cand_01J for verification\n" +
+	want := "**Queued** · CISync accepted candidate cand_01J for verification\n" +
 		"→ Full dossier: http://localhost:3000/candidates/cand_01J\n" +
 		"_queued 2026-08-23T03:41:00Z_"
 	require.Equal(t, want, payload.Summary)
@@ -116,7 +116,7 @@ func TestGoldenLifecycleSummaries(t *testing.T) {
 	inProgress.Phase = domain.LifecycleInProgress
 	payload, err = RenderLifecycle(&inProgress, detailsBase)
 	require.NoError(t, err)
-	want = "**In progress** · Sauron verification started for cand_01J\n" +
+	want = "**In progress** · CISync verification started for cand_01J\n" +
 		"→ Full dossier: http://localhost:3000/candidates/cand_01J\n" +
 		"_in progress since 2026-08-23T03:41:00Z_"
 	require.Equal(t, want, payload.Summary)

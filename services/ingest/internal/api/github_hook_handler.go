@@ -10,11 +10,11 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"sauron.dev/sauron/ingest/internal/domain"
-	"sauron.dev/sauron/ingest/internal/forward"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/seen"
-	"sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/seen"
+	"cisync.dev/cisync/ingest/internal/store"
 )
 
 // retryAfterSeconds is the Retry-After hint returned when control-plane is
@@ -152,7 +152,7 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":{"code":"unauthorized","message":"invalid signature"}}`, http.StatusUnauthorized)
 		return
 	}
-	if err := VerifyTimestampSkew(r.Header.Get("X-Sauron-Timestamp"), h.nowFn(), h.skew); err != nil {
+	if err := VerifyTimestampSkew(r.Header.Get("X-CISync-Timestamp"), h.nowFn(), h.skew); err != nil {
 		h.metrics.CounterInc("ingest_webhook_rejected_total", "Webhook requests rejected at the edge", "reason", "timestamp_skew")
 		reject(w, http.StatusUnauthorized, "unauthorized", "stale or future timestamp", err)
 		return

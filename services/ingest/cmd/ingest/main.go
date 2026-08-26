@@ -10,11 +10,11 @@ import (
 	"sync"
 	"syscall"
 
-	"sauron.dev/sauron/ingest/internal/config"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/redact"
-	"sauron.dev/sauron/ingest/internal/server"
-	pgstore "sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/config"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/redact"
+	"cisync.dev/cisync/ingest/internal/server"
+	pgstore "cisync.dev/cisync/ingest/internal/store"
 )
 
 func main() {

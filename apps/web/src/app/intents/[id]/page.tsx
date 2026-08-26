@@ -7,10 +7,10 @@ import { RiskPill } from '@/components/risk-pill';
 import { StateBadge } from '@/components/state-badge';
 import { EvidenceBar } from '@/components/evidence-bar';
 import { StateMachineProgress } from '@/components/state-machine-progress';
-import { isNotFound } from '@/lib/sauron-api';
+import { isNotFound } from '@/lib/cisync-api';
 import type { ApiErrorView } from '@/components/error-state';
 import { formatCountdown } from '@/lib/format';
-import { getIntent, listCandidates } from '@/lib/sauron-api';
+import { getIntent, listCandidates } from '@/lib/cisync-api';
 import { requireIntentId } from '@/lib/route-guards';
 import { notFound } from 'next/navigation';
 

@@ -10,7 +10,7 @@ import (
 	"errors"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // ErrNotFound reports no tracked revision for the lookup key.

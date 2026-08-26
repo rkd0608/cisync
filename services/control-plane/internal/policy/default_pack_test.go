@@ -73,7 +73,7 @@ func TestDefaultRegistryWildcardFallback(t *testing.T) {
 	for _, risk := range []string{"low", "medium", "high"} {
 		got, err := Resolve(Subject{Repo: "other/repo", RiskClass: risk}, DefaultRegistry())
 		require.NoError(t, err, "risk %s", risk)
-		require.Equal(t, "pol_sauron_default", got.PolicyID)
+		require.Equal(t, "pol_cisync_default", got.PolicyID)
 		require.Equal(t, 1, got.Version)
 	}
 }

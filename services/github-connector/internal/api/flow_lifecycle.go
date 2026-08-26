@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // serveLifecycle handles kind=lifecycle: create-or-update ONE check run per

@@ -19,8 +19,8 @@ func TestParseWebhookSecretsEmpty(t *testing.T) {
 // ordered list replaces the verification set while WebhookSecret stays the
 // PRIMARY (first) secret used for the ctrl signing hop.
 func TestFromEnvRotationListOverridesVerifySet(t *testing.T) {
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRET", "primary")
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRETS", "new,old")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRET", "primary")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRETS", "new,old")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("rotation config must parse: %v", err)
@@ -36,8 +36,8 @@ func TestFromEnvRotationListOverridesVerifySet(t *testing.T) {
 // TestFromEnvSingularFallbackUnchanged: without the list var behavior is
 // byte-identical to pre-rotation deployments.
 func TestFromEnvSingularFallbackUnchanged(t *testing.T) {
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRET", "only")
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRETS", "")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRET", "only")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRETS", "")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("singular config must parse: %v", err)

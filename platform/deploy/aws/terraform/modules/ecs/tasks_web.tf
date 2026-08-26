@@ -1,6 +1,6 @@
 ###############################################################################
 # web task: Next.js UI, 0.5 vCPU / 1 GB. Server-side proxy (next.config.ts
-# rewrites /api/sauron/*) means NOTHING is needed at build time — no
+# rewrites /api/cisync/*) means NOTHING is needed at build time — no
 # NEXT_PUBLIC_* build args (runtime proxy decision, SPEC §3 integrator row).
 ###############################################################################
 
@@ -21,15 +21,15 @@ resource "aws_ecs_task_definition" "web" {
       portMappings = [{ name = "http", containerPort = 3000, protocol = "tcp" }]
 
       environment = [
-        { name = "SAURON_API_URL", value = "http://control-plane.sauron.local:8081" },
-        { name = "SAURON_CONNECTOR_URL", value = "http://github-connector.sauron.local:8083" },
+        { name = "CISYNC_API_URL", value = "http://control-plane.cisync.local:8081" },
+        { name = "CISYNC_CONNECTOR_URL", value = "http://github-connector.cisync.local:8083" },
         { name = "PORT", value = "3000" },
       ]
 
       secrets = [
         # Same admin bearer as control-plane: injected server-side per SPEC §3
         # UI data-path fix; never shipped to the browser.
-        { name = "SAURON_ADMIN_TOKEN", valueFrom = var.secret_arns["admin_token"] },
+        { name = "CISYNC_ADMIN_TOKEN", valueFrom = var.secret_arns["admin_token"] },
       ]
 
       logConfiguration = local.logs["web"]

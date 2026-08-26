@@ -3,7 +3,7 @@ package scheduler
 import (
 	"sort"
 
-	"sauron.dev/sauron/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/cluster"
 )
 
 // Cause is the supersede-side trigger of a cancellation propagation.

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // migrationFile is one discovered *.up.sql migration.

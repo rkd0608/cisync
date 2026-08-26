@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 // EnginePlanner adapts the pure selection planner (Plan + fallback triggers)

@@ -6,7 +6,7 @@ import {
   intentGrantSchema,
   leaseRenewalSchema,
 } from './api-schemas';
-import { request } from './sauron-api';
+import { request } from './cisync-api';
 import { idempotencyKeyHeader, newIdempotencyKey } from './idempotency-key';
 
 const intentCreateSchema = z.object({

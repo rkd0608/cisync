@@ -6,9 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // applyPushBaseAdvanced implements §3.1 push.base_advanced: append
@@ -44,7 +44,7 @@ func (s *Server) applyPushBaseAdvanced(ctx context.Context, tx pgx.Tx, tenant, e
 	if err := s.store.AppendEventsTx(ctx, tx, events); err != nil {
 		return err
 	}
-	s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
+	s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
 	for _, cand := range affected {
 		// No successor exists yet at base-advance time; the self id marks
 		// "no named replacement" until a fresh synchronize arrives.
@@ -57,7 +57,7 @@ func (s *Server) applyPushBaseAdvanced(ctx context.Context, tx pgx.Tx, tenant, e
 			return err
 		}
 	}
-	s.metrics.Add("sauron_ctrl_merge_base_advances_total", 1)
+	s.metrics.Add("cisync_ctrl_merge_base_advances_total", 1)
 	return nil
 }
 
@@ -113,7 +113,7 @@ func (s *Server) applyInstallationDeleted(ctx context.Context, tx pgx.Tx, tenant
 		if err := s.store.InsertSecurityAuditTx(ctx, tx, aev); err != nil {
 			return err
 		}
-		s.metrics.Add("sauron_security_audit_total", 1, "kind", string(audit.KindLeaseRevocation))
+		s.metrics.Add("cisync_security_audit_total", 1, "kind", string(audit.KindLeaseRevocation))
 		live, err := store.LiveCandidatesForIntentTx(ctx, tx, tenant, lr.IntentID)
 		if err != nil {
 			return err
@@ -158,6 +158,6 @@ func (s *Server) applyInstallationDeleted(ctx context.Context, tx pgx.Tx, tenant
 	if err := store.SuspendReposTx(ctx, tx, view.Install.Repos); err != nil {
 		return err
 	}
-	s.metrics.Add("sauron_ctrl_installation_suspensions_total", 1)
+	s.metrics.Add("cisync_ctrl_installation_suspensions_total", 1)
 	return nil
 }

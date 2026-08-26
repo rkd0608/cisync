@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"sauron.dev/sauron/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/obs"
 )
 
 // MetricsHandler serves GET /metrics in Prometheus text exposition format.

@@ -49,12 +49,12 @@ variable "log_retention_days" {
 }
 
 variable "tracked_base_branches" {
-  description = "SAURON_CTRL_TRACKED_BASE_BRANCHES value."
+  description = "CISYNC_CTRL_TRACKED_BASE_BRANCHES value."
   type        = string
 }
 
 variable "connector_details_url" {
-  description = "SAURON_CONN_DETAILS_URL (public web base for check links)."
+  description = "CISYNC_CONN_DETAILS_URL (public web base for check links)."
   type        = string
 }
 
@@ -64,12 +64,12 @@ variable "connector_live_enabled" {
 }
 
 variable "github_app_id" {
-  description = "SAURON_CONN_GITHUB_APP_ID (live mode)."
+  description = "CISYNC_CONN_GITHUB_APP_ID (live mode)."
   type        = string
 }
 
 variable "github_installation_id" {
-  description = "SAURON_CONN_GITHUB_INSTALLATION_ID (live mode)."
+  description = "CISYNC_CONN_GITHUB_INSTALLATION_ID (live mode)."
   type        = string
 }
 
@@ -89,7 +89,7 @@ variable "ingest_target_group_arn" {
 }
 
 variable "web_target_group_arn" {
-  description = "ALB TG for /api/sauron/* + UI default."
+  description = "ALB TG for /api/cisync/* + UI default."
   type        = string
 }
 

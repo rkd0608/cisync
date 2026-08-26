@@ -18,17 +18,17 @@ func setEnvs(t *testing.T, kv map[string]string) {
 }
 
 var envKeys = []string{
-	"SAURON_CONN_WEBHOOK_SECRET", "SAURON_CONN_GITHUB_APP_ID",
-	"SAURON_CONN_GITHUB_PRIVATE_KEY_FILE", "SAURON_CONN_GITHUB_INSTALLATION_ID",
-	"SAURON_CONN_RERUN_POLICY", "SAURON_CONN_RERUN_MAX_PER_CANDIDATE",
-	"SAURON_CONN_RERUN_RATE_PER_HOUR", "SAURON_CONN_WRITE_BUDGET_PER_HOUR",
-	"SAURON_CONN_STALLED_CHECK_AGE", "SAURON_CONN_SWEEP_INTERVAL",
-	"SAURON_CONN_PENDING_DRAIN_INTERVAL", "SAURON_CONN_CTRL_URL", "SAURON_CONN_CTRL_TOKEN",
-	"SAURON_CONN_GITHUB_APP_PRIVATE_KEY_FILE",
+	"CISYNC_CONN_WEBHOOK_SECRET", "CISYNC_CONN_GITHUB_APP_ID",
+	"CISYNC_CONN_GITHUB_PRIVATE_KEY_FILE", "CISYNC_CONN_GITHUB_INSTALLATION_ID",
+	"CISYNC_CONN_RERUN_POLICY", "CISYNC_CONN_RERUN_MAX_PER_CANDIDATE",
+	"CISYNC_CONN_RERUN_RATE_PER_HOUR", "CISYNC_CONN_WRITE_BUDGET_PER_HOUR",
+	"CISYNC_CONN_STALLED_CHECK_AGE", "CISYNC_CONN_SWEEP_INTERVAL",
+	"CISYNC_CONN_PENDING_DRAIN_INTERVAL", "CISYNC_CONN_CTRL_URL", "CISYNC_CONN_CTRL_TOKEN",
+	"CISYNC_CONN_GITHUB_APP_PRIVATE_KEY_FILE",
 }
 
 func TestDefaultsAreDryRunWithFrozenKnobs(t *testing.T) {
-	setEnvs(t, map[string]string{"SAURON_CONN_WEBHOOK_SECRET": "s"})
+	setEnvs(t, map[string]string{"CISYNC_CONN_WEBHOOK_SECRET": "s"})
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.True(t, cfg.DryRun)
@@ -41,18 +41,18 @@ func TestDefaultsAreDryRunWithFrozenKnobs(t *testing.T) {
 
 func TestCredTrioAllOrNothing(t *testing.T) {
 	setEnvs(t, map[string]string{
-		"SAURON_CONN_WEBHOOK_SECRET":         "s",
-		"SAURON_CONN_GITHUB_APP_ID":          "app_1",
-		"SAURON_CONN_GITHUB_INSTALLATION_ID": "42",
+		"CISYNC_CONN_WEBHOOK_SECRET":         "s",
+		"CISYNC_CONN_GITHUB_APP_ID":          "app_1",
+		"CISYNC_CONN_GITHUB_INSTALLATION_ID": "42",
 	})
 	_, err := Load()
 	require.Error(t, err, "half-configured credentials must fail loudly")
 
 	setEnvs(t, map[string]string{
-		"SAURON_CONN_WEBHOOK_SECRET":          "s",
-		"SAURON_CONN_GITHUB_APP_ID":           "app_1",
-		"SAURON_CONN_GITHUB_PRIVATE_KEY_FILE": "/keys/pem",
-		"SAURON_CONN_GITHUB_INSTALLATION_ID":  "42",
+		"CISYNC_CONN_WEBHOOK_SECRET":          "s",
+		"CISYNC_CONN_GITHUB_APP_ID":           "app_1",
+		"CISYNC_CONN_GITHUB_PRIVATE_KEY_FILE": "/keys/pem",
+		"CISYNC_CONN_GITHUB_INSTALLATION_ID":  "42",
 	})
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -62,12 +62,12 @@ func TestCredTrioAllOrNothing(t *testing.T) {
 
 func TestRerunPolicyAndBudgetOverrides(t *testing.T) {
 	setEnvs(t, map[string]string{
-		"SAURON_CONN_WEBHOOK_SECRET":        "s",
-		"SAURON_CONN_RERUN_POLICY":          "replay_cached",
-		"SAURON_CONN_WRITE_BUDGET_PER_HOUR": "50",
-		"SAURON_CONN_STALLED_CHECK_AGE":     "10m",
-		"SAURON_CONN_CTRL_URL":              "http://ctrl:8081",
-		"SAURON_CONN_CTRL_TOKEN":            "tok",
+		"CISYNC_CONN_WEBHOOK_SECRET":        "s",
+		"CISYNC_CONN_RERUN_POLICY":          "replay_cached",
+		"CISYNC_CONN_WRITE_BUDGET_PER_HOUR": "50",
+		"CISYNC_CONN_STALLED_CHECK_AGE":     "10m",
+		"CISYNC_CONN_CTRL_URL":              "http://ctrl:8081",
+		"CISYNC_CONN_CTRL_TOKEN":            "tok",
 	})
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -78,15 +78,15 @@ func TestRerunPolicyAndBudgetOverrides(t *testing.T) {
 	require.Equal(t, "tok", cfg.CtrlToken)
 
 	setEnvs(t, map[string]string{
-		"SAURON_CONN_WEBHOOK_SECRET": "s",
-		"SAURON_CONN_RERUN_POLICY":   "yolo",
+		"CISYNC_CONN_WEBHOOK_SECRET": "s",
+		"CISYNC_CONN_RERUN_POLICY":   "yolo",
 	})
 	_, err = Load()
 	require.Error(t, err)
 
 	setEnvs(t, map[string]string{
-		"SAURON_CONN_WEBHOOK_SECRET":    "s",
-		"SAURON_CONN_STALLED_CHECK_AGE": "not-a-duration",
+		"CISYNC_CONN_WEBHOOK_SECRET":    "s",
+		"CISYNC_CONN_STALLED_CHECK_AGE": "not-a-duration",
 	})
 	_, err = Load()
 	require.Error(t, err)

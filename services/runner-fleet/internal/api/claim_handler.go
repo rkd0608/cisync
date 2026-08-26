@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // ClaimHandler serves POST /internal/fleet/jobs/claim.

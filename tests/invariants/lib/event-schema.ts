@@ -11,7 +11,7 @@ import contractSchema from '../../../packages/contracts/events.schema.json';
  * unapproved dependency.
  */
 
-const SCHEMA_ID = 'https://sauron.dev/contracts/events.schema.json';
+const SCHEMA_ID = 'https://cisync.dev/contracts/events.schema.json';
 const DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
 
 let fullValidate: ValidateFunction | undefined;

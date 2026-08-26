@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // handleTailEvents implements GET /v1/events (ledger tail for agents/web).
@@ -18,7 +18,7 @@ func (s *Server) handleTailEvents(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 		WriteError(w, http.StatusRequestedRangeNotSatisfiable, "validation_failed",
 			"after_seq must be an integer ≥ 0", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "416")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "416")
 		return
 	}
 	limit := 100
@@ -49,5 +49,5 @@ func (s *Server) handleTailEvents(w http.ResponseWriter, r *http.Request) {
 		out = append(out, *ev)
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"events": out, "next_seq": nextSeq})
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/ratelimit"
+	"cisync.dev/cisync/github-connector/internal/ratelimit"
 )
 
 const (

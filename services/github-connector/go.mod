@@ -1,4 +1,4 @@
-module sauron.dev/sauron/github-connector
+module cisync.dev/cisync/github-connector
 
 go 1.23
 

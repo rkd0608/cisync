@@ -1,5 +1,5 @@
 ###############################################################################
-# Sauron AWS kit — variables. Every knob an operator may need, with the WHY.
+# CISync AWS kit — variables. Every knob an operator may need, with the WHY.
 # Never put secret VALUES here; secrets are populated post-apply via
 # `aws secretsmanager put-secret-value` (see RUNBOOK.md §5).
 ###############################################################################
@@ -11,7 +11,7 @@ variable "aws_region" {
 }
 
 variable "environment" {
-  description = "Deployment environment name (staging|prod). Used in resource names, tags, and Secrets Manager paths /sauron/<environment>/...."
+  description = "Deployment environment name (staging|prod). Used in resource names, tags, and Secrets Manager paths /cisync/<environment>/...."
   type        = string
   default     = "prod"
 
@@ -97,7 +97,7 @@ variable "certificate_arn" {
 }
 
 variable "domain_name" {
-  description = "Public hostname for Sauron (e.g. sauron.example.com). Empty = no Route53 record; operator wires DNS manually. Used as connector details-url base."
+  description = "Public hostname for CISync (e.g. cisync.example.com). Empty = no Route53 record; operator wires DNS manually. Used as connector details-url base."
   type        = string
   default     = ""
 }
@@ -145,25 +145,25 @@ EOT
 }
 
 variable "github_app_id" {
-  description = "GitHub App numeric ID (SAURON_CONN_GITHUB_APP_ID). Required iff enable_connector_live_mode."
+  description = "GitHub App numeric ID (CISYNC_CONN_GITHUB_APP_ID). Required iff enable_connector_live_mode."
   type        = string
   default     = ""
 }
 
 variable "github_installation_id" {
-  description = "Default installation ID from the App install URL (SAURON_CONN_GITHUB_INSTALLATION_ID). Required iff enable_connector_live_mode."
+  description = "Default installation ID from the App install URL (CISYNC_CONN_GITHUB_INSTALLATION_ID). Required iff enable_connector_live_mode."
   type        = string
   default     = ""
 }
 
 variable "connector_details_url" {
-  description = "Public URL stamped into GitHub Check details links (SAURON_CONN_DETAILS_URL). Should be https://<domain_name>; kept separate so staging/prod diverge cleanly."
+  description = "Public URL stamped into GitHub Check details links (CISYNC_CONN_DETAILS_URL). Should be https://<domain_name>; kept separate so staging/prod diverge cleanly."
   type        = string
   default     = ""
 }
 
 variable "tracked_base_branches" {
-  description = "Base branches whose pushes advance merge-base and supersede stale candidates (SAURON_CTRL_TRACKED_BASE_BRANCHES). Comma-separated; keep in sync with branch protection."
+  description = "Base branches whose pushes advance merge-base and supersede stale candidates (CISYNC_CTRL_TRACKED_BASE_BRANCHES). Comma-separated; keep in sync with branch protection."
   type        = string
   default     = "main,master"
 }

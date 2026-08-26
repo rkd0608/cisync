@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 // signedPost posts a validly-signed webhook with explicit GUID and payload.

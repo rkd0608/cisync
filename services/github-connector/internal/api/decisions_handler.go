@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/obs"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/obs"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // maxDecisionBodyBytes caps the §4 push payload.
@@ -79,7 +79,7 @@ func (h *DecisionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errorBody("payload_too_large", "payload exceeds size cap"))
 		return
 	}
-	if !VerifyHMAC(h.secret, raw, r.Header.Get("X-Sauron-Signature")) {
+	if !VerifyHMAC(h.secret, raw, r.Header.Get("X-CISync-Signature")) {
 		h.deps.Metrics.CounterInc("conn_decisions_rejected_total", "Decision pushes rejected at the boundary", "reason", "bad_signature")
 		writeJSON(w, http.StatusUnauthorized, errorBody("unauthorized", "bad signature"))
 		return

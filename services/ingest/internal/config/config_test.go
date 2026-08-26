@@ -6,9 +6,9 @@ import (
 )
 
 func TestFromEnvDefaults(t *testing.T) {
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRET", "s")
-	t.Setenv("SAURON_INGEST_ADDR", "")
-	t.Setenv("SAURON_INGEST_CTRL_URL", "")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRET", "s")
+	t.Setenv("CISYNC_INGEST_ADDR", "")
+	t.Setenv("CISYNC_INGEST_CTRL_URL", "")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("defaults must parse: %v", err)
@@ -34,11 +34,11 @@ func TestFromEnvRequiresSecret(t *testing.T) {
 }
 
 func TestFromEnvOverrides(t *testing.T) {
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRET", "s")
-	t.Setenv("SAURON_INGEST_ADDR", ":9090")
-	t.Setenv("SAURON_INGEST_MAX_BODY_BYTES", "1024")
-	t.Setenv("SAURON_INGEST_MAX_ATTEMPTS", "5")
-	t.Setenv("SAURON_INGEST_RETRY_INTERVAL", "2s")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRET", "s")
+	t.Setenv("CISYNC_INGEST_ADDR", ":9090")
+	t.Setenv("CISYNC_INGEST_MAX_BODY_BYTES", "1024")
+	t.Setenv("CISYNC_INGEST_MAX_ATTEMPTS", "5")
+	t.Setenv("CISYNC_INGEST_RETRY_INTERVAL", "2s")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("overrides must parse: %v", err)
@@ -49,8 +49,8 @@ func TestFromEnvOverrides(t *testing.T) {
 }
 
 func TestFromEnvRejectsGarbage(t *testing.T) {
-	t.Setenv("SAURON_INGEST_WEBHOOK_SECRET", "s")
-	t.Setenv("SAURON_INGEST_MAX_BODY_BYTES", "notanumber")
+	t.Setenv("CISYNC_INGEST_WEBHOOK_SECRET", "s")
+	t.Setenv("CISYNC_INGEST_MAX_BODY_BYTES", "notanumber")
 	if _, err := FromEnv(); err == nil {
 		t.Fatalf("garbage max body bytes must error")
 	}

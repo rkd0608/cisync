@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // migrateCtx keeps fixture-table call sites terse.
@@ -61,7 +61,7 @@ func postDelivery(t *testing.T, ts *httptest.Server, secret, extID, eventKind, r
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/internal/ctrl/deliveries", strings.NewReader(string(raw)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", extID)
-	req.Header.Set("X-Sauron-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	req.Header.Set("X-CISync-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

@@ -1,7 +1,7 @@
 package failure
 
 import (
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 // MaxRepairIterations is the v0 hard bound on repair loop iterations

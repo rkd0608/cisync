@@ -9,16 +9,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/ghauth"
-	"sauron.dev/sauron/github-connector/internal/obs"
-	"sauron.dev/sauron/github-connector/internal/queue"
-	"sauron.dev/sauron/github-connector/internal/ratelimit"
-	"sauron.dev/sauron/github-connector/internal/rerun"
-	"sauron.dev/sauron/github-connector/internal/testsupport"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/ghauth"
+	"cisync.dev/cisync/github-connector/internal/obs"
+	"cisync.dev/cisync/github-connector/internal/queue"
+	"cisync.dev/cisync/github-connector/internal/ratelimit"
+	"cisync.dev/cisync/github-connector/internal/rerun"
+	"cisync.dev/cisync/github-connector/internal/testsupport"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // TestLiveLoopThroughFakeGitHub drives envelope → emit.Router →
@@ -52,7 +52,7 @@ func TestLiveLoopThroughFakeGitHub(t *testing.T) {
 		raw, err := json.Marshal(body)
 		require.NoError(t, err)
 		req, _ := http.NewRequest(http.MethodPost, "/", bytesReader(raw))
-		req.Header.Set("X-Sauron-Signature", signBody([]byte(testSecret), raw))
+		req.Header.Set("X-CISync-Signature", signBody([]byte(testSecret), raw))
 		req.Header.Set("Idempotency-Key", key)
 		rec := recordResponse()
 		handler.ServeHTTP(rec, req)
@@ -110,7 +110,7 @@ func TestBudgetExhaustionQueuesThenDrains(t *testing.T) {
 		raw, err := json.Marshal(body)
 		require.NoError(t, err)
 		req, _ := http.NewRequest(http.MethodPost, "/", bytesReader(raw))
-		req.Header.Set("X-Sauron-Signature", signBody([]byte(testSecret), raw))
+		req.Header.Set("X-CISync-Signature", signBody([]byte(testSecret), raw))
 		req.Header.Set("Idempotency-Key", key)
 		rec := recordResponse()
 		handler.ServeHTTP(rec, req)
@@ -155,7 +155,7 @@ func decisionEnvelopeFor(cand, sha, decisionID string) domain.DecisionEnvelope {
 	return domain.DecisionEnvelope{Kind: domain.KindDecision,
 		DecisionID: decisionID, CandidateID: cand, Repo: "acme/payments",
 		HeadSHA: sha, Verb: domain.VerbEligibleForMergeTrain, Confidence: 0.9,
-		Policy:     domain.PolicyRef{PolicyID: "pol_sauron_default", Version: 1},
+		Policy:     domain.PolicyRef{PolicyID: "pol_cisync_default", Version: 1},
 		RenderedAt: frozenNow,
 		Evidence:   &domain.EvidenceCounts{Required: 2, Accepted: 2},
 	}

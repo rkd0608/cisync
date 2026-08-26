@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/api"
-	"sauron.dev/sauron/ingest/internal/config"
-	"sauron.dev/sauron/ingest/internal/forward"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/retry"
-	"sauron.dev/sauron/ingest/internal/seen"
-	"sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/api"
+	"cisync.dev/cisync/ingest/internal/config"
+	"cisync.dev/cisync/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/retry"
+	"cisync.dev/cisync/ingest/internal/seen"
+	"cisync.dev/cisync/ingest/internal/store"
 )
 
 // Server bundles everything the ingest process needs at runtime.

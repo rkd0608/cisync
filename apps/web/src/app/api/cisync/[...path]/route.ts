@@ -1,7 +1,7 @@
 // Server-side API gateway for the browser. WHY a route handler instead of
 // config rewrites: rewrites cannot inject credentials, and the admin token
 // must NEVER ship in the client bundle (charter §2 / THREAT_MODEL B3). The
-// browser calls same-origin /api/sauron/v1/*; this handler forwards upstream
+// browser calls same-origin /api/cisync/v1/*; this handler forwards upstream
 // with the bearer injected from runtime env. Malformed upstream responses are
 // passed through unchanged — schema validation stays client-side fail-closed.
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,12 +9,12 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const CONTROL_PLANE =
-  process.env.SAURON_API_URL ??
-  process.env.NEXT_PUBLIC_SAURON_API_URL ??
+  process.env.CISYNC_API_URL ??
+  process.env.NEXT_PUBLIC_CISYNC_API_URL ??
   'http://control-plane:8081';
 // Installations live on github-connector (ghconn schema owner), not ctrl.
-const CONNECTOR = process.env.SAURON_CONNECTOR_URL ?? 'http://github-connector:8083';
-const ADMIN_TOKEN = process.env.SAURON_ADMIN_TOKEN ?? '';
+const CONNECTOR = process.env.CISYNC_CONNECTOR_URL ?? 'http://github-connector:8083';
+const ADMIN_TOKEN = process.env.CISYNC_ADMIN_TOKEN ?? '';
 
 function upstreamFor(parts: string[]): string {
   return parts[0] === 'v1' && parts[1] === 'installations' ? CONNECTOR : CONTROL_PLANE;
@@ -30,8 +30,8 @@ const HOP_BY_HOP = new Set([
 ]);
 
 function forwardPath(req: NextRequest): string {
-  // /api/sauron/v1/x/y -> upstream /v1/x/y
-  const parts = req.nextUrl.pathname.split('/').slice(3); // ['', 'api', 'sauron', ...]
+  // /api/cisync/v1/x/y -> upstream /v1/x/y
+  const parts = req.nextUrl.pathname.split('/').slice(3); // ['', 'api', 'cisync', ...]
   const search = req.nextUrl.search ?? '';
   return `/${parts.join('/')}${search}`;
 }

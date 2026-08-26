@@ -25,7 +25,7 @@ import * as tail from './tail.js';
 
 function requireApiUrl(): string {
   const url = harnessEnv().apiUrl;
-  if (!url) throw new Error('live probe invoked without SAURON_API_URL');
+  if (!url) throw new Error('live probe invoked without CISYNC_API_URL');
   return url.replace(/\/$/, '');
 }
 

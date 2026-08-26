@@ -1,4 +1,4 @@
-// Package config parses all SAURON_FLEET_* environment variables. It is the
+// Package config parses all CISYNC_FLEET_* environment variables. It is the
 // only place in this service that reads the environment.
 package config
 
@@ -26,20 +26,20 @@ type Config struct {
 	DockerImage       string
 	// JobLeasePubKey is the Ed25519 PUBLIC key PEM (SPKI) used to verify
 	// control-plane-minted job-lease tokens (THREAT_MODEL B2/I-04). Loaded
-	// from SAURON_FLEET_JOBLEASYPUB_KEY_FILE or the base64-encoded inline
-	// SAURON_FLEET_JOBLEASE_PUB_B64. Empty disables lease verification and
+	// from CISYNC_FLEET_JOBLEASYPUB_KEY_FILE or the base64-encoded inline
+	// CISYNC_FLEET_JOBLEASE_PUB_B64. Empty disables lease verification and
 	// every mutating endpoint fails closed with 401 unauthorized.
 	JobLeasePubKey []byte
 }
 
-// FromEnv builds a Config from SAURON_FLEET_* variables with documented
-// defaults; SAURON_FLEET_PROVIDER selects sim (default) or docker (opt-in).
+// FromEnv builds a Config from CISYNC_FLEET_* variables with documented
+// defaults; CISYNC_FLEET_PROVIDER selects sim (default) or docker (opt-in).
 func FromEnv() (Config, error) {
 	cfg := Config{
-		Addr:              envOr("SAURON_FLEET_ADDR", ":8082"),
-		PGDSN:             os.Getenv("SAURON_FLEET_PG_DSN"),
-		Provider:          envOr("SAURON_FLEET_PROVIDER", "sim"),
-		Pool:              envOr("SAURON_FLEET_POOL", "sim"),
+		Addr:              envOr("CISYNC_FLEET_ADDR", ":8082"),
+		PGDSN:             os.Getenv("CISYNC_FLEET_PG_DSN"),
+		Provider:          envOr("CISYNC_FLEET_PROVIDER", "sim"),
+		Pool:              envOr("CISYNC_FLEET_POOL", "sim"),
 		SimWorkers:        8,
 		HeartbeatInterval: 5 * time.Second,
 		WorkerStaleAfter:  15 * time.Second,
@@ -52,28 +52,28 @@ func FromEnv() (Config, error) {
 	switch cfg.Provider {
 	case "sim", "docker":
 	default:
-		return cfg, fmt.Errorf("config: invalid SAURON_FLEET_PROVIDER %q (sim|docker)", cfg.Provider)
+		return cfg, fmt.Errorf("config: invalid CISYNC_FLEET_PROVIDER %q (sim|docker)", cfg.Provider)
 	}
 	var err error
-	if cfg.SimWorkers, err = intEnv("SAURON_FLEET_SIM_WORKERS", cfg.SimWorkers); err != nil {
+	if cfg.SimWorkers, err = intEnv("CISYNC_FLEET_SIM_WORKERS", cfg.SimWorkers); err != nil {
 		return cfg, err
 	}
-	if cfg.ClaimLimit, err = intEnv("SAURON_FLEET_CLAIM_LIMIT", cfg.ClaimLimit); err != nil {
+	if cfg.ClaimLimit, err = intEnv("CISYNC_FLEET_CLAIM_LIMIT", cfg.ClaimLimit); err != nil {
 		return cfg, err
 	}
-	if cfg.HeartbeatInterval, err = durEnv("SAURON_FLEET_HEARTBEAT_INTERVAL", cfg.HeartbeatInterval); err != nil {
+	if cfg.HeartbeatInterval, err = durEnv("CISYNC_FLEET_HEARTBEAT_INTERVAL", cfg.HeartbeatInterval); err != nil {
 		return cfg, err
 	}
-	if cfg.WorkerStaleAfter, err = durEnv("SAURON_FLEET_WORKER_STALE_AFTER", cfg.WorkerStaleAfter); err != nil {
+	if cfg.WorkerStaleAfter, err = durEnv("CISYNC_FLEET_WORKER_STALE_AFTER", cfg.WorkerStaleAfter); err != nil {
 		return cfg, err
 	}
-	if cfg.PollInterval, err = durEnv("SAURON_FLEET_POLL_INTERVAL", cfg.PollInterval); err != nil {
+	if cfg.PollInterval, err = durEnv("CISYNC_FLEET_POLL_INTERVAL", cfg.PollInterval); err != nil {
 		return cfg, err
 	}
-	if v := os.Getenv("SAURON_FLEET_DOCKER_BIN"); v != "" {
+	if v := os.Getenv("CISYNC_FLEET_DOCKER_BIN"); v != "" {
 		cfg.DockerBin = v
 	}
-	if v := os.Getenv("SAURON_FLEET_DOCKER_IMAGE"); v != "" {
+	if v := os.Getenv("CISYNC_FLEET_DOCKER_IMAGE"); v != "" {
 		cfg.DockerImage = v
 	}
 	if cfg.JobLeasePubKey, err = loadJobLeasePubKey(); err != nil {
@@ -86,17 +86,17 @@ func FromEnv() (Config, error) {
 // WHY no default: an unconfigured verifier silently re-opens the P0-1 hole,
 // so absence is surfaced as config error at boot instead of runtime 401s.
 func loadJobLeasePubKey() ([]byte, error) {
-	if path := os.Getenv("SAURON_FLEET_JOBLEASYPUB_KEY_FILE"); path != "" {
+	if path := os.Getenv("CISYNC_FLEET_JOBLEASYPUB_KEY_FILE"); path != "" {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("config: read SAURON_FLEET_JOBLEASYPUB_KEY_FILE: %w", err)
+			return nil, fmt.Errorf("config: read CISYNC_FLEET_JOBLEASYPUB_KEY_FILE: %w", err)
 		}
 		return raw, nil
 	}
-	if inline := os.Getenv("SAURON_FLEET_JOBLEASE_PUB_B64"); inline != "" {
+	if inline := os.Getenv("CISYNC_FLEET_JOBLEASE_PUB_B64"); inline != "" {
 		raw, err := base64.StdEncoding.DecodeString(inline)
 		if err != nil {
-			return nil, fmt.Errorf("config: decode SAURON_FLEET_JOBLEASE_PUB_B64: %w", err)
+			return nil, fmt.Errorf("config: decode CISYNC_FLEET_JOBLEASE_PUB_B64: %w", err)
 		}
 		return raw, nil
 	}

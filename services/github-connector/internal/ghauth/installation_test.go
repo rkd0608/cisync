@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sauron.dev/sauron/github-connector/internal/testsupport"
+	"cisync.dev/cisync/github-connector/internal/testsupport"
 )
 
 // testKey is a throwaway RSA key generated once for the package (minting

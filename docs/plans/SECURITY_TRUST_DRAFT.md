@@ -1,4 +1,4 @@
-# Sauron — Security & Trust Draft (v1)
+# CISync — Security & Trust Draft (v1)
 
 Status: DRAFT · Owner: Security & Trust Engineer · Scope: v1 vertical slice, aligned with `ARCHITECTURE_DRAFT.md` (services, event envelope, hash-chained ledger) and `EDGE_CASES_DRAFT.md` (EC-xxx references) and `SRE_SCALABILITY_DRAFT.md` (budget/fence mechanics).
 References: OWASP CI/CD Security Cheat Sheet; SLSA v1.x build requirements/levels; GitHub artifact attestations & GitHub App permission model.

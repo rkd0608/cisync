@@ -15,7 +15,7 @@ type FleetClient struct {
 	http    *http.Client
 }
 
-// NewFleetClient constructs a client against SAURON_CTRL_FLEET_URL.
+// NewFleetClient constructs a client against CISYNC_CTRL_FLEET_URL.
 func NewFleetClient(baseURL string) *FleetClient {
 	return &FleetClient{
 		baseURL: baseURL,

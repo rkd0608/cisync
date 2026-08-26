@@ -6,8 +6,8 @@ import (
 )
 
 func TestFromEnvDefaults(t *testing.T) {
-	t.Setenv("SAURON_FLEET_PROVIDER", "")
-	t.Setenv("SAURON_FLEET_ADDR", "")
+	t.Setenv("CISYNC_FLEET_PROVIDER", "")
+	t.Setenv("CISYNC_FLEET_ADDR", "")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("defaults must parse: %v", err)
@@ -24,7 +24,7 @@ func TestFromEnvDefaults(t *testing.T) {
 }
 
 func TestFromEnvDockerOptIn(t *testing.T) {
-	t.Setenv("SAURON_FLEET_PROVIDER", "docker")
+	t.Setenv("CISYNC_FLEET_PROVIDER", "docker")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("docker must be accepted: %v", err)
@@ -35,17 +35,17 @@ func TestFromEnvDockerOptIn(t *testing.T) {
 }
 
 func TestFromEnvRejectsUnknownProvider(t *testing.T) {
-	t.Setenv("SAURON_FLEET_PROVIDER", "firecracker")
+	t.Setenv("CISYNC_FLEET_PROVIDER", "firecracker")
 	if _, err := FromEnv(); err == nil {
 		t.Fatalf("unknown provider must fail closed")
 	}
 }
 
 func TestFromEnvOverrides(t *testing.T) {
-	t.Setenv("SAURON_FLEET_SIM_WORKERS", "3")
-	t.Setenv("SAURON_FLEET_CLAIM_LIMIT", "7")
-	t.Setenv("SAURON_FLEET_HEARTBEAT_INTERVAL", "2s")
-	t.Setenv("SAURON_FLEET_WORKER_STALE_AFTER", "9s")
+	t.Setenv("CISYNC_FLEET_SIM_WORKERS", "3")
+	t.Setenv("CISYNC_FLEET_CLAIM_LIMIT", "7")
+	t.Setenv("CISYNC_FLEET_HEARTBEAT_INTERVAL", "2s")
+	t.Setenv("CISYNC_FLEET_WORKER_STALE_AFTER", "9s")
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("overrides must parse: %v", err)
@@ -57,7 +57,7 @@ func TestFromEnvOverrides(t *testing.T) {
 }
 
 func TestFromEnvRejectsGarbageNumbers(t *testing.T) {
-	t.Setenv("SAURON_FLEET_SIM_WORKERS", "zero")
+	t.Setenv("CISYNC_FLEET_SIM_WORKERS", "zero")
 	if _, err := FromEnv(); err == nil {
 		t.Fatalf("garbage workers must error")
 	}

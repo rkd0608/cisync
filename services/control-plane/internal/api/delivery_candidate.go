@@ -6,9 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	plannerengine "cisync.dev/cisync/control-plane/internal/planner"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // createSyntheticIntentTx mints the D12 synthetic intent + change-scope
@@ -39,7 +39,7 @@ func (s *Server) createSyntheticIntentTx(ctx context.Context, tx pgx.Tx, tenant 
 	if _, err := store.CreateIntentTx(ctx, tx, s.store, intent, lease, nil); err != nil {
 		return nil, err
 	}
-	s.metrics.Add("sauron_ctrl_webhook_synthetic_intents_total", 1)
+	s.metrics.Add("cisync_ctrl_webhook_synthetic_intents_total", 1)
 	return intent, nil
 }
 
@@ -51,7 +51,7 @@ func (s *Server) submitWebhookCandidateTx(ctx context.Context, tx pgx.Tx, intent
 		return nil, err
 	}
 	if knownHead && liveHead {
-		s.metrics.Add("sauron_ctrl_webhook_replays_total", 1)
+		s.metrics.Add("cisync_ctrl_webhook_replays_total", 1)
 		return nil, nil // duplicate head already live ⇒ idempotent replay
 	}
 	pol := domain.DefaultPolicy()
@@ -94,7 +94,7 @@ func (s *Server) submitWebhookCandidateTx(ctx context.Context, tx pgx.Tx, intent
 	if err != nil {
 		return nil, err
 	}
-	s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
-	s.metrics.Add("sauron_ctrl_webhook_candidates_submitted_total", 1)
+	s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
+	s.metrics.Add("cisync_ctrl_webhook_candidates_submitted_total", 1)
 	return cand, nil
 }

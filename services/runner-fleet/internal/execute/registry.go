@@ -3,7 +3,7 @@ package execute
 import (
 	"sync"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // Registry exposes active provider handles so the cancel endpoint can reach

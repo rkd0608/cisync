@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	"sauron.dev/sauron/runner-fleet/internal/providers"
-	"sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/providers"
+	"cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // maxLogsExcerptBytes bounds the log prefix carried in result_ref so

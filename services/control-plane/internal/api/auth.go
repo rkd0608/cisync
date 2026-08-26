@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/audit"
 )
 
 type ctxKey int
@@ -19,7 +19,7 @@ func TenantFrom(ctx context.Context) string {
 	return v
 }
 
-// requireAuth enforces Bearer SAURON_CTRL_ADMIN_TOKEN and derives tenant_id
+// requireAuth enforces Bearer CISYNC_CTRL_ADMIN_TOKEN and derives tenant_id
 // from the token claim only (invariant I-14).
 func (s *Server) requireAuth(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -28,14 +28,14 @@ func (s *Server) requireAuth(next func(http.ResponseWriter, *http.Request)) func
 		if !strings.HasPrefix(auth, prefix) {
 			s.auditAuthzRejection(r, "missing_bearer_token")
 			WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token", nil, nil, nil)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "401")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "401")
 			return
 		}
 		token := strings.TrimPrefix(auth, prefix)
 		if subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.AdminToken)) != 1 {
 			s.auditAuthzRejection(r, "invalid_bearer_token")
 			WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid bearer token", nil, nil, nil)
-			s.metrics.Inc("sauron_ctrl_http_requests_total", "401")
+			s.metrics.Inc("cisync_ctrl_http_requests_total", "401")
 			return
 		}
 		ctx := context.WithValue(r.Context(), tenantKey, s.cfg.TenantID)

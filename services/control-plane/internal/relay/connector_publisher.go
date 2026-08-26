@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // ConnectorPublisher pushes rendered decisions to the github-connector
@@ -88,7 +88,7 @@ func (p *ConnectorPublisher) ConsumeRendered(ctx context.Context, item store.Out
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", item.AggID)
-	req.Header.Set("X-Sauron-Signature", signBody(p.secret, body))
+	req.Header.Set("X-CISync-Signature", signBody(p.secret, body))
 	resp, err := p.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("connector publisher: post: %w", err)

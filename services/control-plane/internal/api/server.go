@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	plannerengine "cisync.dev/cisync/control-plane/internal/planner"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // auditStopTimeout bounds the graceful drain of the security-audit stream at
@@ -55,10 +55,10 @@ func NewServer(cfg *config.Config, st *store.Store, planner domain.Planner) *Ser
 		},
 		audit.Hooks{
 			OnEmitted: func(kind audit.Kind) {
-				s.metrics.Add("sauron_security_audit_total", 1, "kind", string(kind))
+				s.metrics.Add("cisync_security_audit_total", 1, "kind", string(kind))
 			},
 			OnDropped: func(kind audit.Kind) {
-				s.metrics.Add("sauron_security_audit_dropped_total", 1, "kind", string(kind))
+				s.metrics.Add("cisync_security_audit_dropped_total", 1, "kind", string(kind))
 			},
 		})
 	return s
@@ -117,7 +117,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "not_found", "resource not found", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "404")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "404")
 	})
 	return mux
 }

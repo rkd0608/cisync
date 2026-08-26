@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
-	fstore "sauron.dev/sauron/runner-fleet/internal/store"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
+	fstore "cisync.dev/cisync/runner-fleet/internal/store"
 )
 
 // maxEnqueueBodyBytes caps the enqueue request payload.

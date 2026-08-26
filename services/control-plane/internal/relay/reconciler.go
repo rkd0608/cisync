@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // Reconciler expires TTL-passed leases, cancels stale dispatched runs, and

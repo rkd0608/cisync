@@ -1,4 +1,4 @@
-// Sauron API client. WHY fail-closed: every response is validated against a
+// CISync API client. WHY fail-closed: every response is validated against a
 // zod schema derived from packages/contracts/openapi.yaml before it reaches a
 // component (charter §2 boundary validation); malformed payloads become error
 // results instead of rendered data.
@@ -31,9 +31,9 @@ import { eventsPageSchema, type EventEnvelope } from './event-schemas';
 // WHY a relative default: the browser bundle cannot rely on NEXT_PUBLIC_*
 // inlining (docker builds bake it before env exists) and direct cross-origin
 // calls to control-plane fail without CORS. The Next.js server proxies
-// /api/sauron/* → SAURON_API_URL (see next.config.ts), so the client talks to
+// /api/cisync/* → CISYNC_API_URL (see next.config.ts), so the client talks to
 // its own origin and every deployment works with zero build-time config.
-const DEFAULT_BASE_URL = '/api/sauron';
+const DEFAULT_BASE_URL = '/api/cisync';
 
 export type ApiFailure = {
   ok: false;
@@ -47,7 +47,7 @@ export type ApiSuccess<T> = { ok: true; data: T };
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 export function apiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SAURON_API_URL ?? DEFAULT_BASE_URL;
+  return process.env.NEXT_PUBLIC_CISYNC_API_URL ?? DEFAULT_BASE_URL;
 }
 
 export function isNotFound<T>(result: ApiResult<T>): boolean {

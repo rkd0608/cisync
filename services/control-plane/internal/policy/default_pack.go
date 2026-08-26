@@ -59,7 +59,7 @@ const defaultPolicyBodyJSON = `{
 // planner would fail closed on anything else (I-09). Lower specificity
 // (all-wildcard selectors) means the payments pack wins whenever it matches.
 const catchAllPolicyBodyJSON = `{
-  "policy_id": "pol_sauron_default",
+  "policy_id": "pol_cisync_default",
   "version": 1,
   "scope_selectors": {},
   "required_evidence_by_risk": {

@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // Completion is the complete-request payload gated by fence token (I-11).

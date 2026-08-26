@@ -29,7 +29,7 @@ resource "aws_iam_role_policy_attachment" "execution_managed" {
 
 data "aws_iam_policy_document" "execution_secrets" {
   statement {
-    sid       = "ReadSauronRuntimeSecrets"
+    sid       = "ReadCISyncRuntimeSecrets"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue", "ssm:GetParameters"]
     resources = values(var.secret_arns)
@@ -50,7 +50,7 @@ data "aws_iam_policy_document" "execution_secrets" {
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  name   = "read-sauron-secrets"
+  name   = "read-cisync-secrets"
   role   = aws_iam_role.execution.id
   policy = data.aws_iam_policy_document.execution_secrets.json
 }

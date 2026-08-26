@@ -5,13 +5,13 @@ import (
 	"os"
 	"testing"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/joblease"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/joblease"
 )
 
 // P0-1 / B2 / I-04: every dispatched run carries an Ed25519-signed job-lease
 // token in the enqueue payload, bound to run_id/attempt/fence with aud
-// "sauron-fleet" and a TTL within the 60-minute cap. The fleet rejects any
+// "cisync-fleet" and a TTL within the 60-minute cap. The fleet rejects any
 // mutation without such a credential, so dispatch MUST mint one.
 
 func TestDispatchMintsVerifiableJobLeaseToken(t *testing.T) {
@@ -61,7 +61,7 @@ func TestDispatchMintsVerifiableJobLeaseToken(t *testing.T) {
 	if claims.Repo != run.JobSpec.Repo || claims.Tier != run.Tier {
 		t.Fatalf("claims must bind repo/tier: %+v", claims)
 	}
-	if claims.Audience != "sauron-fleet" || claims.ID != joblease.JTIBuilds(run.ID, run.Attempt, 1) {
+	if claims.Audience != "cisync-fleet" || claims.ID != joblease.JTIBuilds(run.ID, run.Attempt, 1) {
 		t.Fatalf("audience/jti wrong: %+v", claims)
 	}
 }

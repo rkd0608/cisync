@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/cluster"
 )
 
 // ClusterSnapshot is the clustering view of one active cluster, joined from

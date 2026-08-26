@@ -6,7 +6,7 @@ import {
   autonomySemantics,
   type ActivePolicy,
 } from '@/lib/policy-schema';
-import { getActivePolicies } from '@/lib/sauron-api';
+import { getActivePolicies } from '@/lib/cisync-api';
 
 type PosturePhase = 'loading' | 'ready' | 'unavailable';
 

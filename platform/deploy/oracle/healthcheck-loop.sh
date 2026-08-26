@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Sauron Phase-1 monitoring-lite probe (RUNBOOK-oracle §9).
+# CISync Phase-1 monitoring-lite probe (RUNBOOK-oracle §9).
 # Cron every 5 min as root or ubuntu. Appends timestamped OK/FAIL lines;
-# grep FAIL /var/log/sauron-health.log to alert.
+# grep FAIL /var/log/cisync-health.log to alert.
 set -u
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 ENV_FILE="$PROJECT_DIR/.env.prod"
@@ -17,7 +17,7 @@ else
 	echo "$(ts) FAIL public web"; fail=1
 fi
 
-# Internal mesh probes ride caddy's alpine busybox wget on sauron-net.
+# Internal mesh probes ride caddy's alpine busybox wget on cisync-net.
 probe() { # probe <svc-host> <port> <path>
 	if $COMPOSE exec -T caddy \
 		wget -qO- --timeout=5 "http://$1:$2$3" > /dev/null 2>&1; then
@@ -33,7 +33,7 @@ probe github-connector 8083 /healthz
 
 # Postgres liveness via pg_isready inside the db container itself.
 pg=$($COMPOSE ps -q postgres)
-if [ -n "$pg" ] && docker exec "$pg" pg_isready -U sauron -d sauron > /dev/null 2>&1; then
+if [ -n "$pg" ] && docker exec "$pg" pg_isready -U cisync -d cisync > /dev/null 2>&1; then
 	echo "$(ts) OK postgres"
 else
 	echo "$(ts) FAIL postgres"; fail=1

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sauron.dev/contracts/events.schema.json",
-  "title": "Sauron Ledger Events v1",
+  "$id": "https://cisync.dev/contracts/events.schema.json",
+  "title": "CISync Ledger Events v1",
   "description": "Normative event envelope + CORE payload definitions. Envelope hash chain: entry_hash = sha256(seq || id || type || version || payload_sha256 || prev_hash). Event names are <aggregate>.<verb_past> (frozen, D4).",
   "$defs": {
     "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },

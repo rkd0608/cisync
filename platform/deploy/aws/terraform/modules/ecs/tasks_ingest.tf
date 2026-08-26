@@ -23,16 +23,16 @@ resource "aws_ecs_task_definition" "ingest" {
       portMappings = [{ name = "http", containerPort = 8080, protocol = "tcp" }]
 
       environment = [
-        { name = "SAURON_INGEST_ADDR", value = ":8080" },
-        { name = "SAURON_INGEST_CTRL_URL", value = "http://control-plane.sauron.local:8081" },
+        { name = "CISYNC_INGEST_ADDR", value = ":8080" },
+        { name = "CISYNC_INGEST_CTRL_URL", value = "http://control-plane.cisync.local:8081" },
         # WEBHOOK_SECRETS (rotation list) is NOT set at boot: singular secret
         # below is primary. Rotation per RUNBOOK §6 adds the dual list via a
         # one-off task-def revision, then removes it after <=24h overlap.
       ]
 
       secrets = [
-        { name = "SAURON_INGEST_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:ingest_dsn::" },
-        { name = "SAURON_INGEST_WEBHOOK_SECRET", valueFrom = var.secret_arns["webhook_secret"] },
+        { name = "CISYNC_INGEST_PG_DSN", valueFrom = "${var.secret_arns["db_dsns"]}:ingest_dsn::" },
+        { name = "CISYNC_INGEST_WEBHOOK_SECRET", valueFrom = var.secret_arns["webhook_secret"] },
       ]
 
       logConfiguration = local.logs["ingest"]

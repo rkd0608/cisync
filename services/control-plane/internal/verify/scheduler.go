@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // VerifyFn abstracts one chain-verification pass so scheduling policy is
@@ -39,10 +39,10 @@ type Scheduler struct {
 	audit    AuditSink // required; failures must land in ctrl.security_audit
 	tenantID string
 	// NotifyResult reports "ok" | "fail" per finished pass so main can bump
-	// sauron_ledger_verify_result{status} on the shared registry.
+	// cisync_ledger_verify_result{status} on the shared registry.
 	NotifyResult func(status string)
 	// OnAuditEmitted fires after a chain-verify failure row persisted, for
-	// sauron_security_audit_total{kind} parity.
+	// cisync_security_audit_total{kind} parity.
 	OnAuditEmitted func(kind string)
 }
 

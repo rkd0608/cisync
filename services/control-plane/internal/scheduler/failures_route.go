@@ -6,12 +6,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	failurepkg "sauron.dev/sauron/control-plane/internal/failure"
-	policypkg "sauron.dev/sauron/control-plane/internal/policy"
-	redact "sauron.dev/sauron/control-plane/internal/redact"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	failurepkg "cisync.dev/cisync/control-plane/internal/failure"
+	policypkg "cisync.dev/cisync/control-plane/internal/policy"
+	redact "cisync.dev/cisync/control-plane/internal/redact"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // onRunFailed classifies the failure, records the FailureCase, and routes:

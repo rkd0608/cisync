@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // Get implements Store.

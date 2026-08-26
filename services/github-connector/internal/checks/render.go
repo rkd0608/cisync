@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // CheckName is the stable check-run name agents and branch protection see.

@@ -135,7 +135,7 @@ func TestClassifyCausalSignalsAndPaths(t *testing.T) {
 
 func TestReproductionCommandExtraction(t *testing.T) {
 	got := ReproductionCommand(logCart)
-	require.Equal(t, "go test sauron.dev/sauron/control-plane/services/cart -run '^TestTotals$' -count=1", got)
+	require.Equal(t, "go test cisync.dev/cisync/control-plane/services/cart -run '^TestTotals$' -count=1", got)
 
 	shell := "$ make test-integration\nall good"
 	require.Equal(t, "make test-integration", ReproductionCommand(shell))

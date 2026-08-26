@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	"sauron.dev/sauron/github-connector/internal/config"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/sweeper"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/config"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/sweeper"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // newSweeperRunner builds the stalled-check sweeper loop closure, keeping

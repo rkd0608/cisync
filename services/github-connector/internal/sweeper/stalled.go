@@ -1,5 +1,5 @@
 // Package sweeper is the stalled-check safety net (plan §4.2): check runs
-// stuck non-completed beyond SAURON_CONN_STALLED_CHECK_AGE flip to neutral
+// stuck non-completed beyond CISYNC_CONN_STALLED_CHECK_AGE flip to neutral
 // so a required check can never stay yellow forever.
 package sweeper
 
@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/checks"
-	"sauron.dev/sauron/github-connector/internal/domain"
-	"sauron.dev/sauron/github-connector/internal/emit"
-	"sauron.dev/sauron/github-connector/internal/tracking"
+	"cisync.dev/cisync/github-connector/internal/checks"
+	"cisync.dev/cisync/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/emit"
+	"cisync.dev/cisync/github-connector/internal/tracking"
 )
 
 // Publisher is the emit surface the sweeper needs (interface so tests can

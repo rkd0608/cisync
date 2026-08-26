@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sauron Phase-1 backup — Oracle Always-Free host (RUNBOOK-oracle §7).
+# CISync Phase-1 backup — Oracle Always-Free host (RUNBOOK-oracle §7).
 # Cron entry (daily 03:00): see RUNBOOK-oracle §7. Exits non-zero on any
 # failure so cron MAILTO delivers the alert; silence means success.
 #
@@ -21,20 +21,20 @@
 # so the host stays clean — deploy-time tooling only, per charter §4.
 #
 # ── R2_SETUP.md (inline) ─────────────────────────────────────────────────
-# 1. dash.cloudflare.com -> R2 -> Create bucket `sauron-backups` (default
+# 1. dash.cloudflare.com -> R2 -> Create bucket `cisync-backups` (default
 #    location, NOT public). Free tier: 10GB storage/month, zero egress fees
 #    — comfortably above our 14-retained daily dumps (~50MB each today).
 # 2. R2 -> Manage API tokens -> Create API token: permissions
-#    Object Read & Write, scope ONLY the sauron-backups bucket. Note the
+#    Object Read & Write, scope ONLY the cisync-backups bucket. Note the
 #    Access Key ID / Secret Access Key + Account ID shown ONCE.
 # 3. Create ./rclone/rclone.conf next to this script:
-#      [sauron-r2]
+#      [cisync-r2]
 #      type = s3
 #      provider = Cloudflare
 #      access_key_id = <ACCESS_KEY_ID>
 #      secret_access_key = <SECRET_ACCESS_KEY>
 #      endpoint = https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-#    chmod 600. Set RCLONE_REMOTE=sauron-r2:sauron-backups in .env.prod.
+#    chmod 600. Set RCLONE_REMOTE=cisync-r2:cisync-backups in .env.prod.
 # ────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 umask 077
@@ -70,11 +70,11 @@ pg_container=$(docker compose --env-file "$ENV_FILE" -f "$PROJECT_DIR/docker-com
 [ -n "$pg_container" ] || { echo "FATAL: postgres container not found (stack up?)" >&2; exit 3; }
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
-target="$BACKUP_DIR/sauron-pg-$stamp.dump.gz.age"
+target="$BACKUP_DIR/cisync-pg-$stamp.dump.gz.age"
 tmp="$target.partial"
 
 echo "[backup] dumping $pg_container -> $target"
-docker exec "$pg_container" pg_dump -U sauron -d sauron -Fc \
+docker exec "$pg_container" pg_dump -U cisync -d cisync -Fc \
 	| gzip \
 	| age -r "$AGE_PUBLIC_KEY" > "$tmp"
 mv "$tmp" "$target"
@@ -92,7 +92,7 @@ fi
 echo "[backup] verified ($((size / 1024)) KiB, PGDMP magic ok)"
 
 # Retention: keep newest RETAIN local archives.
-ls -1t "$BACKUP_DIR"/sauron-pg-*.dump.gz.age 2>/dev/null | tail -n +$((RETAIN + 1)) | while read -r old; do
+ls -1t "$BACKUP_DIR"/cisync-pg-*.dump.gz.age 2>/dev/null | tail -n +$((RETAIN + 1)) | while read -r old; do
 	rm -f -- "$old"
 	echo "[backup] pruned $old"
 done

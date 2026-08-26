@@ -9,10 +9,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/cluster"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/cluster"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	plannerengine "cisync.dev/cisync/control-plane/internal/planner"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // candidateSubmit mirrors openapi CandidateSubmit.
@@ -29,7 +29,7 @@ func (s *Server) handleListCandidates(w http.ResponseWriter, r *http.Request) {
 	intentID := r.PathValue("intentId")
 	if _, err := s.store.GetIntent(r.Context(), tenant, intentID); err != nil {
 		WriteDomainError(w, err)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "404")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "404")
 		return
 	}
 	cands, err := s.store.ListCandidates(r.Context(), tenant, intentID)
@@ -42,7 +42,7 @@ func (s *Server) handleListCandidates(w http.ResponseWriter, r *http.Request) {
 		out = append(out, candidateToSummary(c))
 	}
 	WriteJSON(w, http.StatusOK, out)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // handleSubmitCandidate implements POST /v1/change-intents/{intentId}/candidates:
@@ -57,7 +57,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("Idempotency-Key")
 	if len(key) < 16 || len(key) > 128 {
 		WriteError(w, http.StatusBadRequest, "validation_failed", "Idempotency-Key must be 16..128 chars", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "400")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "400")
 		return
 	}
 	reqHash := requestHash(raw)
@@ -70,7 +70,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 	}
 	if cached != nil {
 		writeRawJSON(w, cached.ResponseCode, cached.ResponseBody)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(cached.ResponseCode))
+		s.metrics.Inc("cisync_ctrl_http_requests_total", fmt.Sprint(cached.ResponseCode))
 		return
 	}
 
@@ -170,7 +170,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		s.metrics.Add("sauron_ctrl_events_appended_total", float64(len(events)))
+		s.metrics.Add("cisync_ctrl_events_appended_total", float64(len(events)))
 		body, err := json.Marshal(candidateAcceptedJSON{
 			CandidateID: cand.ID,
 			PlanSummary: planSummaryJSON(plan),
@@ -190,7 +190,7 @@ func (s *Server) handleSubmitCandidate(w http.ResponseWriter, r *http.Request) {
 		PlanSummary: planSummaryJSON(plan),
 		LeaseID:     leaseID,
 	}))
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "201")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "201")
 }
 
 // claimInitialCandidateSlot consumes the intent's reserved first-candidate

@@ -2,7 +2,7 @@
 -- One row per security-grade event (authn/authz failures, signature
 -- failures, budget violations, tamper detections, teardown revocations,
 -- chain verification failures). Append-only by convention; retention is
--- enforced by the reconciler via SAURON_CTRL_AUDIT_RETENTION_DAYS (>=90d,
+-- enforced by the reconciler via CISYNC_CTRL_AUDIT_RETENTION_DAYS (>=90d,
 -- default 90) — the table is NOT part of the hash-chained ledger because
 -- audit pruning must be able to delete old rows.
 BEGIN;

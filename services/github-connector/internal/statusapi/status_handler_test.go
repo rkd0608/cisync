@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/store"
+	"cisync.dev/cisync/github-connector/internal/store"
 )
 
 type fakeSource struct {

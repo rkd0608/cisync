@@ -1,4 +1,4 @@
-# Sauron Repository Standards (BINDING FOR ALL AGENTS)
+# CISync Repository Standards (BINDING FOR ALL AGENTS)
 
 > Every agent brief MUST reference this file AND `docs/ENGINEERING_CHARTER.md`
 > (250-line file cap, TDD, zero loose types, dependency approvals). Violations block
@@ -16,7 +16,7 @@
 ## 2. Canonical tree
 
 ```
-sauron/
+cisync/
 ├── docs/
 │   ├── ARCHITECTURE.md          # frozen architecture (synthesis of plans/)
 │   ├── INVARIANTS.md            # I-01..I-nn executable invariants
@@ -61,7 +61,7 @@ service/
 │   └── config/config.go         # env parsing only
 ├── migrations/                  # NNNN_description.up.sql / .down.sql
 │                                # NNNN = zero-padded seq, snake_case desc
-├── go.mod                       # module sauron.dev/sauron/<service>
+├── go.mod                       # module cisync.dev/cisync/<service>
 └── Dockerfile                   # multi-stage, distroless/debian-slim runtime
 ```
 
@@ -93,7 +93,7 @@ Rules:
 | Events              | `<aggregate>.<verb_past>` | `candidate.superseded`     |
 | API paths           | `/v1/<kebab-resources>`  | `/v1/change-intents`       |
 | IDs                 | `<prefix>_<ulid>`        | `int_01J...`, `cand_01J...`|
-| Env vars            | `SAURON_<SERVICE>_<NAME>`| `SAURON_CTRL_PG_DSN`       |
+| Env vars            | `CISYNC_<SERVICE>_<NAME>`| `CISYNC_CTRL_PG_DSN`       |
 | Branches            | `<wave>/<kebab-desc>`    | `w1/scheduler-core`        |
 
 ## 6. Agent conduct rules

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/audit"
 )
 
 // TeardownLeaseReasons are the lease.revocation reasons that count as
@@ -64,7 +64,7 @@ func actorJSON(a audit.Actor) []byte {
 
 // PruneSecurityAudit deletes audit rows older than the retention horizon and
 // returns how many rows went away. The reconciler calls this with
-// SAURON_CTRL_AUDIT_RETENTION_DAYS (default 90; B7 requires >=90d).
+// CISYNC_CTRL_AUDIT_RETENTION_DAYS (default 90; B7 requires >=90d).
 func (s *Store) PruneSecurityAudit(ctx context.Context, olderThan time.Time) (int64, error) {
 	tag, err := s.Pool.Exec(ctx, `DELETE FROM ctrl.security_audit WHERE ts < $1`, olderThan)
 	if err != nil {

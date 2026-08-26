@@ -10,10 +10,10 @@ FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --no-create-home sauron
+ && useradd --system --uid 10001 --no-create-home cisync
 WORKDIR /app
 COPY --from=build /out/control-plane /app/control-plane
 COPY migrations/ /app/migrations/
-USER sauron
+USER cisync
 EXPOSE 8081
 ENTRYPOINT ["/app/control-plane"]

@@ -1,4 +1,4 @@
-# Sauron Engineering Charter (BINDING FOR ALL AGENTS)
+# CISync Engineering Charter (BINDING FOR ALL AGENTS)
 
 > Source: human operator directive. Supersedes conflicting style guidance.
 > Every agent brief MUST cite this file. Violations block wave exit.

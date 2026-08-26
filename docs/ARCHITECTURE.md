@@ -1,11 +1,11 @@
-# Sauron Architecture (FROZEN v1)
+# CISync Architecture (FROZEN v1)
 
 > Normative. Builder agents implement against THIS file + `packages/contracts/`.
 > `docs/plans/*` are historical planning inputs; where they conflict, this file wins.
 
 ## 0. Mission
 
-Sauron converts an unbounded stream of agent-generated code changes into prioritized,
+CISync converts an unbounded stream of agent-generated code changes into prioritized,
 deduplicated, evidence-backed validation runs and renders explainable merge/reject/
 repair decisions over an append-only, tamper-evident decision ledger.
 
@@ -29,7 +29,7 @@ repair decisions over an append-only, tamper-evident decision ledger.
 ## 2. Services & ownership map
 
 Ports: ingest **8080** · control-plane **8081** · runner-fleet **8082** · web **3000** · postgres **5432**.
-DB: single Postgres 16 database `sauron`, schema-per-service ownership (exclusive write):
+DB: single Postgres 16 database `cisync`, schema-per-service ownership (exclusive write):
 
 | Service | PG schema | Owns (tables) |
 |---|---|---|
@@ -51,9 +51,9 @@ services/<svc>/
 ├── internal/domain/           pure types/state machines, zero I/O
 ├── internal/store/            pgx persistence (one file per aggregate)
 ├── internal/<component>/      svc-specific (scheduler/, evidence/, relay/, providers/ …)
-├── internal/config/config.go  env parsing (SAURON_<SVC>_<VAR>)
+├── internal/config/config.go  env parsing (CISYNC_<SVC>_<VAR>)
 ├── migrations/
-├── go.mod                     module sauron.dev/sauron/<svc>
+├── go.mod                     module cisync.dev/cisync/<svc>
 └── Dockerfile
 ```
 

@@ -1,4 +1,4 @@
-module sauron.dev/sauron/ingest
+module cisync.dev/cisync/ingest
 
 go 1.23
 

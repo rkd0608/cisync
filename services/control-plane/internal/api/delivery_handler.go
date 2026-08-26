@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // buildDeliveryAcceptedEvent constructs the delivery.accepted CORE event.
@@ -40,10 +40,10 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sig := r.Header.Get("X-Sauron-Signature")
+	sig := r.Header.Get("X-CISync-Signature")
 	if !verifyHMAC(s.cfg.WebhookSecret, raw, sig) {
 		WriteError(w, http.StatusUnauthorized, "unauthorized", "bad signature", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "401")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "401")
 		return
 	}
 	extID := r.Header.Get("Idempotency-Key")
@@ -77,7 +77,7 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 		// internal-protocols §1: replays answer 200 regardless of the
 		// originally recorded accept code.
 		writeRawJSON(w, http.StatusOK, []byte(`{"accepted":true,"replay":true}`))
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeRawJSON(w, code, respBody)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(code))
+		s.metrics.Inc("cisync_ctrl_http_requests_total", fmt.Sprint(code))
 		return
 	}
 	if body.DuplicateSuspect {
@@ -109,7 +109,7 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeRawJSON(w, code, respBody)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(code))
+		s.metrics.Inc("cisync_ctrl_http_requests_total", fmt.Sprint(code))
 		return
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.AppendEventsTx(r.Context(), tx, []*domain.Event{ev}); err != nil {
 			return err
 		}
-		s.metrics.Add("sauron_ctrl_events_appended_total", 1)
+		s.metrics.Add("cisync_ctrl_events_appended_total", 1)
 		if err := s.applyDeliveryEffects(r.Context(), tx, &body, view); err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRawJSON(w, responseCode, responseBody)
-	s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(responseCode))
+	s.metrics.Inc("cisync_ctrl_http_requests_total", fmt.Sprint(responseCode))
 }
 
 // applyDeliveryEffects projects §3.1 ledger effects for one delivery inside
@@ -186,7 +186,7 @@ func (s *Server) applyDeliveryEffects(ctx context.Context, tx pgx.Tx, body *deli
 	default:
 		// push.branch / installation.created / permissions_changed /
 		// check_run.rerequested / unknown.* stay delivery.accepted-only.
-		s.metrics.Add("sauron_ctrl_unknown_event_total", 1, normalizedLabel(view))
+		s.metrics.Add("cisync_ctrl_unknown_event_total", 1, normalizedLabel(view))
 		return nil
 	}
 }
@@ -218,7 +218,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		// same security event as an ingest-quarantined delivery.
 		s.auditWebhookSignatureFailure(r.Header.Get("X-GitHub-Delivery"), r.Header.Get("X-GitHub-Event"))
 		WriteError(w, http.StatusUnauthorized, "unauthorized", "bad signature", nil, nil, nil)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "401")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "401")
 		return
 	}
 	body := deliveryBody{
@@ -234,7 +234,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	err = s.store.ExecTx(r.Context(), func(tx pgx.Tx) error {
 		err := s.store.AppendEventsTx(r.Context(), tx, []*domain.Event{ev})
 		if err == nil {
-			s.metrics.Add("sauron_ctrl_events_appended_total", 1)
+			s.metrics.Add("cisync_ctrl_events_appended_total", 1)
 		}
 		return err
 	})
@@ -243,5 +243,5 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRawJSON(w, http.StatusAccepted, []byte(`{"accepted":true}`))
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "202")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "202")
 }

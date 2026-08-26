@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 // handleGetIntent implements GET /v1/change-intents/{intentId}.
@@ -14,12 +14,12 @@ func (s *Server) handleGetIntent(w http.ResponseWriter, r *http.Request) {
 	intent, err := s.store.GetIntent(r.Context(), tenant, intentID)
 	if err != nil {
 		WriteDomainError(w, err)
-		s.metrics.Inc("sauron_ctrl_http_requests_total", "404")
+		s.metrics.Inc("cisync_ctrl_http_requests_total", "404")
 		return
 	}
 	pct := s.evidenceCompleteness(r, tenant, intent.ID)
 	WriteJSON(w, http.StatusOK, intentToJSON(intent, pct))
-	s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+	s.metrics.Inc("cisync_ctrl_http_requests_total", "200")
 }
 
 // evidenceCompleteness applies the D8 formula:

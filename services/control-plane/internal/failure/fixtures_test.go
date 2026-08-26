@@ -7,14 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
-	"sauron.dev/sauron/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/policy"
 )
 
 // Shared fixtures for classify and repair scenario suites.
 const logCart = `2026-08-23T03:41:00Z INFO  runner worker=7 pid=2214
 --- FAIL: TestTotals (0.02s)
     cart_test.go:42: expected 100 got 104
-FAIL	sauron.dev/sauron/control-plane/services/cart	0.512s
+FAIL	cisync.dev/cisync/control-plane/services/cart	0.512s
 `
 
 func above(min float64) func(*testing.T, float64) {

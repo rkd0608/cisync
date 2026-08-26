@@ -1,5 +1,5 @@
 import { InstallationsClient } from '@/components/installations-client';
-import { getInstallationsStatus } from '@/lib/sauron-api';
+import { getInstallationsStatus } from '@/lib/cisync-api';
 
 export const dynamic = 'force-dynamic';
 

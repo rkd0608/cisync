@@ -1,4 +1,4 @@
-# Sauron — Edge-Case Matrix (FINAL v1)
+# CISync — Edge-Case Matrix (FINAL v1)
 
 Status: FINAL · Derived from `docs/plans/EDGE_CASES_DRAFT.md` (all 64 rows retained). Owner: QA & Verification (W1e).
 
@@ -8,7 +8,7 @@ Every row must end up automated-green, explicitly pending (owned, never a silent
 
 | Status | Meaning |
 |---|---|
-| `covered` | Asserted by an automated suite that runs today. Contract mode runs with plain `cd tests && pnpm test`; live/e2e modes arm when `SAURON_API_URL` is set (invariants) or `SAURON_E2E=1` (compose journeys). |
+| `covered` | Asserted by an automated suite that runs today. Contract mode runs with plain `cd tests && pnpm test`; live/e2e modes arm when `CISYNC_API_URL` is set (invariants) or `CISYNC_E2E=1` (compose journeys). |
 | `pending-W2` | Trigger surface or enforcement lands with W2/W3; expected behavior already encoded where possible (contract predicates, chaos hooks) and becomes a failing live assertion once the surface exists. |
 | `manual` | Requires tooling/repo access unavailable in v1 CI; accepted-risk sign-off required. |
 
@@ -129,8 +129,8 @@ All five core design-doc invariants map to dedicated suites: I-01→EC-033 (`i01
 cd tests
 pnpm install
 pnpm test              # contract mode: green without any server (live/e2e skip loudly)
-SAURON_API_URL=http://localhost:8081 pnpm exec vitest run invariants   # live probes vs compose stack
-SAURON_E2E=1 SAURON_API_URL=http://localhost:8081 pnpm exec vitest run # full compose journeys
+CISYNC_API_URL=http://localhost:8081 pnpm exec vitest run invariants   # live probes vs compose stack
+CISYNC_E2E=1 CISYNC_API_URL=http://localhost:8081 pnpm exec vitest run # full compose journeys
 pnpm exec tsx scenarios/storm.ts --concurrency 500 --repos 8 --dupes 4 [--chaos]
 ```
 

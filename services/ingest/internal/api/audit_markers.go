@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/forward"
+	"cisync.dev/cisync/ingest/internal/forward"
 )
 
 // markerBuffer bounds queued signature-failure markers awaiting their

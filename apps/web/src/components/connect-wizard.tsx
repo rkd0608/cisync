@@ -9,11 +9,11 @@ import {
   initialWizardState,
   reduceWizard,
 } from '@/lib/onboarding-machine';
-import { getInstallationsStatus } from '@/lib/sauron-api';
+import { getInstallationsStatus } from '@/lib/cisync-api';
 
 const POLL_INTERVAL_MS = 3000;
 // Read literally so the Next.js build inlines it; unset ⇒ honest operator note.
-const GITHUB_APP_INSTALL_URL = process.env.NEXT_PUBLIC_SAURON_GITHUB_APP_INSTALL_URL;
+const GITHUB_APP_INSTALL_URL = process.env.NEXT_PUBLIC_CISYNC_GITHUB_APP_INSTALL_URL;
 
 const STEP_TITLES: Record<number, string> = {
   1: 'install app',

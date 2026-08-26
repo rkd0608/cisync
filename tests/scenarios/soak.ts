@@ -32,8 +32,8 @@ const flag = (name: string, dflt: string): string => {
 
 async function main(): Promise<void> {
   const cfg: SoakConfig = {
-    apiBase: process.env.SAURON_API_URL ?? 'http://localhost:8081',
-    adminToken: process.env.SAURON_ADMIN_TOKEN ?? 'dev_admin_token_not_for_prod',
+    apiBase: process.env.CISYNC_API_URL ?? 'http://localhost:8081',
+    adminToken: process.env.CISYNC_ADMIN_TOKEN ?? 'dev_admin_token_not_for_prod',
     durationMinutes: Number(flag('minutes', '30')),
     unitsPerMinute: Number(flag('rate', '60')),
     dupes: Number(flag('dupes', '2')),

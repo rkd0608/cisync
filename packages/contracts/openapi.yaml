@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Sauron Control-Plane API
+  title: CISync Control-Plane API
   version: 1.0.0
   description: >
     Agent-native verification & integration control plane. Normative contract for v1.

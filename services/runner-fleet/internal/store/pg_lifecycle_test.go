@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // openTestPG connects to TEST_PG_DSN when provided; otherwise the test skips

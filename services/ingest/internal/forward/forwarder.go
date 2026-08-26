@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/redact"
+	"cisync.dev/cisync/ingest/internal/redact"
 )
 
 // Envelope is the wire shape of POST /internal/ctrl/deliveries.
@@ -86,7 +86,7 @@ func (f *Forwarder) Send(ctx context.Context, env Envelope) (Result, error) {
 	req.Header.Set("Idempotency-Key", env.ExtDeliveryID)
 	mac := hmac.New(sha256.New, f.Secret)
 	mac.Write(body)
-	req.Header.Set("X-Sauron-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	req.Header.Set("X-CISync-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 
 	resp, err := f.Client.Do(req)
 	if err != nil {

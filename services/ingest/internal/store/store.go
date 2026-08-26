@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/domain"
+	"cisync.dev/cisync/ingest/internal/domain"
 )
 
 // Store persists raw webhook deliveries (audit anchor, T6) and their forward

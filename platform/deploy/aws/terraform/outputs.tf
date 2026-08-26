@@ -38,6 +38,6 @@ output "secret_arns" {
 }
 
 output "cloudmap_namespace" {
-  description = "Internal service discovery namespace; services resolve <name>.sauron.local."
-  value       = "sauron.local"
+  description = "Internal service discovery namespace; services resolve <name>.cisync.local."
+  value       = "cisync.local"
 }

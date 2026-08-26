@@ -6,15 +6,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/audit"
-	"sauron.dev/sauron/control-plane/internal/domain"
-	evidencepkg "sauron.dev/sauron/control-plane/internal/evidence"
-	"sauron.dev/sauron/control-plane/internal/relay"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	evidencepkg "cisync.dev/cisync/control-plane/internal/evidence"
+	"cisync.dev/cisync/control-plane/internal/relay"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // SetAuditObserver wires the metric callback fired after every successful
-// security-audit emission (sauron_security_audit_total{kind}). Optional:
+// security-audit emission (cisync_security_audit_total{kind}). Optional:
 // unset keeps emissions metric-free in unit tests.
 func (e *EngineScheduler) SetAuditObserver(notify func(kind string)) {
 	e.auditMu.Lock()

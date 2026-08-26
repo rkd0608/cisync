@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/control-plane/internal/config"
-	"sauron.dev/sauron/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/config"
+	"cisync.dev/cisync/control-plane/internal/domain"
 )
 
 func testConfig() *config.Config {
@@ -99,7 +99,7 @@ func TestDeliveryHMACFailure(t *testing.T) {
 	badSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/internal/ctrl/deliveries", strings.NewReader(body))
-	req.Header.Set("X-Sauron-Signature", badSig)
+	req.Header.Set("X-CISync-Signature", badSig)
 	req.Header.Set("Idempotency-Key", "delivery-12345678")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

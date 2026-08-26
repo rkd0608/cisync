@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // MemoryStore is an in-process Store mirroring the fencing, uniqueness, and

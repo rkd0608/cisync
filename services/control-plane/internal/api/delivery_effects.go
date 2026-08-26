@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // nowUTC pins effect timestamps to UTC for deterministic serialization.
@@ -33,7 +33,7 @@ func (s *Server) applyPROpened(ctx context.Context, tx pgx.Tx, tenant string, vi
 		return err
 	}
 	if suspended {
-		s.metrics.Add("sauron_ctrl_webhook_suspended_skips_total", 1)
+		s.metrics.Add("cisync_ctrl_webhook_suspended_skips_total", 1)
 		return nil
 	}
 	intent, err := s.store.IntentForPR(ctx, tenant, view.Repo, view.PR.Number)
@@ -55,7 +55,7 @@ func (s *Server) applyPRSynchronize(ctx context.Context, tx pgx.Tx, tenant, extI
 	intent, err := s.store.IntentForPR(ctx, tenant, view.Repo, view.PR.Number)
 	if errorsIsNotFound(err) {
 		// Unknown PR: nothing to revise; the delivery stays recorded+acked.
-		s.metrics.Add("sauron_ctrl_webhook_orphans_total", 1)
+		s.metrics.Add("cisync_ctrl_webhook_orphans_total", 1)
 		return nil
 	}
 	if err != nil {
@@ -68,12 +68,12 @@ func (s *Server) applyPRSynchronize(ctx context.Context, tx pgx.Tx, tenant, extI
 	switch {
 	case known && live:
 		// Same-head redelivery: duplicate_sha semantics ⇒ 200 replay.
-		s.metrics.Add("sauron_ctrl_webhook_replays_total", 1)
+		s.metrics.Add("cisync_ctrl_webhook_replays_total", 1)
 		return nil
 	case known:
 		// Out-of-order guard: this head was already superseded/cancelled, so
 		// a stale redelivery must never supersede newer work (plan §3.2).
-		s.metrics.Add("sauron_ctrl_webhook_stale_heads_total", 1)
+		s.metrics.Add("cisync_ctrl_webhook_stale_heads_total", 1)
 		return nil
 	}
 	prior, err := store.LiveCandidatesForIntentTx(ctx, tx, tenant, intent.ID)

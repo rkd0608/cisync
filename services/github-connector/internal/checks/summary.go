@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"sauron.dev/sauron/github-connector/internal/domain"
+	"cisync.dev/cisync/github-connector/internal/domain"
 )
 
 // The summary strings below are BYTE-FROZEN contract surface (plan §4.3):
@@ -62,9 +62,9 @@ func lifecycleSummary(e *domain.LifecycleEnvelope, detailsURL string, phase doma
 	var b strings.Builder
 	switch phase {
 	case domain.PhaseQueued:
-		fmt.Fprintf(&b, "**Queued** · Sauron accepted candidate %s for verification\n", e.CandidateID)
+		fmt.Fprintf(&b, "**Queued** · CISync accepted candidate %s for verification\n", e.CandidateID)
 	case domain.PhaseInProgress:
-		fmt.Fprintf(&b, "**In progress** · Sauron verification started for %s\n", e.CandidateID)
+		fmt.Fprintf(&b, "**In progress** · CISync verification started for %s\n", e.CandidateID)
 	}
 	fmt.Fprintf(&b, "→ Full dossier: %s\n", detailsURL)
 	switch phase {

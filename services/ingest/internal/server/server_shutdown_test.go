@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"sauron.dev/sauron/ingest/internal/config"
-	"sauron.dev/sauron/ingest/internal/obs"
-	"sauron.dev/sauron/ingest/internal/store"
+	"cisync.dev/cisync/ingest/internal/config"
+	"cisync.dev/cisync/ingest/internal/obs"
+	"cisync.dev/cisync/ingest/internal/store"
 )
 
 // freePort reserves an ephemeral port and releases it so the server under

@@ -3,9 +3,9 @@ package scheduler
 import (
 	"encoding/json"
 
-	"sauron.dev/sauron/control-plane/internal/domain"
-	policypkg "sauron.dev/sauron/control-plane/internal/policy"
-	"sauron.dev/sauron/control-plane/internal/store"
+	"cisync.dev/cisync/control-plane/internal/domain"
+	policypkg "cisync.dev/cisync/control-plane/internal/policy"
+	"cisync.dev/cisync/control-plane/internal/store"
 )
 
 // dispatch_ranking.go holds the pure ranking/admission-support functions,

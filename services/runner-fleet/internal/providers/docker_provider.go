@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"sauron.dev/sauron/runner-fleet/internal/domain"
+	"cisync.dev/cisync/runner-fleet/internal/domain"
 )
 
 // NOT-FOR-PRODUCTION: DockerProvider executes agent-supplied job specs inside
@@ -32,7 +32,7 @@ type DockerHandle struct {
 }
 
 // DockerProvider runs each job in a locked-down container (opt-in via
-// SAURON_FLEET_PROVIDER=docker). DEV/DEMO ONLY — see NOT-FOR-PRODUCTION note.
+// CISYNC_FLEET_PROVIDER=docker). DEV/DEMO ONLY — see NOT-FOR-PRODUCTION note.
 type DockerProvider struct {
 	Bin     string
 	Image   string
@@ -147,7 +147,7 @@ func commandFor(job domain.Job) string {
 	if kind == "" {
 		kind = "hermetic_build"
 	}
-	return fmt.Sprintf("echo 'sauron %s %s@%s'", kind, job.Spec.Repo, job.Spec.HeadSHA)
+	return fmt.Sprintf("echo 'cisync %s %s@%s'", kind, job.Spec.Repo, job.Spec.HeadSHA)
 }
 
 func deadlinePassed(deadline time.Time, ctx context.Context) bool {
