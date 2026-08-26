@@ -16,6 +16,7 @@ import (
 
 	"sauron.dev/sauron/ingest/internal/forward"
 	"sauron.dev/sauron/ingest/internal/obs"
+	"sauron.dev/sauron/ingest/internal/seen"
 	"sauron.dev/sauron/ingest/internal/store"
 )
 
@@ -78,7 +79,8 @@ func newHarnessSecrets(t *testing.T, ctrlHandler http.HandlerFunc, secrets ...st
 	for i, s := range secrets {
 		secretBytes[i] = []byte(s)
 	}
-	handler := NewGitHubHookHandler(h.st, fw, metrics, logger, func() time.Time { return h.currentTime() }, 1024, 5*time.Minute, secretBytes)
+	handler := NewGitHubHookHandler(h.st, fw, metrics, logger, func() time.Time { return h.currentTime() }, 1024, 5*time.Minute, secretBytes,
+		seen.New(64, time.Hour, func() time.Time { return h.currentTime() }))
 	h.svc = httptest.NewServer(handler)
 	t.Cleanup(func() {
 		h.ctrl.Close()

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"sauron.dev/sauron/ingest/internal/config"
@@ -43,11 +44,24 @@ func main() {
 
 	srv := server.New(cfg, st, logger, metrics)
 
-	go srv.Retry.Run(ctx)
-	go srv.GaugeDeliveries(ctx, cfg.RetryInterval)
+	// H4: track background workers so the PG pool closes only after they
+	// stopped issuing queries (SIGTERM ⇒ drain HTTP → wait workers → close).
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		srv.Retry.Run(ctx)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		srv.GaugeDeliveries(ctx, cfg.RetryInterval)
+	}()
 
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("http server failed", slog.String("err", err.Error()))
 		os.Exit(1)
 	}
+	stop() // release signal handling before waiting on workers
+	workers.Wait()
 }

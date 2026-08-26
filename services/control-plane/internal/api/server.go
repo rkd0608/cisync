@@ -1,14 +1,22 @@
 package api
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"sauron.dev/sauron/control-plane/internal/audit"
 	"sauron.dev/sauron/control-plane/internal/config"
 	"sauron.dev/sauron/control-plane/internal/domain"
 	plannerengine "sauron.dev/sauron/control-plane/internal/planner"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
+
+// auditStopTimeout bounds the graceful drain of the security-audit stream at
+// shutdown: long enough to flush a full buffer against local PG, short
+// enough to keep SIGTERM turnaround well inside the orchestrator budget.
+const auditStopTimeout = 3 * time.Second
 
 // Server wires HTTP handlers to the store and domain ports.
 type Server struct {
@@ -16,21 +24,72 @@ type Server struct {
 	store   *store.Store
 	planner domain.Planner
 	metrics *Metrics
+	audit   *audit.Stream
 	started time.Time
 }
 
 // NewServer constructs the server; planner may be nil to use the real
 // selection engine backed by the compiled-in default policy registry.
+// The server owns the dedicated security-audit stream (THREAT_MODEL B7):
+// fire-and-forget emissions persist via the store sink with drop-oldest
+// shedding under flood.
 func NewServer(cfg *config.Config, st *store.Store, planner domain.Planner) *Server {
 	if planner == nil {
 		planner = plannerengine.NewEnginePlanner(nil)
 	}
-	return &Server{
+	s := &Server{
 		cfg:     cfg,
 		store:   st,
 		planner: planner,
 		metrics: NewMetrics(),
 		started: time.Now(),
+	}
+	s.audit = audit.NewStream(audit.DefaultCapacity,
+		func(ctx context.Context, ev audit.Event) error {
+			if s.store == nil {
+				// Store-less constructions are test-only; nothing to
+				// persist, so the event counts as dropped.
+				return errAuditNoStore
+			}
+			return s.store.InsertSecurityAudit(ctx, ev)
+		},
+		audit.Hooks{
+			OnEmitted: func(kind audit.Kind) {
+				s.metrics.Add("sauron_security_audit_total", 1, "kind", string(kind))
+			},
+			OnDropped: func(kind audit.Kind) {
+				s.metrics.Add("sauron_security_audit_dropped_total", 1, "kind", string(kind))
+			},
+		})
+	return s
+}
+
+var errAuditNoStore = auditSinkError("no store wired")
+
+type auditSinkError string
+
+func (e auditSinkError) Error() string { return string(e) }
+
+// Audit exposes the security-audit stream for lifecycle management (main
+// stops it during graceful shutdown) and for H3 verify-scheduler wiring.
+func (s *Server) Audit() *audit.Stream { return s.audit }
+
+// Metrics exposes the registry so background workers outside this package
+// (scheduler, verifier) can share ONE consistent exposition endpoint.
+func (s *Server) Metrics() *Metrics { return s.metrics }
+
+// UseAuditSink replaces the audit stream's persistence sink. Test seam:
+// httptest emission assertions capture events without a database.
+func (s *Server) UseAuditSink(sink audit.Sink) {
+	s.audit.ReplaceSink(sink)
+}
+
+// StopAudit drains and stops the audit stream; called by main on shutdown
+// after HTTP serving ended so in-flight requests can still emit.
+func (s *Server) StopAudit() {
+	if flushed := s.audit.Stop(auditStopTimeout); !flushed {
+		slog.Warn("security audit stream flush timed out; buffered rows lost",
+			slog.Duration("timeout", auditStopTimeout))
 	}
 }
 

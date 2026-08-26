@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"sauron.dev/sauron/control-plane/internal/audit"
 	"sauron.dev/sauron/control-plane/internal/domain"
 )
 
@@ -126,6 +127,22 @@ func releaseLeaseTx(ctx context.Context, s *Store, tx pgx.Tx, l *domain.Lease, r
 	}
 	if err := s.AppendEventsTx(ctx, tx, []*domain.Event{ev}); err != nil {
 		return err
+	}
+	// B7: teardown-class revocations are security-audit events. Emission
+	// rides the SAME tx as lease.revoked so the audit trail can never show
+	// fewer teardowns than the ledger.
+	if _, tornDown := TeardownLeaseReasons[reason]; tornDown {
+		aev, aerr := audit.New(l.TenantID, audit.KindLeaseRevocation,
+			audit.Actor{Kind: string(domain.ActorSystem), ID: "control-plane"},
+			map[string]any{"lease_id": l.ID, "intent_id": l.IntentID},
+			map[string]any{"reason": reason})
+		if aerr != nil {
+			return aerr
+		}
+		if err := insertSecurityAuditTx(ctx, tx, aev); err != nil {
+			return err
+		}
+		s.notifyAudit(audit.KindLeaseRevocation)
 	}
 	tag, err := tx.Exec(ctx,
 		`UPDATE ctrl.leases SET state=$3, seq=$4, released_at=now() WHERE id=$1 AND tenant_id=$2 AND state='granted'`,

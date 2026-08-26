@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -72,11 +73,17 @@ func runServer() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	st, cfg, cleanup := loadStore(ctx, true)
-	defer cleanup()
+	st, cfg, closeStore := loadStore(ctx, true)
 
 	srv := api.NewServer(cfg, st, nil)
 	fleet := relay.NewFleetClient(cfg.FleetURL)
+
+	// Metric parity: store-side same-tx audit inserts (teardown revocations)
+	// must surface on the SAME counter as streamed emissions.
+	securityAuditCounter := func(kind string) {
+		srv.Metrics().Add("sauron_security_audit_total", 1, "kind", kind)
+	}
+	st.AuditObserver = securityAuditCounter
 
 	// Job-lease minting is REQUIRED: the fleet rejects unauthenticated
 	// mutations (B2/I-04), so dispatch without a signer would strand runs.
@@ -88,11 +95,17 @@ func runServer() {
 
 	relayCtx, cancelRelay := context.WithCancel(ctx)
 	defer cancelRelay()
+
+	// workers tracks every background loop so graceful shutdown can WAIT
+	// for them to finish BEFORE closing the PG pool they write through.
+	var workers sync.WaitGroup
+
 	outbox := relay.New(st, cfg.RelayBatchSize, cfg.RelayPollInterval)
 
 	// Real engine scheduler: priority ranking + policy-capped admission +
 	// fleet dispatch + completion ingestion (evidence/failure/decisions).
 	engineScheduler := scheduler.NewEngine(st, fleet, "sim", cfg.SchedBatch, leaseSigner)
+	engineScheduler.SetAuditObserver(securityAuditCounter)
 
 	outbox.Register("validation.requested", func(ctx context.Context, item store.OutboxItem) error {
 		return st.ExecTx(ctx, func(tx pgx.Tx) error {
@@ -105,9 +118,42 @@ func runServer() {
 			cfg.WebhookSecret, envOr("SAURON_CTRL_DETAILS_URL", "http://localhost:3000"))
 		outbox.Register("decision.rendered", publisher.ConsumeRendered)
 	}
-	go outbox.Run(relayCtx)
-	go engineScheduler.Run(relayCtx, cfg.TickInterval)
-	go relay.NewReconciler(st, fleet, cfg.StaleRunMaxAge).Run(relayCtx, cfg.ReconcileInterval)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		outbox.Run(relayCtx)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		engineScheduler.Run(relayCtx, cfg.TickInterval)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		relay.NewReconciler(st, fleet, cfg.StaleRunMaxAge, cfg.AuditRetentionDays).
+			Run(relayCtx, cfg.ReconcileInterval)
+	}()
+
+	// H3: in-process nightly chain verification (SAURON_CTRL_VERIFY_INTERVAL;
+	// 0 = off, prod 24h). Same verifier as the `verify` subcommand; failures
+	// log structured, bump a metric, and land a security_audit row — but do
+	// NOT halt serving (see verify.Scheduler WHY comment).
+	if cfg.VerifyInterval > 0 {
+		signer := resolveLedgerSigner(cfg)
+		verifier := verify.New(st, signer)
+		sched := verify.NewScheduler(verify.FromVerifier(verifier), cfg.VerifyInterval,
+			st, cfg.TenantID,
+			func(status string) {
+				srv.Metrics().Add("sauron_ledger_verify_result", 1, "status", status)
+			},
+			securityAuditCounter)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			sched.Run(relayCtx)
+		}()
+	}
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -122,9 +168,30 @@ func runServer() {
 	}()
 
 	<-ctx.Done()
+	// Graceful shutdown order (H4): stop accepting connections and drain
+	// in-flight requests (10s budget) → cancel background loops → WAIT for
+	// them → flush the audit stream → only then close the PG pool, so no
+	// worker writes into a closed pool.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = httpServer.Shutdown(shutdownCtx)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		slog.Warn("http drain incomplete at shutdown", slog.String("err", err.Error()))
+	}
+	cancelRelay()
+	workers.Wait()
+	srv.StopAudit()
+	closeStore()
+}
+
+// resolveLedgerSigner loads the checkpoint signing key when configured;
+// without one the verifier still checks chain structure (dev posture).
+func resolveLedgerSigner(cfg *config.Config) *store.Signer {
+	if cfg.LedgerKeyFile == "" {
+		return nil
+	}
+	sig, err := store.LoadSigningKey(cfg.LedgerKeyFile)
+	must(err, "load ledger key")
+	return sig
 }
 
 func envOr(key, def string) string {

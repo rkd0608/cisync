@@ -14,3 +14,7 @@ bin/
 *.test
 platform/dev-keys/*
 tests/scenarios/reports/
+.env.local
+**/.env.local
+
+platform/deploy/aws/terraform/.terraform/

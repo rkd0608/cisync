@@ -52,11 +52,16 @@ func (e *EngineScheduler) applyCompletion(ctx context.Context, job relay.Complet
 		return false, fmt.Errorf("load run: %w", err)
 	}
 	if job.FenceToken != run.FenceToken || job.Attempt != run.Attempt {
-		// Stale epoch (reclaimed/cancelled elsewhere): diagnostics only —
-		// never mutate state from a stale fence holder (I-11).
+		// Stale epoch (reclaimed/cancelled elsewhere): never mutate state
+		// from a stale fence holder (I-11). B7: this rejection is a
+		// security-audit event. WHY absorbed-as-processed: the §4 feed
+		// re-presents accepted rows forever, so without absorption the
+		// stale row would re-audit every tick; marking it processed gives
+		// the audit emission natural exactly-once semantics (I-12) while
+		// leaving the run's CURRENT epoch free to complete normally.
 		logf("stale completion %s@%d (ctrl fence %d); discarded",
 			job.RunID, job.FenceToken, run.FenceToken)
-		return false, nil
+		return false, e.absorbStaleCompletion(ctx, run, job)
 	}
 	// Decision freshness: a completion for an already-terminal run or a
 	// decided candidate is absorbed as a diagnostic (I-08) and marked

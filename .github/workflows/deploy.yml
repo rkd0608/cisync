@@ -1,0 +1,62 @@
+name: deploy
+
+# Minimal operator-triggered pipeline: build+push images, then terraform apply.
+# Approval gate lives in the GitHub ENVIRONMENT (Settings > Environments >
+# required reviewers for `staging` / `prod`) — NOT in this file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (matches terraform var.environment)"
+        type: choice
+        options: [staging, prod]
+        required: true
+      image_tag:
+        description: "Image tag = git short SHA to build & deploy (default: HEAD)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write # OIDC -> AWS (no long-lived keys)
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_WORKDIR: platform/deploy/aws/terraform
+
+jobs:
+  push-images:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }} # operator-set OIDC role
+          aws-region: ${{ env.AWS_REGION }}
+      - run: ./push-images.sh --tag "${{ inputs.image_tag || github.sha }}"
+        working-directory: platform/deploy/aws
+
+  terraform-apply:
+    needs: push-images
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }} # required-reviewers gate lands HERE
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ">=1.6.0"
+      - run: terraform init -input=false
+      - run: >-
+          terraform apply -auto-approve -input=false
+          -var="environment=${{ inputs.environment }}"
+          -var="image_tag=${{ inputs.image_tag || github.sha }}"
+          -var-file=terraform.tfvars

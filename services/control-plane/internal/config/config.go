@@ -49,6 +49,13 @@ type Config struct {
 	// RerunMaxPerCandidate caps POST /candidates/{id}/revalidate per
 	// candidate (ruling #2: default 2).
 	RerunMaxPerCandidate int
+	// VerifyInterval drives the in-process nightly chain verifier (H3):
+	// 0 disables the loop (the `verify` subcommand stays available); prod
+	// sets 24h per the I-07 nightly posture.
+	VerifyInterval time.Duration
+	// AuditRetentionDays bounds ctrl.security_audit row age (B7 >=90d);
+	// pruned by the reconciler. Default 90.
+	AuditRetentionDays int
 }
 
 // parseList splits a comma-separated env list, trimming whitespace and
@@ -134,6 +141,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.RerunMaxPerCandidate, err = envInt("SAURON_CTRL_RERUN_MAX_PER_CANDIDATE", 2); err != nil {
 		return nil, err
+	}
+	if cfg.VerifyInterval, err = envDuration("SAURON_CTRL_VERIFY_INTERVAL", 0); err != nil {
+		return nil, err
+	}
+	if cfg.AuditRetentionDays, err = envInt("SAURON_CTRL_AUDIT_RETENTION_DAYS", 90); err != nil {
+		return nil, err
+	}
+	if cfg.AuditRetentionDays < 90 {
+		return nil, fmt.Errorf("config SAURON_CTRL_AUDIT_RETENTION_DAYS: %d below the B7 90-day floor", cfg.AuditRetentionDays)
 	}
 	cfg.TrackedBaseBranches = parseList(env("SAURON_CTRL_TRACKED_BASE_BRANCHES", "main,master"))
 	if len(cfg.TrackedBaseBranches) == 0 {

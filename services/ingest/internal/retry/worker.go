@@ -93,12 +93,13 @@ func (w *Worker) processOne(ctx context.Context, d domain.Delivery) {
 		return
 	}
 	env := forward.Envelope{
-		Source:        d.Source,
-		ExtDeliveryID: d.ExtDeliveryID,
-		EventKind:     d.EventKind,
-		Repo:          d.Repo,
-		ReceivedAt:    d.ReceivedAt.UTC(),
-		Payload:       json.RawMessage(clean),
+		Source:           d.Source,
+		ExtDeliveryID:    d.ExtDeliveryID,
+		EventKind:        d.EventKind,
+		Repo:             d.Repo,
+		ReceivedAt:       d.ReceivedAt.UTC(),
+		Payload:          json.RawMessage(clean),
+		DuplicateSuspect: d.DuplicateSuspect,
 	}
 
 	result := forward.ResultUnavailable

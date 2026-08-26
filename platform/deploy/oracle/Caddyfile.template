@@ -1,0 +1,56 @@
+# Sauron Phase-1 public ingress (Caddy v2).
+# Filled by compose env: DOMAIN + ACME_EMAIL come from .env.prod via the
+# caddy service `environment:` block (Caddyfile {$VAR} substitution).
+#
+# Routing contract (= AWS ALB kit, ARCHITECTURE D2):
+#   /hooks/github*  -> ingest:8080        (webhook ingress, ONLY write surface)
+#   /api/sauron/*   -> web:3000           (web's server-side proxy injects bearer)
+#   everything else -> web:3000
+#   /metrics*, /internal/* -> 403         (admin surfaces never publicly routable)
+
+{
+	email {$ACME_EMAIL}
+	# WHY on: GitHub webhook deliveries are POSTed once per event with a short
+	# redelivery window; retries need the server to be explicit about timeouts.
+	servers {
+		timeouts {
+			read_body 30s
+		}
+	}
+}
+
+https://{$DOMAIN} {
+
+	# ---- Admin surfaces: explicit deny BEFORE any proxy -------------------
+	@blocked path /metrics /metrics/* /internal /internal/*
+	respond @blocked 403
+
+	# ---- Webhook ingress ---------------------------------------------------
+	handle /hooks/github* {
+		reverse_proxy ingest:8080
+	}
+
+	# ---- Dashboard API (web proxies to control-plane internally) ----------
+	handle /api/sauron/* {
+		reverse_proxy web:3000
+	}
+
+	# ---- Everything else: dashboard ---------------------------------------
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# ---------------------------------------------------------------------------
+# BARE-IP FALLBACK (no DNS name pointing at this host):
+# Let's Encrypt cannot issue for bare IPs. Replace the block above with:
+#
+#   https://:443 {
+#       tls internal            # self-signed; clients must trust/override
+#       ... same routes ...
+#   }
+#
+# and remove DOMAIN/ACME_EMAIL from caddy environment. GitHub App webhooks
+# REQUIRE a valid TLS cert — bare-IP mode is dashboard-only; wire webhooks via
+# the dev tunnel profile instead (docs/RUNBOOK.md §2 step 3).
+# ---------------------------------------------------------------------------

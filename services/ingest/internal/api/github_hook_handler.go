@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 	"sauron.dev/sauron/ingest/internal/domain"
 	"sauron.dev/sauron/ingest/internal/forward"
 	"sauron.dev/sauron/ingest/internal/obs"
+	"sauron.dev/sauron/ingest/internal/seen"
 	"sauron.dev/sauron/ingest/internal/store"
 )
 
@@ -38,12 +38,19 @@ type GitHubHookHandler struct {
 	// secrets is the ordered rotation list (EC-010); the forwarder's own
 	// secret stays the PRIMARY one used to sign the ctrl hop.
 	secrets [][]byte
+	// seen is the H2 replay window: bounded LRU of payload class hashes;
+	// fresh-GUID content matching a recent class is forwarded record-only.
+	seen *seen.Cache
+	// markers ships signature-failure audit markers to ctrl (B7) on a
+	// bounded background queue.
+	markers *markerSender
 }
 
 // NewGitHubHookHandler wires the webhook edge handler. maxBody is the payload
 // size cap; skew is the tolerated timestamp drift; secrets is the ordered
-// rotation verification list (any match passes).
-func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, maxBody int64, skew time.Duration, secrets [][]byte) *GitHubHookHandler {
+// rotation verification list (any match passes); seenCache is the H2 replay
+// seen-window (nil disables duplicate-suspect detection).
+func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics, logger *slog.Logger, nowFn func() time.Time, maxBody int64, skew time.Duration, secrets [][]byte, seenCache *seen.Cache) *GitHubHookHandler {
 	if len(secrets) == 0 {
 		// Fail-closed fallback for callers predating rotation wiring: verify
 		// against the forwarder's primary secret alone.
@@ -59,8 +66,13 @@ func NewGitHubHookHandler(st store.Store, fw *forward.Forwarder, m *obs.Metrics,
 		maxBody:   maxBody,
 		skew:      skew,
 		secrets:   secrets,
+		seen:      seenCache,
+		markers:   newMarkerSender(fw, logger),
 	}
 }
+
+// Close drains the audit-marker queue at shutdown (H4); safe to call once.
+func (h *GitHubHookHandler) Close() { h.markers.close() }
 
 // acquire marks a delivery as being processed; false means another request is
 // currently handling the same (source, ext_delivery_id) pair.
@@ -124,6 +136,19 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.logger.Info("quarantine audit row skipped",
 				slog.String("ext_delivery_id", deliveryID), slog.String("err", auditErr.Error()))
 		}
+		// B7: report the signature failure to control-plane's security-audit
+		// stream via a signed marker (SEAM DECISION recorded in ctrl
+		// delivery_handler.go). Nonce-suffixed id ⇒ exactly one audit row
+		// per triggering request, never colliding with a valid redelivery.
+		h.markers.send(forward.Envelope{
+			Source:           domain.SourceGitHub,
+			ExtDeliveryID:    deliveryID + ".sigfailed." + ulid.Make().String(),
+			EventKind:        "sig_failed",
+			Repo:             extractRepo(raw),
+			ReceivedAt:       h.nowFn(),
+			Payload:          json.RawMessage(`{"reason":"signature_verification_failed"}`),
+			QuarantineReason: "signature_verification_failed",
+		})
 		http.Error(w, `{"error":{"code":"unauthorized","message":"invalid signature"}}`, http.StatusUnauthorized)
 		return
 	}
@@ -144,6 +169,25 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.release(deliveryID)
 
+	// H2 replay seen-window: content identity independent of the GUID. A
+	// fresh-GUID delivery whose class hash was seen inside the window is a
+	// near-replay suspect — accepted (never rejected; collisions fail open),
+	// marked durably, and forwarded with the record-only diagnostic flag.
+	classHash := ""
+	duplicateSuspect := false
+	if h.seen != nil {
+		classHash = seen.ClassHash(domain.SourceGitHub, extractRepo(raw), eventKind, raw)
+		duplicateSuspect = h.seen.SeenOrAdd(classHash)
+	}
+
+	status := domain.StatusPending
+	if duplicateSuspect {
+		status = domain.StatusDuplicateSuspect
+		h.metrics.CounterInc("ingest_duplicate_suspect_total", "Fresh-GUID deliveries flagged by the replay seen-window")
+		h.logger.Warn("duplicate_suspect delivery admitted record-only",
+			slog.String("ext_delivery_id", deliveryID), slog.String("class_hash", classHash))
+	}
+
 	d := domain.Delivery{
 		ID:            "dlv_" + ulid.Make().String(),
 		Source:        domain.SourceGitHub,
@@ -157,9 +201,11 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"x-hub-signature-256": sigHeader,
 			"content-type":        r.Header.Get("Content-Type"),
 		},
-		Payload:    raw,
-		Status:     domain.StatusPending,
-		ReceivedAt: h.nowFn(),
+		Payload:          raw,
+		Status:           status,
+		ReceivedAt:       h.nowFn(),
+		PayloadClassHash: classHash,
+		DuplicateSuspect: duplicateSuspect,
 	}
 
 	err = h.store.InsertDelivery(r.Context(), d)
@@ -193,51 +239,5 @@ func (h *GitHubHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("ext_delivery_id", d.ExtDeliveryID), slog.String("err", ferr.Error()))
 		h.metrics.CounterInc("ingest_webhook_accepted_total", "Webhook requests accepted")
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted_deferred"})
-	}
-}
-
-// forwardOne performs a single redacted, signed forward attempt. The payload
-// is scrubbed BEFORE anything leaves the process (T1).
-func (h *GitHubHookHandler) forwardOne(r *http.Request, d domain.Delivery) (forward.Result, error) {
-	clean, err := forward.RedactPayload(d.Payload)
-	if err != nil {
-		return forward.ResultRejected, err
-	}
-	env := forward.Envelope{
-		Source:        d.Source,
-		ExtDeliveryID: d.ExtDeliveryID,
-		EventKind:     d.EventKind,
-		Repo:          d.Repo,
-		ReceivedAt:    d.ReceivedAt.UTC(),
-		Payload:       json.RawMessage(clean),
-	}
-	return h.forwarder.Send(r.Context(), env)
-}
-
-// recordOutcome persists the single source of truth for forward state.
-func (h *GitHubHookHandler) recordOutcome(ctx context.Context, d domain.Delivery, result forward.Result, cause error) {
-	now := h.nowFn()
-	var status string
-	attempts := d.Attempts
-	var forwardedAt time.Time
-	switch result {
-	case forward.ResultAccepted:
-		status = domain.StatusForwarded
-		forwardedAt = now
-	case forward.ResultUnavailable:
-		status = domain.StatusPending
-		attempts++
-	default:
-		status = domain.StatusForwardFailed
-		attempts++
-	}
-	err := h.store.UpdateForwardState(ctx, d.ID, status, attempts, now, forwardedAt)
-	if err != nil {
-		h.logger.Error("update delivery state failed",
-			slog.String("delivery_id", d.ID), slog.String("err", err.Error()))
-	}
-	if cause != nil && status != domain.StatusForwarded {
-		h.logger.Warn("delivery forward incomplete",
-			slog.String("delivery_id", d.ID), slog.String("status", status), slog.String("err", cause.Error()))
 	}
 }

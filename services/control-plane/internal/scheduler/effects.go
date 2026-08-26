@@ -58,6 +58,10 @@ func (e *EngineScheduler) onRunSucceeded(ctx context.Context, tx pgx.Tx, run *do
 	outcome := evidenceEvaluate(rec, evidenceContext(plan, leaseJTI, prior), census)
 	if outcome.Action != evidencepkg.ActionAccept {
 		logf("evidence %s for run %s rejected: %s", kind, run.ID, outcome.Reason)
+		// B7: tamper-grade rulings (quarantine / provenance mismatch) are
+		// security-audit events committed in THIS tx; ordinary rejections
+		// are filtered inside the helper.
+		e.auditEvidenceTamperTx(ctx, tx, run, kind, outcome)
 		return e.maybeRenderEligible(ctx, tx, run.TenantID, run.CandidateID, plan, nil)
 	}
 	ev, err := newEvidenceRecordedEvent(rec, outcome.Meta)

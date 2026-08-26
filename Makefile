@@ -47,6 +47,9 @@ keys: ## generate dev ed25519 keys (ledger + job-lease; gitignored)
 storm: ## run concurrency storm against running stack
 	cd tests && pnpm exec tsx scenarios/storm.ts --concurrency 500 --repos 8 --dupes 4
 
+soak: ## 30-min sustained load + drift probes against running stack
+	cd tests && pnpm exec tsx scenarios/soak.ts --minutes 30 --rate 60 --dupes 2
+
 test-integration: ## black-box compose-up suites
 	cd tests/e2e && pnpm exec vitest run
 

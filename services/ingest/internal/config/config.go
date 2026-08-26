@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sauron.dev/sauron/ingest/internal/seen"
 )
 
 // Config carries every tunable for the ingest service.
@@ -29,6 +31,13 @@ type Config struct {
 	RetryBase      time.Duration
 	RetryMaxDelay  time.Duration
 	MaxAttempts    int
+	// SeenWindowTTL bounds the H2 replay seen-window: content repeated
+	// under a FRESH GUID inside this span is flagged duplicate_suspect.
+	// Default 24h.
+	SeenWindowTTL time.Duration
+	// SeenMaxEntries bounds the seen-window LRU (memory cap). Default
+	// 100000.
+	SeenMaxEntries int
 }
 
 // ParseWebhookSecrets splits the ordered rotation list into verify secrets.
@@ -87,6 +96,22 @@ func FromEnv() (Config, error) {
 			return cfg, fmt.Errorf("config: invalid SAURON_INGEST_MAX_ATTEMPTS %q", v)
 		}
 		cfg.MaxAttempts = n
+	}
+	cfg.SeenWindowTTL = seen.DefaultTTL
+	if v := os.Getenv("SAURON_INGEST_SEEN_WINDOW_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return cfg, fmt.Errorf("config: invalid SAURON_INGEST_SEEN_WINDOW_TTL %q", v)
+		}
+		cfg.SeenWindowTTL = d
+	}
+	cfg.SeenMaxEntries = seen.DefaultMaxEntries
+	if v := os.Getenv("SAURON_INGEST_SEEN_MAX_ENTRIES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			return cfg, fmt.Errorf("config: invalid SAURON_INGEST_SEEN_MAX_ENTRIES %q", v)
+		}
+		cfg.SeenMaxEntries = n
 	}
 	return cfg, nil
 }

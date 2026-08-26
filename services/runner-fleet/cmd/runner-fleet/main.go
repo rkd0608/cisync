@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -69,12 +70,29 @@ func main() {
 
 	srv := server.New(cfg, st, provider, logger, metrics, time.Now, leaseVerifier)
 
-	go srv.Executor.Run(ctx)
-	go srv.Sweeper(ctx, cfg.WorkerStaleAfter, cfg.PollInterval)
-	go srv.GaugeQueueDepth(ctx)
+	// H4: await execution-plane workers before the deferred pool close so a
+	// SIGTERM drains in-flight jobs instead of cutting queries mid-flight.
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		srv.Executor.Run(ctx)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		srv.Sweeper(ctx, cfg.WorkerStaleAfter, cfg.PollInterval)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		srv.GaugeQueueDepth(ctx)
+	}()
 
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("http server failed", slog.String("err", err.Error()))
 		os.Exit(1)
 	}
+	stop() // release signal handling before waiting on workers
+	workers.Wait()
 }

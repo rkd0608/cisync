@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"sauron.dev/sauron/github-connector/internal/api"
@@ -133,10 +134,22 @@ func (s *Server) Run(ctx context.Context) error {
 		<-ctx.Done()
 		cancel()
 	}()
+
+	// H4: the background loops write through the same PG pool main closes;
+	// WAIT for them after the HTTP drain instead of abandoning goroutines.
+	var loops sync.WaitGroup
 	if s.drainer != nil {
-		go s.drainer.Run(loopCtx)
+		loops.Add(1)
+		go func() {
+			defer loops.Done()
+			s.drainer.Run(loopCtx)
+		}()
 	}
-	go s.sweeper.run(loopCtx)
+	loops.Add(1)
+	go func() {
+		defer loops.Done()
+		s.sweeper.run(loopCtx)
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -149,10 +162,15 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case runErr := <-errCh:
+		cancel()
+		loops.Wait()
 		return runErr
 	case <-ctx.Done():
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
-		return s.HTTP.Shutdown(shutdownCtx)
+		err := s.HTTP.Shutdown(shutdownCtx)
+		cancel()
+		loops.Wait()
+		return err
 	}
 }

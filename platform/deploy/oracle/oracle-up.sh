@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Boots (or upgrades) the Sauron stack from platform/.env.prod secrets.
+# WHY a wrapper: compose reads env-file relative paths consistently and
+# migrations auto-run at boot per service, so upgrade == rebuild == this.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE"
+test -f .env.prod || { echo "missing .env.prod — copy from .env.prod.example"; exit 1; }
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps

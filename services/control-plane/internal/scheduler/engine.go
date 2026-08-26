@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"sauron.dev/sauron/control-plane/internal/joblease"
@@ -34,6 +35,14 @@ type EngineScheduler struct {
 	policy      PolicySource
 	maxRetry    int
 	leaseSigner *joblease.Signer
+
+	// auditMu/auditNotify/deniedAudits back the B7 security-audit hooks
+	// (see audit.go): notify fans out metric bumps, deniedAudits dedupes
+	// per-run budget-denial emissions across ticks.
+	auditMu      sync.Mutex
+	auditNotify  func(kind string)
+	deniedMu     sync.Mutex
+	deniedAudits map[string]struct{}
 }
 
 // PolicySource supplies the resolved active policy: WIP caps by tier AND
@@ -54,13 +63,14 @@ func NewEngine(st *store.Store, fleet FleetGateway, pool string, batch int, leas
 		batch = 8
 	}
 	return &EngineScheduler{
-		store:       st,
-		fleet:       fleet,
-		pool:        pool,
-		batch:       batch,
-		policy:      DefaultPolicySource,
-		maxRetry:    2,
-		leaseSigner: leaseSigner,
+		store:        st,
+		fleet:        fleet,
+		pool:         pool,
+		batch:        batch,
+		policy:       DefaultPolicySource,
+		maxRetry:     2,
+		leaseSigner:  leaseSigner,
+		deniedAudits: map[string]struct{}{},
 	}
 }
 

@@ -30,15 +30,8 @@ func buildDeliveryAcceptedEvent(tenantID string, body *deliveryBody, normalized 
 		})
 }
 
-// deliveryBody matches internal-protocols §1.
-type deliveryBody struct {
-	Source        string          `json:"source"`
-	ExtDeliveryID string          `json:"ext_delivery_id"`
-	EventKind     string          `json:"event_kind"`
-	Repo          string          `json:"repo"`
-	ReceivedAt    string          `json:"received_at"`
-	Payload       json.RawMessage `json:"payload"`
-}
+// delivery_body.go holds the §1 wire type; see delivery_audit_seams.go for
+// the additive flag fields' rationale.
 
 // handleDelivery implements POST /internal/ctrl/deliveries (ingest →
 // control-plane webhook forwarding, internal-protocols §1).
@@ -56,6 +49,12 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 	extID := r.Header.Get("Idempotency-Key")
 	if extID == "" {
 		WriteError(w, http.StatusBadRequest, "validation_failed", "Idempotency-Key (ext delivery id) required", nil, nil, nil)
+		return
+	}
+	if s.store == nil {
+		// Store-less constructions (hermetic tests) must fail closed AFTER
+		// signature checks so auth failures still audit, but never panic.
+		WriteError(w, http.StatusServiceUnavailable, "unavailable", "storage unavailable; redeliver", nil, nil, nil)
 		return
 	}
 	var body deliveryBody
@@ -79,6 +78,38 @@ func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 		// originally recorded accept code.
 		writeRawJSON(w, http.StatusOK, []byte(`{"accepted":true,"replay":true}`))
 		s.metrics.Inc("sauron_ctrl_http_requests_total", "200")
+		return
+	}
+
+	// Audit-only envelopes (B7 sig-failure markers, H2 duplicate suspects)
+	// record diagnostics WITHOUT domain effects — a suspected near-replay
+	// or a rejected-signature delivery must never mutate state.
+	if body.QuarantineReason != "" {
+		code, respBody, err := s.applyQuarantineMarker(r.Context(), requestHash(raw), &body)
+		if err != nil {
+			logError("sig-failed marker %s failed: %v", extID, err)
+			retry := 5
+			WriteError(w, http.StatusServiceUnavailable, "unavailable", "storage unavailable; redeliver",
+				nil, &retry, nil)
+			w.Header().Set("Retry-After", "5")
+			return
+		}
+		writeRawJSON(w, code, respBody)
+		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(code))
+		return
+	}
+	if body.DuplicateSuspect {
+		code, respBody, err := s.applyDuplicateSuspect(r.Context(), &body, requestHash(raw))
+		if err != nil {
+			logError("duplicate-suspect delivery %s failed: %v", extID, err)
+			retry := 5
+			WriteError(w, http.StatusServiceUnavailable, "unavailable", "storage unavailable; redeliver",
+				nil, &retry, nil)
+			w.Header().Set("Retry-After", "5")
+			return
+		}
+		writeRawJSON(w, code, respBody)
+		s.metrics.Inc("sauron_ctrl_http_requests_total", fmt.Sprint(code))
 		return
 	}
 
@@ -183,6 +214,9 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !verifyHMAC(s.cfg.WebhookSecret, raw, r.Header.Get("X-Hub-Signature-256")) {
+		// B7: a signature failure on the direct GitHub alias route is the
+		// same security event as an ingest-quarantined delivery.
+		s.auditWebhookSignatureFailure(r.Header.Get("X-GitHub-Delivery"), r.Header.Get("X-GitHub-Event"))
 		WriteError(w, http.StatusUnauthorized, "unauthorized", "bad signature", nil, nil, nil)
 		s.metrics.Inc("sauron_ctrl_http_requests_total", "401")
 		return

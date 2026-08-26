@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sauron.dev/sauron/ingest/internal/domain"
+	"sauron.dev/sauron/ingest/internal/forward"
 )
 
 func TestHookSignatureFailures(t *testing.T) {
@@ -64,14 +65,23 @@ func TestHookSignatureFailures(t *testing.T) {
 			t.Fatalf("rejected delivery %s must be quarantined as %q, got %q", id, domain.StatusRejected, d.Status)
 		}
 	}
-	select {
-	case <-h.ctrlCalls:
-		t.Fatalf("no rejected request may reach control-plane")
-	default:
+	// B7 seam: each of the FOUR triggering requests must produce exactly
+	// ONE signed audit marker to control-plane — never a delivery forward.
+	markers := waitForEnvelopes(t, h, 4)
+	for _, env := range markers {
+		if env.QuarantineReason != "signature_verification_failed" || env.EventKind != "sig_failed" {
+			t.Fatalf("only sig-failed markers may reach ctrl after rejections, got %+v", env)
+		}
+		if !strings.HasSuffix(env.ExtDeliveryID, ".sigfailed") &&
+			!strings.Contains(env.ExtDeliveryID, ".sigfailed.") {
+			t.Fatalf("marker id %q must be nonce-suffixed under the original GUID", env.ExtDeliveryID)
+		}
 	}
+	assertNoEnvelopes(t, h)
 
 	// A later VALID redelivery of a rejected GUID must not be treated as a
-	// duplicate — quarantine rows never occupy the dedup slot.
+	// duplicate — quarantine rows never occupy the dedup slot — and must
+	// forward as a NORMAL envelope (no flags).
 	okReq, _ := http.NewRequest(http.MethodPost, h.svc.URL+"/hooks/github", strings.NewReader(string(body)))
 	okReq.Header.Set("Content-Type", "application/json")
 	okReq.Header.Set("X-Hub-Signature-256", signBody([]byte(h.secret), body))
@@ -81,6 +91,41 @@ func TestHookSignatureFailures(t *testing.T) {
 	respOK.Body.Close()
 	if respOK.StatusCode != http.StatusAccepted {
 		t.Fatalf("valid redelivery after rejection must 202, got %d", respOK.StatusCode)
+	}
+	envs := waitForEnvelopes(t, h, 1)
+	if envs[0].QuarantineReason != "" || envs[0].DuplicateSuspect {
+		t.Fatalf("valid redelivery must forward unflagged, got %+v", envs[0])
+	}
+}
+
+// waitForEnvelopes polls the harness channel until n envelopes arrive or a
+// deadline passes (marker sending is asynchronous by design).
+func waitForEnvelopes(t *testing.T, h *harness, n int) []forward.Envelope {
+	t.Helper()
+	var out []forward.Envelope
+	deadline := time.Now().Add(2 * time.Second)
+	for len(out) < n && time.Now().Before(deadline) {
+		select {
+		case env := <-h.ctrlCalls:
+			out = append(out, env)
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if len(out) != n {
+		t.Fatalf("received %d envelopes, want %d", len(out), n)
+	}
+	return out
+}
+
+// assertNoEnvelopes fails when any envelope arrives within a short grace
+// window.
+func assertNoEnvelopes(t *testing.T, h *harness) {
+	t.Helper()
+	select {
+	case env := <-h.ctrlCalls:
+		t.Fatalf("unexpected envelope reached ctrl: %+v", env)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

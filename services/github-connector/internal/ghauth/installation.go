@@ -202,21 +202,32 @@ func repoName(repo string) string {
 	return name
 }
 
-// ParseRSAPrivateKey parses a PEM-encoded PKCS8 RSA private key.
+// ParseRSAPrivateKey parses a PEM-encoded RSA private key in either PKCS#1
+// ("RSA PRIVATE KEY" — the format GitHub's "Download private key" emits) or
+// PKCS#8 ("PRIVATE KEY").
 func ParseRSAPrivateKey(raw []byte) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(raw)
 	if block == nil {
 		return nil, fmt.Errorf("ghauth: app private key is not PEM encoded")
 	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("ghauth: parse app private key: %w", err)
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("ghauth: parse pkcs1 app private key: %w", err)
+		}
+		return key, nil
+	default:
+		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("ghauth: parse app private key: %w", err)
+		}
+		key, ok := parsed.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("ghauth: app private key must be RSA, got %T", parsed)
+		}
+		return key, nil
 	}
-	key, ok := parsed.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("ghauth: app private key must be RSA, got %T", parsed)
-	}
-	return key, nil
 }
 
 func base64RawURLEncode(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

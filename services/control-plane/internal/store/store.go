@@ -26,6 +26,11 @@ type Queryer interface {
 type Store struct {
 	Pool   *pgxpool.Pool
 	signer *Signer
+	// AuditObserver, when wired (main), is invoked after each successful
+	// security-audit INSERT so the sauron_security_audit_total{kind} metric
+	// stays consistent across BOTH persistence paths (streamed and
+	// same-tx). Optional: nil keeps store-side emission metric-free.
+	AuditObserver func(kind string)
 }
 
 // Open connects the pool; the caller must Close. The session timezone is

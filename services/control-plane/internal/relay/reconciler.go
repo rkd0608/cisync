@@ -7,26 +7,39 @@ import (
 	"sauron.dev/sauron/control-plane/internal/store"
 )
 
-// Reconciler expires TTL-passed leases and cancels stale dispatched runs.
+// Reconciler expires TTL-passed leases, cancels stale dispatched runs, and
+// enforces security-audit retention (THREAT_MODEL B7 >=90d policy).
 type Reconciler struct {
 	store *store.Store
 	fleet *FleetClient
 	// staleMaxAge bounds dispatched-without-completion lifetime; see
 	// config.StaleRunMaxAge for why it is configurable.
 	staleMaxAge time.Duration
+	// auditRetention bounds ctrl.security_audit row age; <=0 falls back to
+	// DefaultAuditRetentionDays. Pruning keeps the audit table bounded
+	// while satisfying the B7 minimum retention window.
+	auditRetention time.Duration
 }
 
 // DefaultStaleRunMaxAge is the documented prod posture: 2× the default job
 // timeout (15 min).
 const DefaultStaleRunMaxAge = 30 * time.Minute
 
+// DefaultAuditRetentionDays is the B7 retention floor: 90 days of
+// security-audit rows before the reconciler prunes them.
+const DefaultAuditRetentionDays = 90
+
 // NewReconciler constructs the reconciler; maxAge ≤ 0 falls back to the
-// documented 30-minute posture.
-func NewReconciler(st *store.Store, fleet *FleetClient, maxAge time.Duration) *Reconciler {
+// documented 30-minute posture, retentionDays ≤ 0 to the 90-day floor.
+func NewReconciler(st *store.Store, fleet *FleetClient, maxAge time.Duration, retentionDays int) *Reconciler {
 	if maxAge <= 0 {
 		maxAge = DefaultStaleRunMaxAge
 	}
-	return &Reconciler{store: st, fleet: fleet, staleMaxAge: maxAge}
+	retention := time.Duration(retentionDays) * 24 * time.Hour
+	if retentionDays <= 0 {
+		retention = DefaultAuditRetentionDays * 24 * time.Hour
+	}
+	return &Reconciler{store: st, fleet: fleet, staleMaxAge: maxAge, auditRetention: retention}
 }
 
 // Run loops reconcile every interval until ctx is cancelled (ARCHITECTURE §3:
@@ -49,8 +62,9 @@ func (rc *Reconciler) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// ReconcileOnce expires due leases (lease.expired + budget release) and
-// cancels dispatched runs older than 2× their timeout, fencing them at fleet.
+// ReconcileOnce expires due leases (lease.expired + budget release), cancels
+// dispatched runs older than 2× their timeout fencing them at fleet, and
+// prunes security-audit rows beyond the retention horizon.
 func (rc *Reconciler) ReconcileOnce(ctx context.Context) error {
 	due, err := rc.store.DueLeases(ctx, time.Now().UTC())
 	if err != nil {
@@ -86,6 +100,14 @@ func (rc *Reconciler) ReconcileOnce(ctx context.Context) error {
 			}
 		}
 		logf("cancelled stale run %s", runID)
+	}
+
+	pruned, err := rc.store.PruneSecurityAudit(ctx, time.Now().UTC().Add(-rc.auditRetention))
+	if err != nil {
+		return err
+	}
+	if pruned > 0 {
+		logf("pruned %d security-audit row(s) older than %sd", pruned, rc.auditRetention.Hours()/24)
 	}
 	return nil
 }

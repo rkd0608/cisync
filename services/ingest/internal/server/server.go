@@ -12,6 +12,7 @@ import (
 	"sauron.dev/sauron/ingest/internal/forward"
 	"sauron.dev/sauron/ingest/internal/obs"
 	"sauron.dev/sauron/ingest/internal/retry"
+	"sauron.dev/sauron/ingest/internal/seen"
 	"sauron.dev/sauron/ingest/internal/store"
 )
 
@@ -21,6 +22,15 @@ type Server struct {
 	Retry   *retry.Worker
 	Metrics *obs.Metrics
 	store   store.Store
+	hook    *api.GitHubHookHandler
+}
+
+// Close releases handler-owned background resources (the B7 audit-marker
+// queue); called by Run after HTTP serving ended.
+func (s *Server) Close() {
+	if s.hook != nil {
+		s.hook.Close()
+	}
 }
 
 // New wires the webhook edge, health/metrics endpoints, and the retry worker
@@ -31,7 +41,10 @@ func New(cfg config.Config, st store.Store, logger *slog.Logger, metrics *obs.Me
 	for i, s := range cfg.WebhookSecrets {
 		secretBytes[i] = []byte(s)
 	}
-	hook := api.NewGitHubHookHandler(st, forwarder, metrics, logger, time.Now, cfg.MaxBodyBytes, cfg.TimestampSkew, secretBytes)
+	// H2 replay seen-window: bounded LRU keyed by payload class hash.
+	seenCache := seen.New(cfg.SeenMaxEntries, cfg.SeenWindowTTL, time.Now)
+	hook := api.NewGitHubHookHandler(st, forwarder, metrics, logger, time.Now,
+		cfg.MaxBodyBytes, cfg.TimestampSkew, secretBytes, seenCache)
 	retryWorker := retry.NewWorker(st, forwarder, metrics, logger, cfg.RetryInterval, cfg.RetryBase, cfg.MaxAttempts, time.Now)
 
 	mux := http.NewServeMux()
@@ -53,6 +66,7 @@ func New(cfg config.Config, st store.Store, logger *slog.Logger, metrics *obs.Me
 		Retry:   retryWorker,
 		Metrics: metrics,
 		store:   st,
+		hook:    hook,
 	}
 }
 
@@ -78,5 +92,8 @@ func (s *Server) Run(ctx context.Context) error {
 			slog.Error("graceful shutdown failed", slog.String("err", err.Error()))
 		}
 	}
+	// Drain handler-owned background work only after the listener stopped
+	// so in-flight requests could still enqueue markers.
+	s.Close()
 	return runErr
 }

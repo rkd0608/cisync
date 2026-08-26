@@ -22,7 +22,7 @@ services:
     build: ../services/ingest
     environment:
       SAURON_INGEST_PG_DSN: postgres://sauron:sauron_dev_only@postgres:5432/sauron?pool_max_conns=20&statement_timeout=15000
-      SAURON_INGEST_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
+      SAURON_INGEST_WEBHOOK_SECRET: ${SAURON_INGEST_WEBHOOK_SECRET:-dev_webhook_secret_not_for_prod}
       SAURON_INGEST_ADDR: ":8080"
       SAURON_INGEST_CTRL_URL: http://control-plane:8081
     ports: ["8080:8080"]
@@ -42,7 +42,7 @@ services:
       SAURON_CTRL_JOBLEASE_KEY_FILE: /keys/joblease_ed25519.dev.key
       SAURON_CTRL_ADMIN_TOKEN: dev_admin_token_not_for_prod
       SAURON_CTRL_CONNECTOR_URL: http://github-connector:8083
-      SAURON_CTRL_WEBHOOK_SECRET: dev_webhook_secret_not_for_prod
+      SAURON_CTRL_WEBHOOK_SECRET: ${SAURON_INGEST_WEBHOOK_SECRET:-dev_webhook_secret_not_for_prod}
       # WHY 600: one suite run issues ~40 intent creations inside ~30s; the
       # 120/min default bucket drains across back-to-back runs and 429s them.
       # Typed rate_limited refusals themselves stay contract-conformant.
@@ -98,12 +98,13 @@ services:
       # THREE together after `scripts/github-app-manifest.sh` or the manual
       # runbook emits them into .env.local. Half-configured creds refuse to
       # boot (all-or-nothing, config.go).
-      # SAURON_CONN_GITHUB_APP_ID: "123456"
-      # SAURON_CONN_GITHUB_PRIVATE_KEY_FILE: /keys/github-app.dev.pem
-      # SAURON_CONN_GITHUB_INSTALLATION_ID: "789012"
+      SAURON_CONN_GITHUB_APP_ID: ${SAURON_CONN_GITHUB_APP_ID:-}
+      SAURON_CONN_GITHUB_PRIVATE_KEY_FILE: ${SAURON_CONN_GITHUB_PRIVATE_KEY_FILE:-/keys/github-app.dev.pem}
+      SAURON_CONN_GITHUB_INSTALLATION_ID: ${SAURON_CONN_GITHUB_INSTALLATION_ID:-}
+      SAURON_CONN_DETAILS_URL: http://localhost:3000
       # Control-plane endpoint + bearer for rerun replan (plan §4.5):
-      # SAURON_CONN_CTRL_URL: http://control-plane:8081
-      # SAURON_CONN_CTRL_TOKEN: dev_admin_token_not_for_prod
+      SAURON_CONN_CTRL_URL: http://control-plane:8081
+      SAURON_CONN_CTRL_TOKEN: ${SAURON_ADMIN_TOKEN:-dev_admin_token_not_for_prod}
     volumes:
       - ./dev-keys:/keys:ro
     ports: ["8083:8083"]
@@ -116,7 +117,7 @@ services:
   # App's webhook at <that-url>/hooks/github. Only ingest is exposed; ctrl
   # and connector stay internal. `ngrok http 8080` documented as alternative.
   webhook-forwarder:
-    image: cloudflared/cloudflared:latest
+    image: cloudflare/cloudflared:latest
     profiles: ["github"]
     command: tunnel --no-autoupdate --url http://ingest:8080
     depends_on:

@@ -1,0 +1,46 @@
+###############################################################################
+# EXAMPLE tfvars — copy to terraform.tfvars and fill in. NEVER commit real
+# secret values anywhere in this kit; secrets go in via CLI post-apply.
+###############################################################################
+
+# --- where & who -------------------------------------------------------------
+aws_region = "us-east-1"
+environment = "prod" # staging | prod
+
+# --- network -----------------------------------------------------------------
+vpc_cidr = "10.42.0.0/16"
+single_nat_gateway = true # COST: false = NAT per AZ (~2x NAT cost)
+
+# --- RDS (stated v0.2 sizes; see variables.tf for the WHY of each) -----------
+db_instance_class = "db.t4g.small"
+db_engine_version = "16.6"
+db_allocated_storage = 20
+db_max_allocated_storage = 100
+db_multi_az = false # COST TOGGLE
+db_backup_retention_days = 14
+db_deletion_protection = true
+db_skip_final_snapshot = false
+
+# --- ALB / DNS (OPERATOR PREREQS) --------------------------------------------
+# ACM cert must already be ISSUED (DNS-validated) in aws_region:
+# aws acm request-certificate --domain-name sauron.example.com \
+#   --validation-method DNS
+certificate_arn = "arn:aws:acm:us-east-1:111122223333:certificate/REPLACE-ME"
+domain_name = "sauron.example.com"
+# Set hosted_zone_id to auto-create the alias record; omit to manage DNS yourself.
+hosted_zone_id = "" # e.g. "Z0123456789ABCDEFGHIJ"
+
+# --- services -----------------------------------------------------------------
+image_tag = "latest" # first boot; then pass git SHA via -var
+enable_services = false # flip to true AFTER push-images + secrets populated
+log_retention_days = 90
+
+# github-connector live mode (GitHub App check publishing). Keep false for
+# dry-run posture; see RUNBOOK §7 to enable.
+enable_connector_live_mode = false
+github_app_id = ""
+github_installation_id = ""
+connector_details_url = "" # defaults to https://<domain_name>
+tracked_base_branches = "main,master"
+
+keystore_image = "public.ecr.aws/docker/library/alpine:3.20"

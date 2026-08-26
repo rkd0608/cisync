@@ -65,11 +65,11 @@ func (s *PGStore) InsertDelivery(ctx context.Context, d domain.Delivery) error {
 	var payload json.RawMessage = d.Payload
 	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO ingest.deliveries
-			(id, source, ext_delivery_id, event_kind, repo, sig_ok, headers, payload, status, attempts, received_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			(id, source, ext_delivery_id, event_kind, repo, sig_ok, headers, payload, status, attempts, received_at, payload_class_hash, duplicate_suspect)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		ON CONFLICT DO NOTHING`,
 		d.ID, d.Source, d.ExtDeliveryID, d.EventKind, d.Repo, d.SigOK, headers, payload,
-		d.Status, d.Attempts, d.ReceivedAt)
+		d.Status, d.Attempts, d.ReceivedAt, d.PayloadClassHash, d.DuplicateSuspect)
 	if err != nil {
 		if pgErr := newPgUniqueViolation(err); pgErr != nil {
 			return fmt.Errorf("pg store: insert delivery: %w", domain.ErrDuplicateDelivery)
@@ -85,14 +85,15 @@ func (s *PGStore) InsertDelivery(ctx context.Context, d domain.Delivery) error {
 // GetDelivery implements Store.
 func (s *PGStore) GetDelivery(ctx context.Context, source, extDeliveryID string) (domain.Delivery, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, source, ext_delivery_id, event_kind, repo, sig_ok, headers, payload, status, attempts, received_at, last_attempt_at, forwarded_at
+		SELECT id, source, ext_delivery_id, event_kind, repo, sig_ok, headers, payload, status, attempts, received_at, last_attempt_at, forwarded_at, payload_class_hash, duplicate_suspect
 		FROM ingest.deliveries WHERE source=$1 AND ext_delivery_id=$2`, source, extDeliveryID)
 	var d domain.Delivery
 	var headers []byte
 	var payload []byte
 	var lastAttemptAt, forwardedAt *time.Time
 	err := row.Scan(&d.ID, &d.Source, &d.ExtDeliveryID, &d.EventKind, &d.Repo, &d.SigOK,
-		&headers, &payload, &d.Status, &d.Attempts, &d.ReceivedAt, &lastAttemptAt, &forwardedAt)
+		&headers, &payload, &d.Status, &d.Attempts, &d.ReceivedAt, &lastAttemptAt, &forwardedAt,
+		&d.PayloadClassHash, &d.DuplicateSuspect)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return domain.Delivery{}, fmt.Errorf("pg store: get delivery: %w", domain.ErrNotFound)
@@ -129,16 +130,18 @@ func (s *PGStore) UpdateForwardState(ctx context.Context, id string, status stri
 }
 
 // DueDeliveries implements Store. Quarantined rejected rows are audit-only
-// and never retried.
+// and never retried; duplicate_suspect rows ARE retried (their forward may
+// have failed) and carry the suspect flag back to control-plane.
 func (s *PGStore) DueDeliveries(ctx context.Context, olderThan time.Duration, maxAttempts int, limit int) ([]domain.Delivery, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, source, ext_delivery_id, event_kind, repo, sig_ok, status, attempts, received_at, COALESCE(last_attempt_at, received_at), payload
+		SELECT id, source, ext_delivery_id, event_kind, repo, sig_ok, status, attempts, received_at, COALESCE(last_attempt_at, received_at), payload, payload_class_hash, duplicate_suspect
 		FROM ingest.deliveries
 		WHERE status = ANY($1) AND attempts < $2
 		  AND COALESCE(last_attempt_at, received_at) <= $3
 		ORDER BY received_at
 		LIMIT $4`,
-		[]string{domain.StatusPending, domain.StatusForwardFailed}, maxAttempts, time.Now().Add(-olderThan), limit)
+		[]string{domain.StatusPending, domain.StatusForwardFailed, domain.StatusDuplicateSuspect},
+		maxAttempts, time.Now().Add(-olderThan), limit)
 	if err != nil {
 		return nil, fmt.Errorf("pg store: due deliveries: %w", err)
 	}
@@ -148,7 +151,8 @@ func (s *PGStore) DueDeliveries(ctx context.Context, olderThan time.Duration, ma
 		var d domain.Delivery
 		var payload []byte
 		if err := rows.Scan(&d.ID, &d.Source, &d.ExtDeliveryID, &d.EventKind, &d.Repo, &d.SigOK,
-			&d.Status, &d.Attempts, &d.ReceivedAt, &d.LastAttemptAt, &payload); err != nil {
+			&d.Status, &d.Attempts, &d.ReceivedAt, &d.LastAttemptAt, &payload,
+			&d.PayloadClassHash, &d.DuplicateSuspect); err != nil {
 			return nil, fmt.Errorf("pg store: scan due delivery: %w", err)
 		}
 		d.Payload = payload

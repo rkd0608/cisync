@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"sauron.dev/sauron/control-plane/internal/audit"
 	"sauron.dev/sauron/control-plane/internal/domain"
 	"sauron.dev/sauron/control-plane/internal/store"
 )
@@ -97,6 +98,22 @@ func (s *Server) applyInstallationDeleted(ctx context.Context, tx pgx.Tx, tenant
 			lr.LeaseID); err != nil {
 			return err
 		}
+		// B7: teardown-class revocations are security-audit events, emitted
+		// in the SAME tx as the cascade so the audit trail cannot lag the
+		// ledger. repo_deleted is the live teardown reason (events.schema
+		// lease.revoked enum); store.TeardownLeaseReasons documents why it
+		// shares the tenant_teardown audit class.
+		aev, aerr := audit.New(tenant, audit.KindLeaseRevocation,
+			audit.Actor{Kind: "github", ID: "installation_cascade"},
+			map[string]any{"lease_id": lr.LeaseID},
+			map[string]any{"reason": "repo_deleted", "repos": view.Install.Repos})
+		if aerr != nil {
+			return aerr
+		}
+		if err := s.store.InsertSecurityAuditTx(ctx, tx, aev); err != nil {
+			return err
+		}
+		s.metrics.Add("sauron_security_audit_total", 1, "kind", string(audit.KindLeaseRevocation))
 		live, err := store.LiveCandidatesForIntentTx(ctx, tx, tenant, lr.IntentID)
 		if err != nil {
 			return err

@@ -25,6 +25,14 @@ type Envelope struct {
 	Repo          string          `json:"repo"`
 	ReceivedAt    time.Time       `json:"received_at"`
 	Payload       json.RawMessage `json:"payload"`
+	// DuplicateSuspect (H2, additive): fresh-GUID content whose class hash
+	// hit the replay seen-window; control-plane logs it record-only with
+	// NO domain effects. Omitted for normal traffic.
+	DuplicateSuspect bool `json:"duplicate_suspect,omitempty"`
+	// QuarantineReason (B7, additive): non-empty only on signature-failure
+	// audit markers minted by ingest; control-plane records a
+	// security_audit row and applies no effects.
+	QuarantineReason string `json:"quarantine_reason,omitempty"`
 }
 
 // Result classifies a forwarding attempt.
