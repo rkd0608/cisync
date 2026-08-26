@@ -23,7 +23,9 @@ https://{$DOMAIN} {
 
 	# ---- Admin surfaces: explicit deny BEFORE any proxy -------------------
 	@blocked path /metrics /metrics/* /internal /internal/*
-	respond @blocked 403
+	handle @blocked {
+		respond 403
+	}
 
 	# ---- Webhook ingress ---------------------------------------------------
 	handle /hooks/github* {

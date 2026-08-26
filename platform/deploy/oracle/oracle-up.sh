@@ -6,5 +6,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 test -f .env.prod || { echo "missing .env.prod — copy from .env.prod.example"; exit 1; }
+# Caddy needs a real file at ./Caddyfile (the template uses Caddy's own {$VAR}
+# runtime substitution); without it Docker bind-mounts an auto-created dir.
+test -f Caddyfile || cp Caddyfile.template Caddyfile
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
