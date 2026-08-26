@@ -3,6 +3,7 @@
 # WHY a wrapper: compose reads env-file relative paths consistently and
 # migrations auto-run at boot per service, so upgrade == rebuild == this.
 set -euo pipefail
+"$HERE/box-sanitize.sh"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 test -f .env.prod || { echo "missing .env.prod — copy from .env.prod.example"; exit 1; }

@@ -1,0 +1,21 @@
+{
+	email ops@cisync.dev
+}
+https://163.192.108.154.sslip.io {
+	@blocked path /metrics* /internal/*
+	handle @blocked {
+		respond 403
+	}
+	handle /hooks/github* {
+		reverse_proxy ingest:8080
+	}
+	handle /v1/* {
+		reverse_proxy control-plane:8081
+	}
+	handle /api/cisync/* {
+		reverse_proxy web:3000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}
