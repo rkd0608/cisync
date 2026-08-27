@@ -5,26 +5,15 @@ import { BoardSummaryStrip } from './board-summary-strip';
 import { EmptyState } from './empty-state';
 import { ErrorState, type ApiErrorView } from './error-state';
 import { EventTimeline } from './event-timeline';
+import { IntentCard, recentEventsFor } from './intent-card';
+import { LiveSeqIndicator } from './live-seq-indicator';
 import { RelationBadge } from './relation-badge';
-import { RiskPill } from './risk-pill';
+import { SkeletonRows } from './skeleton';
 import { StateBadge } from './state-badge';
-import {
-  deriveSummary,
-  type BoardCandidate,
-  type BoardIntent,
-  type BoardState,
-} from '@/lib/event-board';
-import { formatCountdown, shortSha } from '@/lib/format';
+import { deriveSummary, type BoardCandidate, type BoardIntent, type BoardState } from '@/lib/event-board';
+import { truncateMiddle } from '@/lib/format';
 import type { EventEnvelope } from '@/lib/event-schemas';
-import { groupIntents } from '@/lib/board-filters';
-import type { BoardGroupMode } from '@/lib/board-filters';
-
-const COUNTDOWN_TONES: Record<string, string> = {
-  overdue: 'text-red-400',
-  soon: 'text-amber-300',
-  calm: 'text-zinc-500',
-  none: 'text-zinc-600',
-};
+import { groupIntents, type BoardGroupMode } from '@/lib/board-filters';
 
 export interface IntentBoardProps {
   phase: 'loading' | 'ready' | 'error';
@@ -36,15 +25,20 @@ export interface IntentBoardProps {
   groupBy: BoardGroupMode;
 }
 
+// Command-center board (mission Part 3): KPI strip up top, swimlanes grouped
+// by state|risk, ledger tail aside. Swimlanes scroll horizontally at density
+// instead of stacking into an ever-lengthening page. The board renders only
+// after the client poll loop resolves, so reading the clock here is safe
+// (no SSR/hydration divergence).
 export function IntentBoard(props: IntentBoardProps): React.ReactElement {
-  const summary = deriveSummary(props.board);
+  const summary = deriveSummary(props.board, new Date().toISOString());
   return (
     <div className="flex flex-col gap-6">
-      <BoardSummaryStrip summary={summary} />
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <section className="flex flex-col gap-3">
+      <BoardSummaryStrip summary={summary} lastSeq={props.board.lastSeq} />
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+        <section className="flex min-w-0 flex-col gap-3">
           <h2 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
-            change intents · ledger-derived
+            change intents · swimlanes by {props.groupBy}
           </h2>
           {props.phase === 'loading' ? (
             <SkeletonRows rows={4} />
@@ -57,10 +51,10 @@ export function IntentBoard(props: IntentBoardProps): React.ReactElement {
             <EmptyState
               what="no change activity yet"
               whyEmpty="Open a PR on a connected repo, or POST /v1/change-intents. Intents appear here as intent.declared events land in the ledger."
-              action={{ label: 'connect a repo at /onboarding', href: '/onboarding' }}
+              action={{ label: 'connect a repo at /app/setup', href: '/app/setup' }}
             />
           ) : (
-            <IntentSections intents={props.visibleIntents} groupBy={props.groupBy} />
+            <Swimlanes intents={props.visibleIntents} groupBy={props.groupBy} timeline={props.board.timeline} />
           )}
 
           <h2 className="mt-4 font-mono text-[11px] uppercase tracking-widest text-zinc-500">
@@ -78,11 +72,12 @@ export function IntentBoard(props: IntentBoardProps): React.ReactElement {
           )}
         </section>
 
-        <aside className="flex flex-col gap-3">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
-            ledger tail
-          </h2>
-          <div className="rounded border border-zinc-800 bg-zinc-950 p-2">
+        <aside className="flex min-w-0 flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">ledger tail</h2>
+            <LiveSeqIndicator lastSeq={props.board.lastSeq} />
+          </div>
+          <div className="card-glass p-2">
             <EventTimeline events={props.board.timeline.slice(0, 30) as EventEnvelope[]} />
           </div>
         </aside>
@@ -91,51 +86,37 @@ export function IntentBoard(props: IntentBoardProps): React.ReactElement {
   );
 }
 
-function IntentSections({
+function Swimlanes({
   intents,
   groupBy,
+  timeline,
 }: {
   intents: BoardIntent[];
   groupBy: BoardGroupMode;
+  timeline: EventEnvelope[];
 }): React.ReactElement {
   const sections = groupIntents(intents, groupBy);
   return (
-    <>
+    <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-2" data-testid={`board-${groupBy}-swimlanes`}>
       {sections.map((section) => (
-        <div key={section.key} data-testid={`group-${section.key}`} className="flex flex-col gap-2">
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-600">
-            ── {section.key.replace(/_/g, ' ')} · {section.items.length}
+        <div
+          key={section.key}
+          data-testid={`group-${section.key}`}
+          className="flex w-72 shrink-0 snap-start flex-col gap-2 rounded-lg border border-white/5 bg-white/[0.015] p-3"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+            ── {section.key.replace(/_/g, ' ')} · <span className="tabular-nums">{section.items.length}</span>
           </p>
           <ul className="flex flex-col gap-2">
             {section.items.map((intent) => (
               <li key={intent.id}>
-                <IntentCard intent={intent} />
+                <IntentCard intent={intent} events={recentEventsFor(timeline, intent.id)} />
               </li>
             ))}
           </ul>
         </div>
       ))}
-    </>
-  );
-}
-
-function IntentCard({ intent }: { intent: BoardIntent }): React.ReactElement {
-  const countdown = formatCountdown(intent.deadline, Date.now());
-  return (
-    <Link
-      href={`/intents/${intent.id}`}
-      className="block rounded border border-zinc-800 bg-zinc-950 px-4 py-3 hover:border-zinc-600"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <StateBadge state={intent.state} />
-        <RiskPill risk={intent.riskClass} />
-        <span className={`font-mono text-[11px] ${COUNTDOWN_TONES[countdown.tone] ?? ''}`}>
-          {countdown.label}
-        </span>
-        <span className="ml-auto font-mono text-[11px] text-zinc-600">{shortSha(intent.id)}</span>
-      </div>
-      <p className="mt-1.5 truncate text-sm text-zinc-200">{intent.goal}</p>
-    </Link>
+    </div>
   );
 }
 
@@ -156,17 +137,17 @@ function CandidateTable({
       </thead>
       <tbody>
         {rows.map(({ candidate }) => (
-          <tr key={candidate.id} className="border-b border-zinc-900 last:border-0">
+          <tr key={candidate.id} className="border-b border-zinc-900 transition-colors hover:bg-white/[0.03] last:border-0">
             <td className="py-1.5 pr-2">
-              <StateBadge state={candidate.state} />
+              <Link href={`/candidates/${candidate.id}`} data-testid={`cand-link-${candidate.id}`} className="hover:text-[var(--color-accent-soft)]">
+                <StateBadge state={candidate.state} />
+              </Link>
             </td>
-            <td className="py-1.5 pr-2 text-zinc-400">
-              {candidate.headSha ? shortSha(candidate.headSha) : '--'}
-            </td>
+            <td className="py-1.5 pr-2">{candidate.headSha ? truncateMiddle(candidate.headSha, 8, 4) : '--'}</td>
             <td className="py-1.5 pr-2 text-zinc-400">
               {candidate.clusterId ? (
-                <Link href={`/clusters/${candidate.clusterId}`} className="hover:text-cyan-300">
-                  {candidate.clusterId.slice(0, 12)}…
+                <Link href={`/clusters/${candidate.clusterId}`} className="hover:text-cyan-300" title={candidate.clusterId}>
+                  {truncateMiddle(candidate.clusterId, 8, 4)}
                 </Link>
               ) : (
                 '--'
@@ -179,15 +160,5 @@ function CandidateTable({
         ))}
       </tbody>
     </table>
-  );
-}
-
-function SkeletonRows({ rows }: { rows: number }): React.ReactElement {
-  return (
-    <div aria-hidden className="flex flex-col gap-2" data-testid="skeleton-rows">
-      {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="h-14 animate-pulse rounded border border-zinc-900 bg-zinc-900/50" />
-      ))}
-    </div>
   );
 }

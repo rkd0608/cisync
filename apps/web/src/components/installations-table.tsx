@@ -8,11 +8,33 @@ import type {
 } from '@/lib/installation-schemas';
 import { relativeAge } from '@/lib/format';
 
-const STATE_DOT: Record<RepoWebhookStatus['webhook_state'], string> = {
-  receiving: 'bg-emerald-400',
-  pending: 'border border-zinc-500 bg-transparent',
-  stalled: 'animate-pulse bg-red-500',
+// Connection health first-class (mission Part 3): webhook_state renders as a
+// border-tinted PILL per row — receiving=pulse-dot emerald, pending=slate
+// hollow, stalled=red pulse with ⚠ marker. Red stays scarce (§7).
+const STATE_PILL: Record<RepoWebhookStatus['webhook_state'], string> = {
+  receiving: 'border-emerald-500/50 text-emerald-300',
+  pending: 'border-zinc-600 text-zinc-400',
+  stalled: 'border-[var(--color-risk-critical)]/70 text-[var(--color-risk-critical)]',
 };
+
+function StatePill({ state }: { state: RepoWebhookStatus['webhook_state'] }): ReactElement {
+  const style = STATE_PILL[state];
+  return (
+    <span data-testid="webhook-pill" className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${style}`}>
+      <span
+        aria-hidden
+        className={`inline-block h-1.5 w-1.5 rounded-full ${
+          state === 'receiving'
+            ? 'bg-emerald-400'
+            : state === 'stalled'
+              ? 'animate-pulse bg-[var(--color-risk-critical)]'
+              : 'border border-current bg-transparent'
+        }`}
+      />
+      {state}
+    </span>
+  );
+}
 
 function RepoRow({ repo, nowMs }: { repo: RepoWebhookStatus; nowMs: number | null }): ReactElement {
   const stalled = repo.webhook_state === 'stalled';
@@ -22,19 +44,22 @@ function RepoRow({ repo, nowMs }: { repo: RepoWebhookStatus; nowMs: number | nul
       data-webhook-state={repo.webhook_state}
       className={`border-b border-zinc-900 last:border-0 ${stalled ? 'bg-red-950/20' : ''}`}
     >
-      <td className="py-1.5 pl-6 pr-2 font-mono text-xs text-zinc-200">
-        <span className={`mr-2 inline-block h-1.5 w-1.5 rounded-full ${STATE_DOT[repo.webhook_state]}`} aria-hidden />
+      <td className="py-2 pl-6 pr-2 font-mono text-xs text-zinc-200">
         {repo.name}
         {stalled ? <span className="ml-2 text-red-400">⚠ stalled</span> : null}
       </td>
-      <td className="py-1.5 pr-2 text-right font-mono text-xs tabular-nums text-zinc-400">
+      <td className="py-2 pr-2">
+        <StatePill state={repo.webhook_state} />
+      </td>
+      <td className="py-2 pr-2 text-right font-mono text-xs tabular-nums text-zinc-400">
         seq {repo.last_delivery_seq?.toLocaleString('en-US') ?? '--'}
       </td>
-      {/* Age is client-only (relative to now) to keep SSR markup deterministic. */}
+      {/* Age is client-only (relative to now) to keep SSR markup deterministic;
+          the tooltip carries the absolute ISO timestamp. */}
       <td
         data-testid="delivery-age"
         title={repo.last_event_at ?? undefined}
-        className={`py-1.5 text-right font-mono text-xs tabular-nums ${stalled ? 'text-red-300' : 'text-zinc-500'}`}
+        className={`py-2 text-right font-mono text-xs tabular-nums ${stalled ? 'text-red-300' : 'text-zinc-500'}`}
       >
         {nowMs === null ? '--' : relativeAge(repo.last_event_at, nowMs)}
       </td>
@@ -50,10 +75,10 @@ function InstallationBlock({
   nowMs: number | null;
 }): ReactElement {
   return (
-    <section className="rounded border border-zinc-800 bg-zinc-950 px-4 py-3">
+    <section className="rounded-lg border border-white/8 bg-[var(--color-surface)] px-4 py-3">
       <p className="flex flex-wrap items-center gap-2 font-mono text-xs text-zinc-300">
         <span>{installation.account}</span>
-        <span className="text-emerald-400">app installed ✓</span>
+        <span className="text-emerald-400">✓ app installed</span>
         {Object.entries(installation.permissions ?? {}).map(([permission, level]) => (
           <span key={permission} className="text-zinc-600">
             {permission}:{level}
@@ -64,6 +89,7 @@ function InstallationBlock({
         <thead>
           <tr className="border-b border-zinc-800 text-left text-[10px] uppercase tracking-widest text-zinc-600">
             <th className="py-1 pr-2">repo</th>
+            <th className="py-1 pr-2">webhook state</th>
             <th className="py-1 pr-2 text-right">last delivery</th>
             <th className="py-1 text-right">age</th>
           </tr>
@@ -95,8 +121,8 @@ export interface ApiErrorLike {
   message: string;
 }
 
-// Dense status table (§2.2): proves the pipe is alive; red-dot rows mark
-// stalled deliveries; resync refetches only — never mutates installations.
+// Dense status table (§2.2): proves the pipe is alive; stalled rows are THE
+// first debugging stop when checks don't appear; resync refetches only.
 export function InstallationsTable({
   data,
   error,
@@ -111,19 +137,14 @@ export function InstallationsTable({
         <h2 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
           installations · webhook pipe health
         </h2>
-        <button
-          type="button"
-          onClick={onResync}
-          disabled={syncing}
-          className="rounded border border-zinc-700 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
-        >
+        <button type="button" onClick={onResync} disabled={syncing} className="btn-console">
           {syncing ? 'resyncing…' : 'resync'}
         </button>
       </div>
 
       {error !== null ? (
-        <div role="alert" data-testid="installations-error" className="rounded border border-red-900/60 bg-red-950/30 px-4 py-3 font-mono text-xs text-red-200">
-          <span className="rounded bg-red-500/20 px-1.5 py-0.5 uppercase tracking-wider">{error.code}</span>{' '}
+        <div role="alert" data-testid="installations-error" className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 font-mono text-xs text-red-200">
+          <span className="rounded-md bg-red-500/20 px-1.5 py-0.5 uppercase tracking-wider">{error.code}</span>{' '}
           {error.message}
         </div>
       ) : null}
@@ -132,7 +153,7 @@ export function InstallationsTable({
         <EmptyState
           what="no installations"
           whyEmpty="No GitHub App installation is connected to this tenant yet."
-          action={{ label: 'start at /onboarding', href: '/onboarding' }}
+          action={{ label: 'run the guided setup', href: '/app/setup' }}
         />
       ) : null}
 
@@ -141,7 +162,7 @@ export function InstallationsTable({
       ))}
 
       <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-700">
-        first debugging stop when checks don&apos;t appear · <Link href="/onboarding" className="underline">onboarding</Link>
+        first debugging stop when checks don&apos;t appear · <Link href="/app/setup" className="underline">guided setup</Link>
       </p>
     </div>
   );

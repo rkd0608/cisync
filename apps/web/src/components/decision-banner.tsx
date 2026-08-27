@@ -2,10 +2,13 @@ import type { ReactElement } from 'react';
 import type { Decision, DecisionFactor } from '@/lib/api-schemas';
 import { calibratedConfidence, verbPhrase } from '@/lib/calibrated-copy';
 
+// §7: verdict kinds render outline-only — color encodes state, text encodes
+// meaning (colorblind-safe by construction); no fill-flood. Mission verdict
+// mapping: eligible=emerald · rejected=rose · deferred=amber.
 const VERB_STYLES: Record<string, string> = {
-  eligible_for_merge_train: 'border-emerald-500 bg-emerald-500/10 text-emerald-200',
-  rejected: 'border-red-500 bg-red-500/10 text-red-200',
-  deferred: 'border-amber-500 bg-amber-500/10 text-amber-200',
+  eligible_for_merge_train: 'border-emerald-500 text-emerald-200',
+  rejected: 'border-rose-500 text-rose-200',
+  deferred: 'border-amber-500 text-amber-200',
 };
 
 // T1: factors render straight from the ledger record — name=value plus source,
@@ -38,7 +41,7 @@ export function DecisionBanner({ decision }: { decision: Decision }): ReactEleme
     <section
       data-testid="decision-banner"
       data-verb={decision.verb}
-      className={`rounded border px-5 py-4 font-mono ${VERB_STYLES[decision.verb] ?? 'border-zinc-700 bg-zinc-950'}`}
+      className={`rounded-lg border px-5 py-4 font-mono backdrop-blur-md bg-[var(--color-surface-raised)]/85 ${VERB_STYLES[decision.verb] ?? 'border-zinc-700'}`}
     >
       <p className="text-[11px] uppercase tracking-widest opacity-70">
         decision {decision.decision_id}

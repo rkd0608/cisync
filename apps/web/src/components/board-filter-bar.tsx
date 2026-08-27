@@ -63,9 +63,19 @@ export function BoardFilterBar({
   return (
     <div
       data-testid="board-filter-bar"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-zinc-800 bg-zinc-950 px-4 py-2"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-white/8 bg-[var(--color-surface)] px-4 py-2"
     >
-      <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">filters</span>
+      <label className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
+        <span aria-hidden className="text-zinc-500">⌕</span>
+        <input
+          type="search"
+          data-testid="board-search"
+          placeholder="search goals…"
+          defaultValue={filters.q ?? ''}
+          onChange={(event) => onChange({ ...filters, q: event.target.value })}
+          className="w-44 rounded-md border border-zinc-700 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal text-zinc-200 placeholder:text-zinc-600"
+        />
+      </label>
       <Select
         label="repo"
         value={filters.repo}
@@ -86,7 +96,7 @@ export function BoardFilterBar({
       />
       <div className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
         group
-        <div className="flex overflow-hidden rounded border border-zinc-700">
+        <div className="flex overflow-hidden rounded-md border border-zinc-700">
           {GROUP_MODES.map((mode) => (
             <button
               key={mode}
@@ -95,7 +105,7 @@ export function BoardFilterBar({
               data-active={groupBy === mode || undefined}
               onClick={() => onGroupChange(mode)}
               className={`px-2 py-1 font-mono text-[11px] ${
-                groupBy === mode ? 'bg-zinc-800 text-cyan-300' : 'text-zinc-400 hover:bg-zinc-900'
+                groupBy === mode ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent-soft)]' : 'text-zinc-400 hover:bg-zinc-900'
               }`}
             >
               {mode}
@@ -103,10 +113,10 @@ export function BoardFilterBar({
           ))}
         </div>
       </div>
-      {filters.repo !== null || filters.risk !== null || filters.origin !== null ? (
+      {filters.repo !== null || filters.risk !== null || filters.origin !== null || filters.q !== null ? (
         <button
           type="button"
-          onClick={() => onChange({ repo: null, risk: null, origin: null })}
+          onClick={() => onChange({ repo: null, risk: null, origin: null, q: null })}
           className="ml-auto font-mono text-[11px] uppercase tracking-widest text-cyan-400 hover:text-cyan-300"
         >
           clear

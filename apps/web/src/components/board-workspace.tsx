@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, type ReactElement } from 'react';
 import { BoardFilterBar } from './board-filter-bar';
+import { BudgetStrip, useBudgetMeters } from './budget-strip';
+import { FirstRunRedirect } from './first-run-redirect';
 import { IntentBoard } from './intent-board';
 import { ShadowBanner } from './shadow-banner';
 import { StaleFeedBanner } from './stale-feed-banner';
@@ -18,13 +20,15 @@ import {
 import { RISK_CLASSES } from '@/lib/api-schemas';
 import { useEventBoard } from '@/lib/use-event-board';
 
-// Dashboard composition (§2.3 minimal evolution): shadow banner + stale-feed
-// indicator + query-param-persisted filters + group-by over the existing
-// ledger-derived board. The board itself never blocks on the banners.
+// Command-center composition (mission Part 3): shadow banner + first-run
+// interception + query-param-persisted filters/search + budget strip (hidden
+// until the endpoint exists) over the ledger-derived swimlane board. The
+// board itself never blocks on the banners.
 export function BoardWorkspace(): ReactElement {
   const handle = useEventBoard();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const budgets = useBudgetMeters();
 
   const { filters, groupBy } = useMemo(
     () => parseBoardFilters(Object.fromEntries(searchParams.entries())),
@@ -61,11 +65,12 @@ export function BoardWorkspace(): ReactElement {
 
   function pushQuery(nextFilters: typeof ALL_FILTERS, nextGroup: typeof groupBy): void {
     const qs = boardQueryString(nextFilters, nextGroup);
-    router.replace(qs.length > 0 ? `/?${qs}` : '/', { scroll: false });
+    router.replace(qs.length > 0 ? `/dashboard?${qs}` : '/dashboard', { scroll: false });
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <FirstRunRedirect />
       <ShadowBanner />
       <StaleFeedBanner lastSeq={handle.board.lastSeq} lastAdvancedAtMs={handle.lastAdvancedAtMs} />
       <BoardFilterBar
@@ -75,6 +80,7 @@ export function BoardWorkspace(): ReactElement {
         onChange={(next) => pushQuery(next, groupBy)}
         onGroupChange={(mode) => pushQuery(filters, mode)}
       />
+      {budgets !== null ? <BudgetStrip meters={budgets} /> : null}
       <IntentBoard
         phase={handle.phase}
         board={handle.board}

@@ -1,14 +1,18 @@
 import type { ReactElement } from 'react';
 
+// §7 risk semantics via named tokens (mission Part 2 mapping):
+// low=slate · medium=amber · high=orange · critical=red.
+// Border-tinted outline only — never fill-flooded; red stays scarce so it
+// keeps its meaning. Text mirrors the border token (outline-safe pairing).
 const RISK_STYLES: Record<string, string> = {
-  low: 'border-emerald-500/40 text-emerald-300',
-  medium: 'border-amber-500/40 text-amber-300',
-  high: 'border-orange-500/50 text-orange-300',
-  critical: 'border-red-500/60 bg-red-500/10 text-red-300',
+  low: 'border-[var(--color-risk-low)]/50 text-zinc-400',
+  medium: 'border-[var(--color-risk-medium)]/60 text-[var(--color-risk-medium)]',
+  high: 'border-[var(--color-risk-high)]/70 text-[var(--color-risk-high)]',
+  critical: 'border-[var(--color-risk-critical)]/80 text-[var(--color-risk-critical)]',
 };
 
 export function RiskPill({ risk }: { risk: string }): ReactElement {
-  const style = RISK_STYLES[risk] ?? 'border-zinc-600 text-zinc-400';
+  const style = RISK_STYLES[risk] ?? 'border-zinc-700 text-zinc-500';
   return (
     <span
       data-risk={risk}

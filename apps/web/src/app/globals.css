@@ -3,16 +3,153 @@
 @theme {
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
     "Liberation Mono", monospace;
-  --color-console: #05070a;
-  --grid-line: rgba(148, 163, 184, 0.04);
+  /* Display face is reserved for the marketing hero only (PART 2 typography
+     hierarchy): console surfaces stay tight mono/sans. No webfont download —
+     native system display stacks keep builds offline-safe. */
+  --font-display: -apple-system, "SF Pro Display", BlinkMacSystemFont,
+    system-ui, sans-serif;
+
+  /* Layered canvas system: page < surface < raised. Every async panel sits on
+     one of these three depths so elevation reads as information hierarchy. */
+  --color-canvas: #0b0e14;
+  --color-surface: #10141d;
+  --color-surface-raised: #171c29;
+
+  /* Brand accent family: indigo primary, cyan as signal/live tint. */
+  --color-accent: #818cf8;
+  --color-accent-soft: #a5b4fc;
+  --color-signal: #22d3ee;
+  --radius-card: 0.75rem;
+  --grid-line: rgba(148, 163, 184, 0.05);
+
+  /* §7 color semantics as named tokens — mission mapping: low=slate,
+     medium=amber, high=orange, critical=red. Components reference the token,
+     never raw hex. Outline-only: color encodes state, text encodes meaning. */
+  --color-risk-low: oklch(0.74 0.02 255);
+  --color-risk-medium: oklch(0.82 0.15 85);
+  --color-risk-high: oklch(0.79 0.155 55);
+  --color-risk-critical: oklch(0.68 0.205 25);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background-color: var(--color-console);
-  /* Ops-console radar grid: faint horizontal + vertical scan lines. */
+  background-color: var(--color-canvas);
+  /* Ops-console radar grid over a top glow: faint scanlines keep density
+     readable without decorative imagery (§7: zero decoration, structure only). */
   background-image:
+    radial-gradient(ellipse 60% 32% at 50% -8%, rgba(99, 102, 241, 0.07), transparent),
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-size: 100% 100%, 36px 36px, 36px 36px;
   color: #e4e4e7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* §7 shared surface system: one card recipe everywhere so spacing/border/
+   radius stay consistent without repeating utility soup. */
+@layer components {
+  .card-glass {
+    border-radius: var(--radius-card);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.015)
+    );
+    backdrop-filter: blur(8px);
+  }
+
+  /* Hover elevate micro-interaction: lift + shadow + brand-edge, restrained
+     to cards that navigate (dense tables never bounce). */
+  .card-hover {
+    transition-property: transform, border-color, box-shadow;
+    transition-duration: 160ms;
+    transition-timing-function: ease-out;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    border-color: rgba(129, 140, 248, 0.4);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #a1a1aa;
+  }
+
+  .btn-console {
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 0.5rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #e4e4e7;
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  }
+  .btn-console:hover:not(:disabled) {
+    border-color: rgba(165, 180, 252, 0.5);
+    background-color: rgba(129, 140, 248, 0.1);
+  }
+  .btn-console:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+/* Focus-visible rings everywhere (keyboard trust affordance). */
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Live seq pulse: keyed remount replays this so new ledger arrivals visibly
+   pop once (never loops — constant motion would bury the signal). */
+@keyframes seq-pop {
+  0% {
+    opacity: 0.15;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.seq-flash {
+  animation: seq-pop 480ms ease-out both;
+}
+
+/* Minimal route-transition feel: content rises 4px on mount, once. */
+@keyframes route-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.route-rise {
+  animation: route-rise 240ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seq-flash,
+  .route-rise,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
+  .card-hover,
+  .btn-console {
+    transition: none;
+  }
 }

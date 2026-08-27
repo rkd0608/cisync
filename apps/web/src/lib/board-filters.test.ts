@@ -103,13 +103,25 @@ describe('filter logic over fixture events', () => {
 
 describe('query-param round trip', () => {
   it('serializes only non-default values and parses them back', () => {
-    const qs = boardQueryString({ repo: 'payments', risk: 'high', origin: null }, 'risk');
+    const qs = boardQueryString({ repo: 'payments', risk: 'high', origin: null, q: null }, 'risk');
     expect(qs).toBe('repo=payments&risk=high&group=risk');
     const parsed = parseBoardFilters(Object.fromEntries(new URLSearchParams(qs).entries()));
     expect(parsed).toEqual({
-      filters: { repo: 'payments', risk: 'high', origin: null },
+      filters: { repo: 'payments', risk: 'high', origin: null, q: null },
       groupBy: 'risk',
     });
+  });
+
+  it('round-trips a search term and matches goals case-insensitively', () => {
+    const parsed = parseBoardFilters({ q: 'PAYMENT' });
+    expect(parsed.filters.q).toBe('payment');
+    expect(
+      intents.filter((i) => intentMatchesFilters(i, { ...ALL_FILTERS, q: 'payment' })).map((i) => i.id),
+    ).toEqual([INT_A]);
+    // Candidates inherit the parent's goal for matching.
+    const cand = candidates[0];
+    expect(candidateMatchesFilters(cand, board.intents[INT_A], { ...ALL_FILTERS, q: 'retry' })).toBe(true);
+    expect(candidateMatchesFilters(cand, board.intents[INT_A], { ...ALL_FILTERS, q: 'nonexistent' })).toBe(false);
   });
 
   it('defaults group to state and drops out-of-enum filter values', () => {
@@ -123,6 +135,7 @@ describe('query-param round trip', () => {
     expect(parsed.filters.risk).toBeNull();
     expect(parsed.filters.origin).toBeNull();
     expect(parsed.filters.repo).toBe('acme/payments');
+    expect(parsed.filters.q).toBeNull();
   });
 
   it('treats malicious/empty query noise as "all"', () => {
@@ -130,8 +143,14 @@ describe('query-param round trip', () => {
       repo: '',
       risk: `${'x'.repeat(500)}`,
       group: '../../etc',
+      q: '   ',
     });
     expect(parsed).toEqual({ filters: ALL_FILTERS, groupBy: 'state' });
+  });
+
+  it('serializes a full query incl. search back exactly', () => {
+    const qs = boardQueryString({ repo: null, risk: null, origin: 'agent', q: 'retry loop' }, 'state');
+    expect(qs).toBe('origin=agent&q=retry+loop');
   });
 });
 

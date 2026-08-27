@@ -186,6 +186,10 @@ export interface BoardSummary {
   eligibleCandidates: number;
   inFlightCandidates: number;
   decisionsRendered: number;
+  // Decisions whose ledger timestamp falls on the supplied UTC day. Counted
+  // from the LOADED tail only — callers label it honestly (tooltip cites the
+  // tail cap), never silently implying a full historical scan.
+  decisionsToday: number;
   malformedEvents: number;
 }
 
@@ -203,9 +207,14 @@ const IN_FLIGHT_CANDIDATE_STATES = new Set([
   'blocked_representative',
 ]);
 
-export function deriveSummary(board: BoardState): BoardSummary {
+function utcDayPrefix(isoDate: string): string {
+  return isoDate.slice(0, 10);
+}
+
+export function deriveSummary(board: BoardState, todayIso?: string): BoardSummary {
   const intents = Object.values(board.intents);
   const candidates = Object.values(board.candidates);
+  const todayPrefix = todayIso !== undefined ? utcDayPrefix(todayIso) : null;
   return {
     totalIntents: intents.length,
     activeIntents: intents.filter((i) => ACTIVE_INTENT_STATES.has(i.state)).length,
@@ -217,6 +226,13 @@ export function deriveSummary(board: BoardState): BoardSummary {
       IN_FLIGHT_CANDIDATE_STATES.has(c.state),
     ).length,
     decisionsRendered: board.decisionsRendered,
+    decisionsToday:
+      todayPrefix === null
+        ? 0
+        : board.timeline.filter(
+            (event) =>
+              event.type === 'decision.rendered' && event.occurred_at.startsWith(todayPrefix),
+          ).length,
     malformedEvents: board.malformedCount,
   };
 }

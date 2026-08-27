@@ -10,6 +10,7 @@ import {
   SupersededBanner,
   type FailedEvidenceItem,
 } from '@/components/dossier-alerts';
+import { DossierProvenanceFooter } from '@/components/dossier-provenance-footer';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState, type ApiErrorView } from '@/components/error-state';
 import { ShadowBanner } from '@/components/shadow-banner';
@@ -23,6 +24,9 @@ export const dynamic = 'force-dynamic';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
+// THE trust artifact (mission Part 3 flagship). Canonical URL is the
+// permalink; ?at=dec_… pins the banner decision; provenance footer anchors
+// the audit chain (T6).
 export default async function CandidatePage({
   params,
   searchParams,
@@ -51,9 +55,9 @@ export default async function CandidatePage({
     ? null
     : { code: dossierResult.code, message: dossierResult.message };
 
-  // ?at pin state (frozen ruling #2): the dossier carries only the latest
-  // decision until G4 lands, so a pin that doesn't match latest renders the
-  // honest mismatch notice — never a silently wrong "snapshot".
+  // ?at pin state (frozen ruling #2): until G4 lands servers ignore the query
+  // param and return latest — a pin that doesn't match renders the honest
+  // mismatch notice, never a silently wrong "snapshot".
   const latestDecisionId = dossier?.decision.decision_id ?? null;
   const pinActive =
     permalink.pinnedDecisionId !== null && permalink.pinnedDecisionId === latestDecisionId;
@@ -70,7 +74,7 @@ export default async function CandidatePage({
       })) ?? [];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="route-rise flex flex-col gap-6">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <StateBadge state={candidate.state} />
@@ -92,8 +96,12 @@ export default async function CandidatePage({
           {' · '}est. cost {(candidate.est_cost_millicents / 100_000).toFixed(2)} USD
         </p>
         {dossier !== null ? (
-          <div className="flex">
+          // Share row doubles as the breadcrumb bar on this flagship page.
+          <div className="flex items-center gap-3 border-t border-white/5 pt-3">
             <CopyEvidenceLink candidateId={candidate.candidate_id} decisionId={dossier.decision.decision_id} />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+              permalink is safe for PRs &amp; slack — pinned to decision, never rewritten
+            </span>
           </div>
         ) : null}
       </header>
@@ -119,6 +127,15 @@ export default async function CandidatePage({
           <ErrorState error={dossierError} />
         )}
       </section>
+
+      {dossier !== null ? (
+        <DossierProvenanceFooter
+          inputsHash={dossier.inputs_hash}
+          generatedAt={dossier.generated_at}
+          candidateId={dossier.candidate_id}
+          intentId={dossier.intent_id}
+        />
+      ) : null}
     </div>
   );
 }

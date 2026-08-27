@@ -14,9 +14,13 @@ export interface BoardFilters {
   repo: string | null;
   risk: string | null;
   origin: string | null;
+  // Free-text search over intent goals (mission Part 3: global search stub).
+  // Substring, case-insensitive — honest about what it searches (the loaded
+  // ledger projection), persisted like every other filter.
+  q: string | null;
 }
 
-export const ALL_FILTERS: BoardFilters = { repo: null, risk: null, origin: null };
+export const ALL_FILTERS: BoardFilters = { repo: null, risk: null, origin: null, q: null };
 
 const RISK_SET = new Set<string>(RISK_CLASSES);
 const ORIGIN_SET = new Set<string>(ORIGIN_KINDS);
@@ -38,12 +42,14 @@ export function parseBoardFilters(query: Record<string, string | string[] | unde
   const repo = firstString(query.repo)?.trim() ?? '';
   const risk = firstString(query.risk) ?? '';
   const origin = firstString(query.origin) ?? '';
+  const q = firstString(query.q)?.trim() ?? '';
   const groupBy: BoardGroupMode = firstString(query.group) === 'risk' ? 'risk' : 'state';
   return {
     filters: {
       repo: repo.length > 0 ? repo : null,
       risk: RISK_SET.has(risk) ? risk : null,
       origin: ORIGIN_SET.has(origin) ? origin : null,
+      q: q.length > 0 ? q.toLowerCase() : null,
     },
     groupBy,
   };
@@ -55,11 +61,13 @@ export function boardQueryString(filters: BoardFilters, groupBy: BoardGroupMode)
   if (filters.repo) params.set('repo', filters.repo);
   if (filters.risk) params.set('risk', filters.risk);
   if (filters.origin) params.set('origin', filters.origin);
+  if (filters.q) params.set('q', filters.q);
   if (groupBy === 'risk') params.set('group', 'risk');
   return params.toString();
 }
 
 export function intentMatchesFilters(intent: BoardIntent, f: BoardFilters): boolean {
+  if (f.q !== null && !intent.goal.toLowerCase().includes(f.q)) return false;
   if (f.repo !== null && !(intent.repository ?? '').includes(f.repo)) return false;
   if (f.risk !== null && intent.riskClass !== f.risk) return false;
   if (f.origin !== null && intent.origin !== f.origin) return false;
@@ -67,12 +75,14 @@ export function intentMatchesFilters(intent: BoardIntent, f: BoardFilters): bool
 }
 
 // Repo/risk ride on the parent intent; origin may come from either the
-// candidate's own submitter or its declaring actor.
+// candidate's own submitter or its declaring actor; search matches the
+// parent's goal text.
 export function candidateMatchesFilters(
   candidate: BoardCandidate,
   parent: BoardIntent | undefined,
   f: BoardFilters,
 ): boolean {
+  if (f.q !== null && !(parent?.goal ?? '').toLowerCase().includes(f.q)) return false;
   if (f.repo !== null && !((parent?.repository ?? '')).includes(f.repo)) return false;
   if (f.risk !== null && parent?.riskClass !== f.risk) return false;
   if (

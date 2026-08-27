@@ -39,12 +39,12 @@ describe('InstallationsTable render states (§2.2)', () => {
     expect(html).toContain('checks:write');
   });
 
-  it('empty state teaches and routes to /onboarding', () => {
+  it('empty state teaches and routes to the guided setup flow', () => {
     const html = renderToStaticMarkup(
       <InstallationsTable data={{ installations: [] }} error={null} syncing={false} onResync={() => undefined} nowMs={null} />,
     );
     expect(html).toContain('no installations');
-    expect(html).toContain('href="/onboarding"');
+    expect(html).toContain('href="/app/setup"');
   });
 
   it('error state surfaces the machine-readable code', () => {
