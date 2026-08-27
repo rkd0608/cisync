@@ -76,7 +76,7 @@ describe('landing page', () => {
     it('shows an honest not-configured note instead of a fabricated link', () => {
       const markup = renderToStaticMarkup(<LandingPage />);
       expect(markup).toContain('data-testid="cta-install-app-unset"');
-      expect(markup).toContain('install URL not configured');
+      expect(markup).toContain('install link coming shortly');
       expect(markup).not.toContain('data-testid="cta-install-app"');
     });
   });

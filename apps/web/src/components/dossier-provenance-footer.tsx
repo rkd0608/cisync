@@ -27,9 +27,9 @@ export function DossierProvenanceFooter({
         <span className="flex items-center gap-1 text-zinc-500">
           inputs_hash <IdLabel id={inputsHash} head={10} tail={4} />
         </span>
-        <span className="text-zinc-600">generated {generatedAt}</span>
+        <span className="text-zinc-400">generated {generatedAt}</span>
       </div>
-      <p className="mt-2 font-mono text-[10px] leading-relaxed text-zinc-600">
+      <p className="mt-2 font-mono text-[10px] leading-relaxed text-zinc-400">
         candidate {candidateId} · intent {intentId} · append-only ledger: the causation event id for this
         decision lives in the dossier decision record — drill from the tail panel on the board.
       </p>

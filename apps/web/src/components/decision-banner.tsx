@@ -20,7 +20,7 @@ function FactorList({ factors }: { factors: DecisionFactor[] }): ReactElement {
         <li key={`${factor.name}-${index}`} className="flex flex-wrap items-baseline gap-2">
           <span className="text-zinc-100">{factor.name}</span>
           <span className="text-zinc-300">={String(factor.value)}</span>
-          <span className="text-zinc-600">{factor.source}</span>
+          <span className="text-zinc-400">{factor.source}</span>
         </li>
       ))}
     </ul>

@@ -9,8 +9,8 @@ const SLOTS = ['acz', 'krn', 'vlt', 'mtr', 'os1', 'pl8'] as const;
 export function LandingSocialProof(): ReactElement {
   return (
     <section className="mx-auto w-full max-w-6xl border-y border-white/5 py-10" data-testid="social-proof-strip">
-      <p className="text-center font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-600">
-        pilot cohort forming · wordmarks arrive with partners · not fabricated
+      <p className="text-center font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+        pilot cohort forming · slots reserved for real partners · no fabricated endorsements
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4" aria-hidden>
         {SLOTS.map((slot) => (

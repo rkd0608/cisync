@@ -1,12 +1,13 @@
 import { InstallationsClient } from '@/components/installations-client';
-import { getInstallationsStatus } from '@/lib/cisync-api';
 
 export const dynamic = 'force-dynamic';
 
-// §2.2 installation/repo status. Server fetch first; endpoint absence renders
-// the honest error state (backend G3 lands in parallel) — never a crash.
-export default async function InstallationsPage(): Promise<React.ReactElement> {
-  const result = await getInstallationsStatus();
+// §2.2 installation/repo status. WHY the page no longer server-fetches (B2
+// SSR fix): the relative gateway path has no URL base during SSR, so the
+// old pre-render always produced a fabricated "unreachable" error before the
+// client could speak. The client shell fetches on mount through the
+// same-origin proxy instead — identical semantics to the dashboard board.
+export default function InstallationsPage(): React.ReactElement {
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -16,12 +17,7 @@ export default async function InstallationsPage(): Promise<React.ReactElement> {
           stopped flowing — checks will not appear until it resumes.
         </p>
       </div>
-      <InstallationsClient
-        initialData={result.ok ? result.data : null}
-        initialError={
-          result.ok ? null : { code: result.code, message: result.message }
-        }
-      />
+      <InstallationsClient />
     </div>
   );
 }

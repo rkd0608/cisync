@@ -18,7 +18,7 @@ export default function DashboardPage(): React.ReactElement {
             Search and filters persist in the URL.
           </p>
         </div>
-        <p className="hidden font-mono text-[10px] uppercase tracking-widest text-zinc-700 lg:block">
+        <p className="hidden font-mono text-[10px] uppercase tracking-widest text-zinc-500 lg:block">
           dense · honest · event-sourced
         </p>
       </div>

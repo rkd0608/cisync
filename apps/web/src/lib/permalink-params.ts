@@ -12,6 +12,26 @@ function firstString(value: string | string[] | undefined): string | undefined {
   return value;
 }
 
+// Bridge from the browser's useSearchParams() API to the record shape this
+// module validates. WHY here: the client-era candidate shell reads params via
+// hooks; keeping the adapter beside parsePermalinkParams means repeated-value
+// and absent-key semantics can never drift between the two entry styles.
+export function urlSearchParamsToRecord(
+  params: URLSearchParams,
+): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  params.forEach((value, key) => {
+    const existing = out[key];
+    if (existing === undefined) {
+      out[key] = value;
+      return;
+    }
+    if (Array.isArray(existing)) existing.push(value);
+    else out[key] = [existing, value];
+  });
+  return out;
+}
+
 export interface PermalinkParams {
   // dec_* id when the URL pins a decision AND the value is well-formed.
   pinnedDecisionId: string | null;

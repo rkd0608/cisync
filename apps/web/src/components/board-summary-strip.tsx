@@ -34,7 +34,7 @@ export function BoardSummaryStrip({
       {tiles.map((tile) => (
         <div key={tile.label} className="bg-[var(--color-surface)] px-4 py-3 transition-colors hover:bg-[var(--color-surface-raised)]" title={tile.note}>
           <p className={`font-mono text-xl tabular-nums ${tile.tone}`}>{tile.value}</p>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">{tile.label}</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{tile.label}</p>
         </div>
       ))}
     </div>

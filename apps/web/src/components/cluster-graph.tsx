@@ -60,10 +60,10 @@ export function ClusterGraph({
             </ul>
           </>
         ) : (
-          <p className="my-auto font-mono text-xs text-zinc-600">single-member cluster — no relations to draw</p>
+          <p className="my-auto font-mono text-xs text-zinc-400">single-member cluster — no relations to draw</p>
         )}
       </div>
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-zinc-700">
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-zinc-500">
         edges encode relation glyphs (= dup · &lt;&gt; alt · + comp · ✕ conflict · → prereq)
       </p>
     </div>
@@ -92,7 +92,7 @@ function NodeChip({ member }: { member: MemberNode }): ReactElement {
       >
         {truncateMiddle(member.candidateId, 10, 4)}
         {member.similarity !== undefined ? (
-          <span className="tabular-nums text-zinc-600">{Math.round(member.similarity * 100)}%</span>
+          <span className="tabular-nums text-zinc-400">{Math.round(member.similarity * 100)}%</span>
         ) : null}
       </Link>
     </>

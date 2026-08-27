@@ -19,7 +19,7 @@ const LOOP_INDEX = 2; // blocked <-> repairing loop lives at this rung
 function nodeTone(current: boolean, reached: boolean): string {
   if (current) return 'border-[var(--color-accent)] bg-[var(--color-accent)]/20 text-[var(--color-accent-soft)]';
   if (reached) return 'border-zinc-600 bg-zinc-800/60 text-zinc-300';
-  return 'border-transparent text-zinc-600';
+  return 'border-transparent text-zinc-400';
 }
 
 // Vertical cockpit rail (mission Part 3): animated pulse ring on the CURRENT
@@ -48,7 +48,7 @@ export function StateLadderVertical({ state }: { state: string }): ReactElement 
                 {step}
               </span>
               {index === LOOP_INDEX ? (
-                <span aria-hidden className="ml-2 select-none text-[10px] text-zinc-600">⇄ repairing</span>
+                <span aria-hidden className="ml-2 select-none text-[10px] text-zinc-400">⇄ repairing</span>
               ) : null}
             </li>
           );

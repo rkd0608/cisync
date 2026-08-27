@@ -11,7 +11,7 @@ const RELATION_GLYPHS: Record<string, string> = {
 
 export function RelationBadge({ relation }: { relation: string | null }): ReactElement {
   if (!relation) {
-    return <span className="font-mono text-[11px] text-zinc-600">--</span>;
+    return <span className="font-mono text-[11px] text-zinc-400">--</span>;
   }
   const label = RELATION_GLYPHS[relation] ?? relation;
   return (

@@ -45,7 +45,7 @@ export function DossierView({ dossier }: { dossier: EvidenceDossier }): ReactEle
           </h3>
         </summary>
         {dossier.evidence_accepted.length === 0 ? (
-          <p className="mt-2 text-xs text-zinc-600">none recorded</p>
+          <p className="mt-2 text-xs text-zinc-400">none recorded</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1 font-mono text-xs">
             {dossier.evidence_accepted.map((ev) => (
@@ -102,7 +102,7 @@ function DeferredBody({ items, policyLabel }: { items: DeferredItem[]; policyLab
     // §2.8: absence of deferral is information — cite the policy that ran
     // everything required, never a blank section.
     return (
-      <p data-testid="deferred-empty" className="mt-2 text-xs text-zinc-600">
+      <p data-testid="deferred-empty" className="mt-2 text-xs text-zinc-400">
         Nothing deferred — plan ran everything required by {policyLabel}.
       </p>
     );
@@ -124,7 +124,7 @@ function DeferredBody({ items, policyLabel }: { items: DeferredItem[]; policyLab
 // T3: uncertainty is content — neutral informational blocks with mitigation
 // text; reserved for things a human would ask about.
 function UncertaintyList({ items }: { items: UncertaintyItem[] }): ReactElement {
-  if (items.length === 0) return <p className="mt-2 text-xs text-zinc-600">none declared</p>;
+  if (items.length === 0) return <p className="mt-2 text-xs text-zinc-400">none declared</p>;
   return (
     <ul className="mt-2 flex flex-col gap-2 text-xs">
       {items.map((item, index) => (
@@ -140,7 +140,7 @@ function UncertaintyList({ items }: { items: UncertaintyItem[] }): ReactElement 
 }
 
 function PostMergeList({ items }: { items: PostMergeEntry[] }): ReactElement {
-  if (items.length === 0) return <p className="mt-2 text-xs text-zinc-600">none required</p>;
+  if (items.length === 0) return <p className="mt-2 text-xs text-zinc-400">none required</p>;
   return (
     <ul className="mt-2 flex flex-col gap-1 font-mono text-xs">
       {items.map((item, index) => (

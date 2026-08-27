@@ -25,7 +25,7 @@ function Select({
   onChange: (value: string | null) => void;
 }): ReactElement {
   return (
-    <label className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
+    <label className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-zinc-400">
       {label}
       <select
         data-testid={`filter-${label}`}
@@ -65,7 +65,7 @@ export function BoardFilterBar({
       data-testid="board-filter-bar"
       className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-white/8 bg-[var(--color-surface)] px-4 py-2"
     >
-      <label className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
+      <label className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-zinc-400">
         <span aria-hidden className="text-zinc-500">⌕</span>
         <input
           type="search"
@@ -73,7 +73,7 @@ export function BoardFilterBar({
           placeholder="search goals…"
           defaultValue={filters.q ?? ''}
           onChange={(event) => onChange({ ...filters, q: event.target.value })}
-          className="w-44 rounded-md border border-zinc-700 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal text-zinc-200 placeholder:text-zinc-600"
+          className="w-44 rounded-md border border-zinc-700 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal text-zinc-200 placeholder:text-zinc-400"
         />
       </label>
       <Select
@@ -94,7 +94,7 @@ export function BoardFilterBar({
         options={options.origins}
         onChange={(origin) => onChange({ ...filters, origin })}
       />
-      <div className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
+      <div className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-zinc-400">
         group
         <div className="flex overflow-hidden rounded-md border border-zinc-700">
           {GROUP_MODES.map((mode) => (

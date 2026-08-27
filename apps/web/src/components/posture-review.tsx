@@ -77,7 +77,7 @@ export function PostureReview({
 
       <table className="w-full border-collapse font-mono text-xs">
         <thead>
-          <tr className="border-b border-zinc-800 text-left text-[10px] uppercase tracking-widest text-zinc-600">
+          <tr className="border-b border-zinc-800 text-left text-[10px] uppercase tracking-widest text-zinc-400">
             <th className="py-1.5 pr-2">risk</th>
             <th className="py-1.5">required evidence</th>
           </tr>

@@ -19,7 +19,7 @@ export default function LoginPage(): ReactElement {
         <div className="card-glass p-6 sm:p-8">
           <LoginForm />
         </div>
-        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-zinc-700">
+        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-zinc-400">
           access is allowlisted · codes expire in 10 minutes
         </p>
       </div>

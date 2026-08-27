@@ -17,7 +17,7 @@ export function ConflictPanel({ conflicts }: { conflicts: ConflictRef[] }): Reac
         <h3 className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
           surface conflicts
         </h3>
-        <p className="mt-1 text-xs text-zinc-600">
+        <p className="mt-1 text-xs text-zinc-400">
           No conflicts on record. Note: the v1 GET /change-intents/&#123;id&#125; response
           (Intent) does not carry the conflicts[] field — it is only returned by
           POST /change-intents (IntentGrant). This panel renders live conflict

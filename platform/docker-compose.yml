@@ -130,6 +130,9 @@ services:
       CISYNC_API_URL: http://control-plane:8081
       CISYNC_CONNECTOR_URL: http://github-connector:8083
       CISYNC_ADMIN_TOKEN: dev_admin_token_not_for_prod
+      # Login-session parity (B1): ≥16 chars required by auth-config.ts.
+      AUTH_SECRET: dev_auth_secret_not_for_prod_local_only
+      CISYNC_AUTH_EMAIL_PATTERN: '.*@example\.com$'
     ports: ["3000:3000"]
     depends_on: [control-plane]
 

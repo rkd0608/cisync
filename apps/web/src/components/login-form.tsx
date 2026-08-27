@@ -30,7 +30,7 @@ function ErrorNote({ error }: { error: AuthStepError }): ReactElement | null {
 }
 
 const INPUT_CLASS =
-  'w-full rounded-md border border-white/15 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/40';
+  'w-full rounded-md border border-white/15 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-400 focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/40';
 const BUTTON_CLASS =
   'w-full rounded-md bg-cyan-500/90 px-4 py-2.5 font-mono text-sm font-semibold text-black transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50';
 

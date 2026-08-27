@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { evidencePermalinkPath, parsePermalinkParams } from './permalink-params';
+import {
+  evidencePermalinkPath,
+  parsePermalinkParams,
+  urlSearchParamsToRecord,
+} from './permalink-params';
 
 const VALID_DEC = 'dec_01J8ZC7XK9Q2W3E4R5T6Y70003';
 const VALID_CAND = 'cand_01J8ZC7XK9Q2W3E4R5T6Y70002';
@@ -68,6 +72,32 @@ describe('parsePermalinkParams', () => {
   it('treats an empty repeated param as absent', () => {
     const parsed = parsePermalinkParams({ at: [] });
     expect(parsed.pinnedDecisionId).toBeNull();
+  });
+});
+
+// Client shells (B2 SSR fix) read the URL with useSearchParams() inside a
+// client component; this adapter bridges that API to the record shape
+// parsePermalinkParams was hardened against. Pinning its contract here keeps
+// repeated/absent handling byte-compatible with the server-era behavior.
+describe('urlSearchParamsToRecord', () => {
+  const make = (query: string): URLSearchParams => new URLSearchParams(query);
+
+  it('maps single values as plain strings', () => {
+    expect(urlSearchParamsToRecord(make('at=dec_x&src=gh_check'))).toEqual({
+      at: 'dec_x',
+      src: 'gh_check',
+    });
+  });
+
+  it('folds repeats into arrays so first-value-wins survives downstream', () => {
+    expect(urlSearchParamsToRecord(make('at=a&at=b&src=x'))).toEqual({
+      at: ['a', 'b'],
+      src: 'x',
+    });
+  });
+
+  it('returns an empty record for an empty query', () => {
+    expect(urlSearchParamsToRecord(make(''))).toEqual({});
   });
 });
 

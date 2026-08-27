@@ -13,7 +13,7 @@ const COUNTDOWN_TONES: Record<string, string> = {
   overdue: 'text-[var(--color-risk-critical)]',
   soon: 'text-[var(--color-risk-medium)]',
   calm: 'text-zinc-500',
-  none: 'text-zinc-600',
+  none: 'text-zinc-400',
 };
 
 function utcClock(iso: string): string {
@@ -60,13 +60,13 @@ export function IntentCard({
           <ul className="mt-1.5 flex flex-col gap-0.5 font-mono text-[11px]">
             {events.map((event) => (
               <li key={event.id} className="flex items-baseline gap-2">
-                <span className="tabular-nums text-zinc-600">{utcClock(event.occurred_at)}</span>
+                <span className="tabular-nums text-zinc-400">{utcClock(event.occurred_at)}</span>
                 <span className="truncate text-[var(--color-accent-soft)]">{event.type}</span>
               </li>
             ))}
           </ul>
           {events.length >= 5 ? (
-            <span className="mt-1 block font-mono text-[10px] text-zinc-600">
+            <span className="mt-1 block font-mono text-[10px] text-zinc-400">
               newest 5 of intent activity — full trail inside
             </span>
           ) : null}

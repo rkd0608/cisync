@@ -24,11 +24,11 @@ export function EmptyState({
       data-testid="empty-state"
       className="flex flex-col items-center gap-1 rounded border border-dashed border-zinc-800 px-5 py-8 text-center"
     >
-      <p data-testid="empty-what" className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+      <p data-testid="empty-what" className="font-mono text-xs uppercase tracking-widest text-zinc-400">
         {what}
       </p>
       {whyEmpty ? (
-        <p data-testid="empty-why" className="max-w-md text-xs text-zinc-600">
+        <p data-testid="empty-why" className="max-w-md text-xs text-zinc-400">
           {whyEmpty}
         </p>
       ) : null}

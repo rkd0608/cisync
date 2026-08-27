@@ -24,7 +24,7 @@ export function StepRail({ current }: { current: SetupStep }): ReactElement {
             data-current={active || undefined}
             data-done={done || undefined}
             className={
-              active ? 'text-[var(--color-accent-soft)]' : done ? 'text-emerald-400' : 'text-zinc-600'
+              active ? 'text-[var(--color-accent-soft)]' : done ? 'text-emerald-400' : 'text-zinc-400'
             }
           >
             {done ? '✓' : '○'} {'①②③'[step.index - 1]} {step.title}

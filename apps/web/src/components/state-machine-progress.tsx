@@ -42,7 +42,7 @@ export function StateMachineProgress({ state }: { state: string }): ReactElement
                   ? 'border-cyan-400 bg-cyan-400/15 text-cyan-200'
                   : reached
                     ? 'border-zinc-700 text-zinc-300'
-                    : 'border-transparent text-zinc-600',
+                    : 'border-transparent text-zinc-400',
               ].join(' ')}
             >
               {step}

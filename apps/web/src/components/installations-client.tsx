@@ -6,18 +6,24 @@ import { getInstallationsStatus } from '@/lib/cisync-api';
 import type { InstallationsStatusResponse } from '@/lib/installation-schemas';
 
 // Client shell for /installations: owns the resync refetch (read-only) and the
-// post-mount clock that makes delivery ages relative. Server-provided initial
-// data renders first; a failed server fetch starts in the honest error state.
+// post-mount clock that makes delivery ages relative. WHY no server-provided
+// initial data anymore (B2 SSR fix): SSR cannot resolve the relative gateway
+// path, so the server-era "initial fetch" degraded every first paint into a
+// bogus unreachable-error. The shell now starts in the syncing posture when
+// launched data-less and mounts its own browser-side gateway call — same
+// auth semantics on every host, zero deployment env.
 export function InstallationsClient({
-  initialData,
-  initialError,
+  initialData = null,
+  initialError = null,
 }: {
-  initialData: InstallationsStatusResponse | null;
-  initialError: ApiErrorLike | null;
+  initialData?: InstallationsStatusResponse | null;
+  initialError?: ApiErrorLike | null;
 }): ReactElement {
   const [data, setData] = useState<InstallationsStatusResponse | null>(initialData);
   const [error, setError] = useState<ApiErrorLike | null>(initialError);
-  const [syncing, setSyncing] = useState(false);
+  // Starting state mirrors reality: with no server data in hand we are
+  // genuinely fetching — the table must not flash "no installations".
+  const [syncing, setSyncing] = useState(initialData === null && initialError === null);
   const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -35,6 +41,10 @@ export function InstallationsClient({
       setSyncing(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (initialData === null && initialError === null) resync();
+  }, [resync, initialData, initialError]);
 
   return (
     <InstallationsTable

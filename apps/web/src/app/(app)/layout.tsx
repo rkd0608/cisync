@@ -32,7 +32,7 @@ export default async function AppLayout({
             <span aria-hidden className="inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
             CISYNC
           </Link>
-          <span className="hidden text-[10px] uppercase tracking-[0.25em] text-zinc-600 sm:inline">
+          <span className="hidden text-[10px] uppercase tracking-[0.25em] text-zinc-400 sm:inline">
             change control console
           </span>
       <nav className="ml-auto flex items-center gap-4 text-xs text-zinc-400">
@@ -65,7 +65,7 @@ export default async function AppLayout({
       {/* route-rise gives a minimal enter transition (mission Part 2
           micro-interactions) without any router-level dependency. */}
       <main className="route-rise mx-auto w-full max-w-7xl flex-1 px-5 py-8">{children}</main>
-      <footer className="border-t border-white/5 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-zinc-700">
+      <footer className="border-t border-white/5 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-zinc-500">
         read-mostly · every number derived from the ledger · nothing fabricated
       </footer>
     </div>

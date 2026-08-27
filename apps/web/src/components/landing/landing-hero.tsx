@@ -47,9 +47,9 @@ export function LandingHero(): ReactElement {
           // NEXT_PUBLIC_CISYNC_GITHUB_APP_INSTALL_URL; fabricating one would lie.
           <span
             data-testid="cta-install-app-unset"
-            className="rounded-lg border border-dashed border-white/15 px-6 py-3 font-mono text-xs text-zinc-600"
+            className="rounded-lg border border-dashed border-white/25 px-6 py-3 font-mono text-xs text-zinc-400"
           >
-            GitHub App install URL not configured
+            GitHub App install link coming shortly — sign in meanwhile
           </span>
         )}
       </div>

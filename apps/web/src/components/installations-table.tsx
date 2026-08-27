@@ -80,14 +80,14 @@ function InstallationBlock({
         <span>{installation.account}</span>
         <span className="text-emerald-400">✓ app installed</span>
         {Object.entries(installation.permissions ?? {}).map(([permission, level]) => (
-          <span key={permission} className="text-zinc-600">
+          <span key={permission} className="text-zinc-400">
             {permission}:{level}
           </span>
         ))}
       </p>
       <table className="mt-2 w-full border-collapse font-mono text-xs">
         <thead>
-          <tr className="border-b border-zinc-800 text-left text-[10px] uppercase tracking-widest text-zinc-600">
+          <tr className="border-b border-zinc-800 text-left text-[10px] uppercase tracking-widest text-zinc-400">
             <th className="py-1 pr-2">repo</th>
             <th className="py-1 pr-2">webhook state</th>
             <th className="py-1 pr-2 text-right">last delivery</th>
@@ -161,7 +161,7 @@ export function InstallationsTable({
         <InstallationBlock key={installation.installation_id} installation={installation} nowMs={nowMs} />
       ))}
 
-      <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-700">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
         first debugging stop when checks don&apos;t appear · <Link href="/app/setup" className="underline">guided setup</Link>
       </p>
     </div>

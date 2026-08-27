@@ -140,3 +140,46 @@ describe('design-token layer (globals.css)', () => {
     expect(pillSource).not.toMatch(/bg-\[var\(--color-risk[^)]*\)\]/);
   });
 });
+
+describe('contrast tokens — zinc floor on data surfaces', () => {
+  // Measured against the shipped canvas family (#0b0e14 canvas, #10141d
+  // surface, #171c29 raised — WCAG relative-luminance math):
+  //   zinc-600 #52525b → 2.20–2.50:1   FAIL
+  //   zinc-500 #71717a → 3.52–4.00:1   FAIL (bump target rejected)
+  //   zinc-400 #a1a1aa → 6.64–7.54:1   PASS ≥4.5 everywhere
+  // So the rule "zinc-500 only where still ≥4.5:1" resolves to zinc-400 for
+  // EVERY text token in this app — there is no surface where 500 passes.
+  const TEXT_ZINC_LOW = /(^|\s|')((?:hover:)?text-zinc-(?:600|700))(?=\s|'|")/g;
+  // Micro-label text below the floor is tolerated ONLY where the string is
+  // incidental/decorative per WCAG 1.4.3 (marketing glyph block, whisper
+  // footers) — each exemption carries a WHY at its usage site.
+  const ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
+    {
+      file: join('landing-social-proof.tsx'),
+      why: 'aria-hidden placeholder logomark strip — decorative glyph block, not data',
+    },
+  ];
+
+  it('never renders micro-label or data text in zinc-600/700 outside the documented exemptions', () => {
+    const offenders: Array<{ file: string; match: string }> = [];
+    for (const file of listFiles(SRC_ROOT, ['.ts', '.tsx'])) {
+      if (file.includes('.test.')) continue;
+      const rel = file.slice(SRC_ROOT.length + 1);
+      if (ALLOWLIST.some((entry) => rel.endsWith(entry.file))) continue;
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(TEXT_ZINC_LOW)) {
+        offenders.push({ file: rel, match: match[2] ?? String(match[0]) });
+      }
+    }
+    expect(
+      offenders.map((offender) => `${offender.file}: ${offender.match}`),
+    ).toEqual([]);
+  });
+
+  it('documents the measured ladder that pins the bump decision', () => {
+    // Guards against a future palette change silently invalidating the
+    // zinc-400 choice above: re-run the luminance script if any hex moves.
+    const css = readFileSync(join(SRC_ROOT, 'app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/--color-canvas:\s*#0b0e14/i);
+  });
+});

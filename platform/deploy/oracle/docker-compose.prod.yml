@@ -159,6 +159,10 @@ services:
       CISYNC_API_URL: http://control-plane:8081
       CISYNC_CONNECTOR_URL: http://github-connector:8083
       CISYNC_ADMIN_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN}
+      # Auth session secret + login allowlist (B1): code reads AUTH_SECRET
+      # (apps/web src/lib/auth-config.ts); values live in deploy/.env.prod.
+      AUTH_SECRET: ${AUTH_SECRET:?set in .env.prod}
+      CISYNC_AUTH_EMAIL_PATTERN: ${CISYNC_AUTH_EMAIL_PATTERN:?set in .env.prod}
     networks: [cisync-net]
     mem_limit: 2g
     cpus: 0.5
