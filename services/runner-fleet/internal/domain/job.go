@@ -37,6 +37,11 @@ type JobSpec struct {
 	InputsHash string      `json:"inputs_hash"`
 	TimeoutMS  int64       `json:"timeout_ms"`
 	SimProfile *SimProfile `json:"sim_profile,omitempty"`
+	// PreFetchedBundleRef carries the control-plane-materialized repo
+	// snapshot (absolute path under the shared cisync-repos volume, keyed by
+	// inputs_hash). Runners NEVER fetch with tokens themselves (B5): when
+	// empty, real-exec providers degrade to honest all-skipped outcomes.
+	PreFetchedBundleRef string `json:"pre_fetched_bundle_ref,omitempty"`
 }
 
 // Job is one fenced execution instance; run_id is unique per attempt.

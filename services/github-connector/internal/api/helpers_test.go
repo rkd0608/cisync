@@ -23,13 +23,17 @@ const testSecret = "test_conn_secret"
 
 var frozenNow = time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 
-// recordingRouter captures emit calls; dry-run posture by default.
+// recordingRouter captures emit calls; dry-run posture by default. Set
+// liveMode=true to emulate a wired installation so the report gate's
+// non-dry-run paths become reachable in tests.
 type recordingRouter struct {
-	creates   []checks.CheckPayload
-	updates   []checks.CheckPayload
-	updateIDs []int64
-	nextID    int64
-	err       error // injectable failure
+	creates    []checks.CheckPayload
+	updates    []checks.CheckPayload
+	updateIDs  []int64
+	nextID     int64
+	err        error // injectable failure
+	liveMode   bool
+	queuedMode bool // emulate budget exhaustion → write parked in outbox
 }
 
 func (r *recordingRouter) Create(_ context.Context, _ string, payload checks.CheckPayload) (emit.Result, error) {
@@ -38,7 +42,7 @@ func (r *recordingRouter) Create(_ context.Context, _ string, payload checks.Che
 	}
 	r.creates = append(r.creates, payload)
 	r.nextID++
-	return emit.Result{CheckRunID: r.nextID, DryRun: true}, nil
+	return r.result(r.nextID), nil
 }
 
 func (r *recordingRouter) Update(_ context.Context, _ string, checkRunID int64, payload checks.CheckPayload) (emit.Result, error) {
@@ -47,7 +51,18 @@ func (r *recordingRouter) Update(_ context.Context, _ string, checkRunID int64, 
 	}
 	r.updates = append(r.updates, payload)
 	r.updateIDs = append(r.updateIDs, checkRunID)
-	return emit.Result{CheckRunID: checkRunID}, nil
+	return r.result(checkRunID), nil
+}
+
+func (r *recordingRouter) result(id int64) emit.Result {
+	switch {
+	case r.queuedMode:
+		return emit.Result{Queued: true}
+	case r.liveMode:
+		return emit.Result{CheckRunID: id}
+	default:
+		return emit.Result{CheckRunID: id, DryRun: true}
+	}
 }
 
 func (r *recordingRouter) InstallationFor(_ context.Context, _ string) (int64, bool) {

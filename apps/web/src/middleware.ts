@@ -1,24 +1,33 @@
-// Auth gate for the console surface. WHY verify (not just cookie-presence):
-// a stale/tampered cookie must bounce exactly like an absent one; WebCrypto
-// verification keeps this runnable on the edge runtime.
+// Auth gate for the console surface. WHY oracle-call instead of local HMAC
+// verification: sessions are control-plane-signed Ed25519 JWTs carried in an
+// httpOnly cookie (SPEC §3 2026-08-26); validation happens ONE place —
+// GET /v1/auth/me via the same-origin gateway — so tampered, stale or revoked
+// cookies bounce exactly like absent ones, with identical /login?next= UX.
 import { NextResponse, type NextRequest } from 'next/server';
-import { authSecret } from '@/lib/auth-config';
-import { verifySession } from '@/lib/auth-session';
-import { SESSION_COOKIE } from '@/lib/session-cookie';
+import { checkSessionViaGateway } from '@/lib/middleware-auth';
+
+export const HEADER_AUTH_EMAIL = 'x-cisync-auth-email';
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const secret = authSecret();
-  const claims =
-    token !== undefined && secret !== null ? await verifySession(token, secret) : null;
+  const result = await checkSessionViaGateway(
+    request.nextUrl.origin,
+    request.headers.get('cookie') ?? undefined,
+  );
 
-  if (claims === null) {
+  if (!result.authenticated) {
     const loginUrl = new URL('/login', request.url);
     // Round-trip target so post-login lands where the user meant to go.
     loginUrl.searchParams.set('next', request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
-  return NextResponse.next();
+
+  // Forward the oracle-verified identity to server components (the console
+  // layout renders it in the header). WHY a request header and not a client
+  // hint: the value crossed the /me trust boundary INSIDE this middleware,
+  // downstream code can rely on it without re-verifying signatures.
+  const headers = new Headers(request.headers);
+  if (result.email !== null) headers.set(HEADER_AUTH_EMAIL, result.email);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {
@@ -30,8 +39,7 @@ export const config = {
     '/installations/:path*',
     '/decisions/:path*',
     '/settings/:path*',
-    // Guided first-run flow (mission Part 1) lives behind auth like the rest
-    // of the console — anonymous visitors bounce to login with next=/app/setup.
+    // Guided first-run flow lives behind auth like the rest of the console.
     '/app/:path*',
   ],
 };

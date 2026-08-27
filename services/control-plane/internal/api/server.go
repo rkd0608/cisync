@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cisync.dev/cisync/control-plane/internal/audit"
+	"cisync.dev/cisync/control-plane/internal/authusers"
 	"cisync.dev/cisync/control-plane/internal/config"
 	"cisync.dev/cisync/control-plane/internal/domain"
 	plannerengine "cisync.dev/cisync/control-plane/internal/planner"
@@ -26,6 +27,11 @@ type Server struct {
 	metrics *Metrics
 	audit   *audit.Stream
 	started time.Time
+	// sessionSigner/Verifier implement the stateless web-session JWTs
+	// (email+password auth). Both nil when CISYNC_SESSION_KEY_FILE is unset;
+	// /v1/auth/* then fails closed instead of silently accepting.
+	sessionSigner   *authusers.Signer
+	sessionVerifier *authusers.Verifier
 }
 
 // NewServer constructs the server; planner may be nil to use the real
@@ -61,7 +67,28 @@ func NewServer(cfg *config.Config, st *store.Store, planner domain.Planner) *Ser
 				s.metrics.Add("cisync_security_audit_dropped_total", 1, "kind", string(kind))
 			},
 		})
+	// WHY session keys build before serving (not per-request): one PEM parse
+	// at boot keeps the hot path allocation-free and surfaces a bad key file
+	// as a loud startup error rather than a 500 at first login.
+	// (Loaded via UseSessionKey from main after construction.)
 	return s
+}
+
+// UseSessionKey loads the DEDICATED session-signing Ed25519 key (mirrors
+// store.UseSigningKey's late-bind seam). Empty path is allowed in dev:
+// /v1/auth/* then fails closed with 503 instead of minting unverifiable
+// tokens. Errors are loud — a bad key file must block serving, not degrade.
+func (s *Server) UseSessionKey(keyFile string) error {
+	if keyFile == "" {
+		return nil
+	}
+	signer, err := authusers.NewSignerFromPEMFile(keyFile)
+	if err != nil {
+		return err
+	}
+	s.sessionSigner = signer
+	s.sessionVerifier = signer.Verifier()
+	return nil
 }
 
 var errAuditNoStore = auditSinkError("no store wired")
@@ -112,7 +139,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/leases/{leaseId}", s.requireAuth(s.handleReleaseLease))
 	mux.HandleFunc("GET /v1/events", s.requireAuth(s.handleTailEvents))
 
-	mux.HandleFunc("POST /v1/hooks/github", s.handleGitHubWebhook)
+// Public email+password auth surface (SPEC §3 2026-08-26): NO admin bearer —
+// the browser obtains a session JWT here and carries it as an httpOnly
+// cookie through the web gateway. Registered without requireAuth.
+mux.HandleFunc("POST /v1/auth/signup", s.handleAuthSignup)
+mux.HandleFunc("POST /v1/auth/login", s.handleAuthLogin)
+mux.HandleFunc("GET /v1/auth/me", s.requireSession(s.handleAuthMe))
+
+mux.HandleFunc("POST /v1/hooks/github", s.handleGitHubWebhook)
 	mux.HandleFunc("POST /internal/ctrl/deliveries", s.handleDelivery)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

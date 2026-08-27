@@ -1,19 +1,33 @@
 // Client-side auth call layer for /login. WHY a separate module: the form
 // component stays presentational while every network transition is a pure,
-// stubbable function — the vitest suite exercises the flow with mocked fetch
-// and no DOM.
+// stubbable function — the vitest suite exercises signup→login→me with a
+// mocked fetch and no DOM (email+password flow per SPEC §3 2026-08-26;
+// the OTP code path is deleted).
+//
+// Requests go through the SAME same-origin gateway as every other console
+// call (/api/cisync/v1/auth/*): the route handler special-cases auth paths to
+// capture the upstream session JWT and set the httpOnly cisync_session
+// cookie server-side. The token itself never crosses the client JS boundary.
 
 import { z } from 'zod';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type AuthStepError = {
-  kind: 'network' | 'not_allowed' | 'rate_limited' | 'invalid_code' | 'server';
+  kind:
+    | 'network'
+    | 'invalid_credentials' // uniform 401 body (no enumeration)
+    | 'weak_password'
+    | 'invalid_email'
+    | 'exists'
+    | 'rate_limited'
+    | 'server';
   message: string;
   retryAfterS?: number;
 };
 
-const requestCodeResponseSchema = z.object({ ok: z.literal(true) }).passthrough();
+const userSchema = z.object({ email: z.string() });
+const successSchema = z.object({ user: userSchema });
 const errorResponseSchema = z
   .object({
     error: z.object({
@@ -39,57 +53,69 @@ function mapError(status: number, body: unknown): AuthStepError {
   const code = parsed.success ? parsed.data.error.code : 'unparseable_error';
   const message = parsed.success ? (parsed.data.error.message ?? code) : `HTTP ${status}`;
   switch (code) {
-    case 'not_allowed':
-      return { kind: 'not_allowed', message };
+    case 'invalid_credentials':
+      return { kind: 'invalid_credentials', message };
+    case 'weak_password':
+      return { kind: 'weak_password', message };
+    case 'invalid_email':
+      return { kind: 'invalid_email', message };
+    case 'exists':
+      return { kind: 'exists', message };
     case 'rate_limited':
       return {
         kind: 'rate_limited',
         message,
         retryAfterS: parsed.success ? (parsed.data.error.retry_after_s ?? undefined) : undefined,
       };
-    case 'invalid_code':
-      return { kind: 'invalid_code', message };
     default:
       return { kind: 'server', message: `${message} (HTTP ${status})` };
   }
 }
 
-export async function requestCode(
-  email: string,
-  fetchImpl: FetchLike,
-): Promise<{ ok: true } | { ok: false; error: AuthStepError }> {
-  let response: Response;
-  try {
-    response = await fetchImpl('/api/auth/request-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-  } catch {
-    return { ok: false, error: { kind: 'network', message: 'network unreachable' } };
-  }
-  if (!response.ok) return { ok: false, error: mapError(response.status, await parseJson(response)) };
-  if (!requestCodeResponseSchema.safeParse(await parseJson(response)).success) {
-    return { ok: false, error: { kind: 'server', message: 'unexpected response shape' } };
-  }
-  return { ok: true };
+function assertPayload(body: unknown): AuthStepError | null {
+  return successSchema.safeParse(body).success ? null : { kind: 'server', message: 'unexpected response shape' };
 }
 
-export async function verifyCode(
+export async function signUp(
   email: string,
-  code: string,
+  password: string,
   fetchImpl: FetchLike,
 ): Promise<{ ok: true } | { ok: false; error: AuthStepError }> {
   let response: Response;
   try {
-    response = await fetchImpl('/api/auth/verify', {
+    response = await fetchImpl('/api/cisync/v1/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, code }),
+      body: JSON.stringify({ email, password }),
     });
   } catch {
     return { ok: false, error: { kind: 'network', message: 'network unreachable' } };
   }
   if (!response.ok) return { ok: false, error: mapError(response.status, await parseJson(response)) };
-  return { ok: true };
+  // Fail-closed even on 201s: any non-conforming confirmation body is treated
+  // as a service defect. Cookie still comes from the LOGIN call below.
+  const err = assertPayload(await parseJson(response));
+  return err !== null ? { ok: false, error: err } : { ok: true };
+}
+
+export async function logIn(
+  email: string,
+  password: string,
+  fetchImpl: FetchLike,
+): Promise<{ ok: true } | { ok: false; error: AuthStepError }> {
+  let response: Response;
+  try {
+    response = await fetchImpl('/api/cisync/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { ok: false, error: { kind: 'network', message: 'network unreachable' } };
+  }
+  if (!response.ok) return { ok: false, error: mapError(response.status, await parseJson(response)) };
+  // Upstream {token,user} is consumed SERVER-side by the gateway handler
+  // (cookie captured there); the client contract is just success + user echo.
+  const err = assertPayload(await parseJson(response));
+  return err !== null ? { ok: false, error: err } : { ok: true };
 }

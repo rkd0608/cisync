@@ -22,8 +22,12 @@ type Config struct {
 	PollInterval      time.Duration
 	ClaimLimit        int
 	GaugeInterval     time.Duration
-	DockerBin         string
-	DockerImage       string
+	DockerBin       string
+	DockerImage     string
+	// Realexec tuning (opt-in provider CISYNC_FLEET_PROVIDER=realexec).
+	ReposDir   string // cisync-repos volume mount holding staged bundles
+	ToolsImage string // node+eslint+tsc+python3 preset image
+	GoImage    string // optional golang image; empty ⇒ go preset skips
 	// JobLeasePubKey is the Ed25519 PUBLIC key PEM (SPKI) used to verify
 	// control-plane-minted job-lease tokens (THREAT_MODEL B2/I-04). Loaded
 	// from CISYNC_FLEET_JOBLEASYPUB_KEY_FILE or the base64-encoded inline
@@ -48,11 +52,13 @@ func FromEnv() (Config, error) {
 		GaugeInterval:     5 * time.Second,
 		DockerBin:         "docker",
 		DockerImage:       "docker.io/library/busybox:1.36",
+		ReposDir:          "/repos",
+		ToolsImage:        "cisync-tools:v0",
 	}
 	switch cfg.Provider {
-	case "sim", "docker":
+	case "sim", "docker", "realexec":
 	default:
-		return cfg, fmt.Errorf("config: invalid CISYNC_FLEET_PROVIDER %q (sim|docker)", cfg.Provider)
+		return cfg, fmt.Errorf("config: invalid CISYNC_FLEET_PROVIDER %q (sim|docker|realexec)", cfg.Provider)
 	}
 	var err error
 	if cfg.SimWorkers, err = intEnv("CISYNC_FLEET_SIM_WORKERS", cfg.SimWorkers); err != nil {
@@ -76,6 +82,9 @@ func FromEnv() (Config, error) {
 	if v := os.Getenv("CISYNC_FLEET_DOCKER_IMAGE"); v != "" {
 		cfg.DockerImage = v
 	}
+	cfg.ReposDir = envOr("CISYNC_FLEET_REPOS_DIR", cfg.ReposDir)
+	cfg.ToolsImage = envOr("CISYNC_FLEET_REALEXEC_TOOLS_IMAGE", cfg.ToolsImage)
+	cfg.GoImage = os.Getenv("CISYNC_FLEET_REALEXEC_GO_IMAGE")
 	if cfg.JobLeasePubKey, err = loadJobLeasePubKey(); err != nil {
 		return cfg, err
 	}

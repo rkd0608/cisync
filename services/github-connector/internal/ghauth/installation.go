@@ -4,14 +4,8 @@
 package ghauth
 
 import (
-	"bytes"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -46,6 +40,10 @@ type InstallationTokenSource struct {
 	// repo being touched (§2.1), so each (installation, repo) pair caches
 	// independently; a bug in one publish path can never touch another repo.
 	scoped map[string]cachedToken
+
+	// issuesWrite mirrors WithIssuesWriteScope so comment writes ride the
+	// same scoped token instead of a second mint per request.
+	issuesWrite bool
 }
 
 type cachedToken struct {
@@ -57,11 +55,12 @@ type cachedToken struct {
 type Option func(*sourceOptions)
 
 type sourceOptions struct {
-	baseURL string
-	http    *http.Client
-	now     func() time.Time
-	key     *rsa.PrivateKey
-	keyFile string
+	baseURL     string
+	http        *http.Client
+	now         func() time.Time
+	key         *rsa.PrivateKey
+	keyFile     string
+	issuesWrite bool // sticky-comment opt-in; see WithIssuesWriteScope
 }
 
 // WithBaseURL overrides the GitHub API base (tests point it at httptest).
@@ -76,6 +75,33 @@ func WithNow(now func() time.Time) Option { return func(o *sourceOptions) { o.no
 // WithKey injects an already-parsed private key (registry reuse: parse PEM
 // once per process, not once per installation).
 func WithKey(key *rsa.PrivateKey) Option { return func(o *sourceOptions) { o.key = key } }
+
+// WithIssuesWriteScope makes every minted repo-scoped token ALSO request
+// issues:write — REQUIRED for the sticky verification comment. It only takes
+// effect after the operator grants "Issues: Read & write" on the GitHub App;
+// otherwise token exchange fails loudly (GitHub rejects ungranted scopes).
+func WithIssuesWriteScope() Option {
+	return func(o *sourceOptions) { o.issuesWrite = true }
+}
+
+// WithHTTPClientOrDefault overrides the mint HTTP client only when non-nil
+// (used when replaying stored registry options into lazy source builds).
+func WithHTTPClientOrDefault(c *http.Client) Option {
+	return func(o *sourceOptions) {
+		if c != nil {
+			o.http = c
+		}
+	}
+}
+
+// WithNowIfSet overrides the clock only when non-nil (lazy build replay).
+func WithNowIfSet(now func() time.Time) Option {
+	return func(o *sourceOptions) {
+		if now != nil {
+			o.now = now
+		}
+	}
+}
 
 // NewInstallationTokenSource builds a source for one installation.
 func NewInstallationTokenSource(appID string, installationID int64, opts ...Option) (*InstallationTokenSource, error) {
@@ -109,6 +135,7 @@ func NewInstallationTokenSource(appID string, installationID int64, opts ...Opti
 		http:           httpClient,
 		baseURL:        strings.TrimRight(o.baseURL, "/"),
 		now:            now,
+		issuesWrite:    o.issuesWrite,
 		scoped:         make(map[string]cachedToken),
 	}, nil
 }
@@ -138,70 +165,6 @@ func (s *InstallationTokenSource) Token(repo string) (string, error) {
 	return token, nil
 }
 
-// mintJWT builds the RS256 JWT GitHub requires for App authentication:
-// iss=app id, iat=now-60s clock skew guard, exp=now+10m.
-func (s *InstallationTokenSource) mintJWT() (string, error) {
-	now := s.now().Add(-mintSkewGuard)
-	header := base64RawURLEncode([]byte(`{"alg":"RS256","typ":"JWT"}`))
-	claims, err := json.Marshal(struct {
-		Iss string `json:"iss"`
-		Iat int64  `json:"iat"`
-		Exp int64  `json:"exp"`
-	}{s.appID, now.Unix(), now.Add(tokenTTL).Unix()})
-	if err != nil {
-		return "", fmt.Errorf("ghauth: marshal claims: %w", err)
-	}
-	signingInput := header + "." + base64RawURLEncode(claims)
-	digest := sha256.Sum256([]byte(signingInput))
-	sig, err := s.privateKey.Sign(rand.Reader, digest[:], crypto.SHA256)
-	if err != nil {
-		return "", fmt.Errorf("ghauth: sign jwt: %w", err)
-	}
-	return signingInput + "." + base64RawURLEncode(sig), nil
-}
-
-// exchange narrows the minted token to exactly one repository with checks:
-// write permission (plan §2.1) instead of the v1 all-repositories `{}` body.
-func (s *InstallationTokenSource) exchange(jwt, repo string) (string, time.Time, error) {
-	url := fmt.Sprintf("%s/app/installations/%d/access_tokens", s.baseURL, s.installationID)
-	body := fmt.Sprintf(`{"repositories":[%q],"permissions":{"checks":"write"}}`, repo)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(body)))
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("ghauth: build token request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+jwt)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("ghauth: token exchange: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		return "", time.Time{}, fmt.Errorf("ghauth: token exchange status %d", resp.StatusCode)
-	}
-	var parsed struct {
-		Token     string    `json:"token"`
-		ExpiresAt time.Time `json:"expires_at"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return "", time.Time{}, fmt.Errorf("ghauth: decode token response: %w", err)
-	}
-	if parsed.Token == "" {
-		return "", time.Time{}, fmt.Errorf("ghauth: empty installation token")
-	}
-	return strings.TrimSpace(parsed.Token), parsed.ExpiresAt.UTC(), nil
-}
-
-// repoName validates owner/name and returns just the name for the scoping
-// body; malformed repos fail closed before any network call.
-func repoName(repo string) string {
-	owner, name, ok := strings.Cut(repo, "/")
-	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
-		return ""
-	}
-	return name
-}
-
 // ParseRSAPrivateKey parses a PEM-encoded RSA private key in either PKCS#1
 // ("RSA PRIVATE KEY" — the format GitHub's "Download private key" emits) or
 // PKCS#8 ("PRIVATE KEY").
@@ -229,5 +192,3 @@ func ParseRSAPrivateKey(raw []byte) (*rsa.PrivateKey, error) {
 		return key, nil
 	}
 }
-
-func base64RawURLEncode(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

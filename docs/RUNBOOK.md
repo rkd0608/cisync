@@ -56,6 +56,28 @@ One-time (~10 min), manual registration per GITHUB_APP_PLAN §1:
 
 ## 3. Required-check configuration (branch protection)
 
+### 3.0 Sticky PR verification comments (v0.3 opt-in — W6)
+
+CISync can keep ONE "CISync Verification Report" comment per PR, edited in
+place on every decision (CodeRabbit-style dossier). This is **feature-OFF by
+default** and REQUIRES a permission the v0.2 App never held:
+
+1. github.com/settings/apps → `<your app>` → Permissions & events →
+   set **Issues: Read and write** → Save. Installations show an
+   "accept new permissions" banner; every admin must re-approve.
+   (Alternative: Pull requests Read+write also works, but Issues RW is
+   narrower and preferred.)
+2. ONLY THEN set `CISYNC_CONN_REPORT_COMMENTS=true` on the connector and
+   restart. Token minting now requests `{checks:write, issues:write}`;
+   if the App grant is missing, GitHub rejects minting and checks FAIL
+   loudly in logs (`token exchange status 422/403`) — flip the flag back,
+   fix step 1, retry.
+3. Control-plane pushes `pr_number` + optional `report` block per
+   internal-protocols §4.1 W6; unknown-PR decisions skip silently with
+   `cisync_report_skipped_total{reason="no_pr_number"}`.
+4. Verify: post two synthetic decisions for one PR via the ctrl outbox —
+   expect ONE comment whose bytes PATCH in place (no duplicates).
+
 Admins configure this themselves — CISync never requests Administration rights:
 
 Settings → Branches → `<base>` → Require pull request before merging →

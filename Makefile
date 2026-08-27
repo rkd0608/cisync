@@ -34,7 +34,7 @@ down: ## stop stack
 logs: ## tail service logs
 	$(COMPOSE) logs -f --tail=100
 
-keys: ## generate dev ed25519 keys (ledger + job-lease; gitignored)
+keys: ## generate dev ed25519 keys (ledger + job-lease + session; gitignored)
 	mkdir -p platform/dev-keys
 	test -f platform/dev-keys/ledger_ed25519.dev.key || \
 	openssl genpkey -algorithm ed25519 -out platform/dev-keys/ledger_ed25519.dev.key
@@ -43,6 +43,11 @@ keys: ## generate dev ed25519 keys (ledger + job-lease; gitignored)
 	test -f platform/dev-keys/joblease_ed25519.dev.pub || \
 	openssl pkey -in platform/dev-keys/joblease_ed25519.dev.key -pubout \
 		-out platform/dev-keys/joblease_ed25519.dev.pub
+	test -f platform/dev-keys/session_ed25519.dev.key || \
+	openssl genpkey -algorithm ed25519 -out platform/dev-keys/session_ed25519.dev.key
+	test -f platform/dev-keys/session_ed25519.dev.pub || \
+	openssl pkey -in platform/dev-keys/session_ed25519.dev.key -pubout \
+		-out platform/dev-keys/session_ed25519.dev.pub
 
 storm: ## run concurrency storm against running stack
 	cd tests && pnpm exec tsx scenarios/storm.ts --concurrency 500 --repos 8 --dupes 4

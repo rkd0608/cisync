@@ -22,6 +22,10 @@ const (
 	KindWebhookSignatureFailed Kind = "webhook_signature_failed"
 	// KindAuthzRejected fires on 401/403 auth middleware rejections.
 	KindAuthzRejected Kind = "authz_rejected"
+	// KindAuthnAccepted fires on successful credential transitions
+	// (email+password signup/login, SPEC §3 2026-08-26). Rejections of
+	// those flows stay KindAuthzRejected (invalid_credentials reason).
+	KindAuthnAccepted Kind = "authn_accepted"
 	// KindFenceMismatch fires when a stale fence-token completion is
 	// rejected at the ctrl completion gate (I-11).
 	KindFenceMismatch Kind = "fence_mismatch"

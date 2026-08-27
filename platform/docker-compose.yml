@@ -40,6 +40,9 @@ services:
       CISYNC_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.dev.key
       # DEDICATED job-lease signing key (B2/I-04): never the ledger key.
       CISYNC_CTRL_JOBLEASE_KEY_FILE: /keys/joblease_ed25519.dev.key
+      # DEDICATED web-session signing key (email+password auth, SPEC §3
+      # 2026-08-26): a THIRD key — no single-key compromise cascades.
+      CISYNC_SESSION_KEY_FILE: /keys/session_ed25519.dev.key
       CISYNC_CTRL_ADMIN_TOKEN: dev_admin_token_not_for_prod
       CISYNC_CTRL_CONNECTOR_URL: http://github-connector:8083
       CISYNC_CTRL_WEBHOOK_SECRET: ${CISYNC_INGEST_WEBHOOK_SECRET:-dev_webhook_secret_not_for_prod}
@@ -60,8 +63,16 @@ services:
       # it there strands its candidate (a required kind can never complete).
       CISYNC_CTRL_RECONCILE_INTERVAL: "5s"
       CISYNC_CTRL_STALE_RUN_MAX_AGE: "300s"
+      # Realexec evidence sourcing (opt-in): uncomment BOTH lines (plus a
+      # real credential source: full GitHub App trio OR static token) to make
+      # ctrl stage repo head-state archives at dispatch. Runners NEVER receive
+      # any GitHub token (THREAT_MODEL B5) — they only read staged bytes.
+      # CISYNC_CTRL_REPO_BUNDLES_DIR: /repos
+      # CISYNC_CTRL_GITHUB_TOKEN: ${CISYNC_CTRL_GITHUB_TOKEN:-}
     volumes:
       - ./dev-keys:/keys:ro
+      # Shared with runner-fleet (read-only there); inert in sim posture.
+      - cisync-repos:/repos
     ports: ["8081:8081"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -80,9 +91,28 @@ services:
       CISYNC_FLEET_SIM_WORKERS: "48"
     volumes:
       - ./dev-keys:/keys:ro
+      # Staged repo bundles staged by control-plane (read-only consumer).
+      # Used ONLY by the opt-in realexec provider; sim ignores it.
+      - cisync-repos:/repos:ro
     ports: ["8082:8082"]
     depends_on:
       postgres: { condition: service_healthy }
+
+  # REALEXEC OPERATOR NOTE (profile-gated posture): to run REAL preset checks
+  # instead of simulated ones, a fleet process needs BOTH sides wired:
+  #   1. control-plane: materialization env above + credential source;
+  #   2. runner-fleet: CISYNC_FLEET_PROVIDER=realexec (+ tools image below).
+  # WHY no in-compose realexec service: provider→docker binds mount HOST paths,
+  # so an in-container fleet binary cannot pass its /tmp dirs to the daemon —
+  # realexec runs as a host-binary dev posture, hence NOT-FOR-PRODUCTION and
+  # the deploy kits keep sim pinned (B5). A compose-native variant requires
+  # dind or bind-hosted scratch → THREAT_MODEL graduation item, not v0.
+  #
+  #   # CISYNC_FLEET_PROVIDER: realexec
+  #   # CISYNC_FLEET_POOL: sim                  # claims dispatched runs as-is
+  #   # CISYNC_FLEET_REALEXEC_TOOLS_IMAGE: cisync-tools:v0  # build via:
+  #   #   docker build -f platform/tools/Dockerfile.tools -t cisync-tools:v0 .
+  #   # CISYNC_FLEET_REALEXEC_GO_IMAGE: golang:1.23-alpine  # optional go vet
 
   # github-connector runs dry-run by default: without GitHub App credentials
   # it logs the would-be check payloads instead of calling the Checks API.
@@ -126,15 +156,19 @@ services:
   web:
     build: ../apps/web
     environment:
-      # Server-side proxy upstream (next.config.ts rewrites /api/cisync/*).
+      # Server-side proxy upstream (route handler /api/cisync/*).
       CISYNC_API_URL: http://control-plane:8081
       CISYNC_CONNECTOR_URL: http://github-connector:8083
       CISYNC_ADMIN_TOKEN: dev_admin_token_not_for_prod
-      # Login-session parity (B1): ≥16 chars required by auth-config.ts.
-      AUTH_SECRET: dev_auth_secret_not_for_prod_local_only
-      CISYNC_AUTH_EMAIL_PATTERN: '.*@example\.com$'
+      # Signup posture for the /login page (invite = form hides self-service
+      # signup). Session cookies are httpOnly, minted by control-plane; no
+      # AUTH_SECRET or mail provider exists in this stack anymore.
+      CISYNC_SIGNUP_MODE: open
     ports: ["3000:3000"]
     depends_on: [control-plane]
 
 volumes:
   pgdata:
+  # Repo head-state snapshots staged by control-plane (keyed by inputs_hash,
+  # I-02) and consumed read-only by the realexec provider.
+  cisync-repos:

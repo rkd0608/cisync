@@ -1,83 +1,86 @@
-// Static-render coverage for the /login two-step UI. The interactive logic is
-// exercised through login-flow.test.ts (mock fetch); here we pin the render
-// contract of each step so copy, error slots and data hooks stay stable.
+// Static-render coverage for the /login single-step email+password UI. The
+// network logic is exercised through auth-flow.test.ts (mocked fetch); here we
+// pin the render contract per signup mode and error slot so copy and data
+// hooks stay stable (email+password replaced OTP per SPEC §3 2026-08-26).
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  LoginCodeStep,
-  LoginEmailStep,
-} from './login-form';
+import { CredentialsFormView } from './login-form';
+import type { AuthStepError } from '@/lib/auth-flow';
 
 const noop = (): void => undefined;
 
-describe('LoginEmailStep', () => {
-  const markup = (): string =>
-    renderToStaticMarkup(
-      <LoginEmailStep email="dev@yourdomain.com" onEmailChange={noop} onSubmit={noop} pending={false} />,
-    );
+const base = {
+  isSignup: false,
+  onToggleSignup: noop,
+  email: 'dev@yourdomain.com',
+  onEmailChange: noop,
+  password: '',
+  onPasswordChange: noop,
+  onSubmit: noop,
+  pending: false,
+  error: null,
+};
 
-  it('renders the email input with autofill hints', () => {
-    const html = markup();
-    expect(html).toContain('data-testid="login-step-email"');
-    expect(html).toContain('type="email"');
+describe('CredentialsFormView render contract', () => {
+  it('renders a password field with autofill hints for sign-in', () => {
+    const html = renderToStaticMarkup(<CredentialsFormView {...base} mode="open" />);
+    expect(html).toContain('data-testid="login-form"');
+    expect(html).toContain('type="password"');
+    expect(html).toContain('autoComplete="current-password"');
     expect(html).toContain('autoComplete="email"');
-    expect(html).toContain('value="dev@yourdomain.com"');
   });
 
-  it('labels the submit affordance send code', () => {
-    expect(markup()).toContain('send code');
+  it('switches autofill + copy for signup mode', () => {
+    const html = renderToStaticMarkup(<CredentialsFormView {...base} mode="open" isSignup />);
+    expect(html).toContain('autoComplete="new-password"');
+    expect(html).toContain('create your CISync account');
   });
 
-  it('renders a disabled submit while pending', () => {
-    const html = renderToStaticMarkup(
-      <LoginEmailStep email="dev@yourdomain.com" onEmailChange={noop} onSubmit={noop} pending />,
-    );
-    expect(html).toContain('sending…');
-    expect(html).toContain('disabled');
-  });
-});
-
-describe('LoginCodeStep', () => {
-  const markup = (): string =>
-    renderToStaticMarkup(
-      <LoginCodeStep
-        email="dev@yourdomain.com"
-        code="123"
-        onCodeChange={noop}
-        onSubmit={noop}
-        onBack={noop}
-        pending={false}
-      />,
-    );
-
-  it('shows the destination email and an escape hatch back to step 1', () => {
-    const html = markup();
-    expect(html).toContain('data-testid="login-step-code"');
-    expect(html).toContain('dev@yourdomain.com');
-    expect(html).toContain('use a different email');
+  it('open mode exposes the signup toggle', () => {
+    const html = renderToStaticMarkup(<CredentialsFormView {...base} mode="open" />);
+    expect(html).toContain('data-testid="signup-toggle"');
+    expect(html).toContain('create one');
   });
 
-  it('constrains input to six numeric digits', () => {
-    const html = markup();
-    expect(html).toContain('inputMode="numeric"');
-    expect(html).toContain('maxLength="6"');
-    expect(html).toContain('pattern="\\d{6}"');
+  it('invite/closed modes hide the toggle and say so honestly', () => {
+    for (const mode of ['invite', 'closed'] as const) {
+      const html = renderToStaticMarkup(<CredentialsFormView {...base} mode={mode} />);
+      expect(html).not.toContain('data-testid="signup-toggle"');
+      expect(html).toContain('data-testid="closed-copy"');
+      expect(html).toContain('invite-only');
+    }
   });
 
-  it('disables verify until six digits are present (value length drives it)', () => {
-    // Three digits → button must be disabled.
-    expect(markup()).toContain('disabled');
-    const complete = renderToStaticMarkup(
-      <LoginCodeStep
-        email="dev@yourdomain.com"
-        code="123456"
-        onCodeChange={noop}
-        onSubmit={noop}
-        onBack={noop}
-        pending={false}
-      />,
-    );
-    expect(complete).toContain('verify &amp; continue');
-    expect(complete).not.toContain('button ... disabled'); // sanity: no malformed attr
+  it('submit is disabled while fields are empty, enabled with valid input, pending swaps copy', () => {
+    // WHY lookahead: Tailwind's "disabled:*" utility classes contain the
+    // literal token, so match a standalone HTML attribute only.
+    const hasDisabledAttr = (html: string): boolean => /data-testid="auth-submit"[^>]*\bdisabled(?=[\s=>])/.test(html);
+    expect(hasDisabledAttr(markupWith({}, {}))).toBe(true);
+    expect(hasDisabledAttr(markupWith({ password: 'long-enough-pass' }, {}))).toBe(false);
+    // Pending disables again and shows the working copy.
+    const busy = markupWith({ password: 'long-enough-pass' }, { pending: true });
+    expect(busy).toContain('working…');
+    expect(hasDisabledAttr(busy)).toBe(true);
+  });
+
+  it.each([
+    ['invalid_credentials', 'Invalid email or password.'],
+    ['weak_password', 'Password must be at least 10 characters.'],
+    ['exists', 'An account with this email already exists — sign in instead.'],
+    ['rate_limited', 'Too many attempts. Wait a moment, then retry. (12s)'],
+  ] as const)('%s error renders its exact copy (uniform message)', (kind, expected) => {
+    const error: AuthStepError = kind === 'rate_limited'
+      ? { kind, message: '', retryAfterS: 12 }
+      : { kind, message: '' };
+    expect(renderToStaticMarkup(<CredentialsFormView {...base} mode="open" error={error} />)).toContain(expected);
   });
 });
+
+function markupWith(
+  fields: Partial<Pick<typeof base, 'email' | 'password'>>,
+  state: Partial<Pick<typeof base, 'pending'>>,
+): string {
+  return renderToStaticMarkup(
+    <CredentialsFormView {...base} {...fields} {...state} mode="open" />,
+  );
+}

@@ -26,7 +26,12 @@ type Config struct {
 	// tokens (THREAT_MODEL B2/I-04) — never the ledger key: compromise of
 	// either must not cascade into the other trust domain.
 	JobLeaseKeyFile string
-	TenantID        string
+	// SessionKeyFile is the DEDICATED Ed25519 private key for stateless web
+	// session JWTs (email+password sign-in, SPEC §3 2026-08-26). A THIRD key:
+	// ledger != joblease != session so no single-key compromise cascades.
+	// Optional at boot; when empty /v1/auth/* fails closed (503 mint-time).
+	SessionKeyFile string
+	TenantID       string
 
 	RelayBatchSize    int
 	RelayPollInterval time.Duration
@@ -56,6 +61,19 @@ type Config struct {
 	// AuditRetentionDays bounds ctrl.security_audit row age (B7 >=90d);
 	// pruned by the reconciler. Default 90.
 	AuditRetentionDays int
+
+	// Repo bundle materialization (realexec evidence sourcing; opt-in).
+	// RepoBundlesDir non-empty enables the dispatch-path materializer that
+	// stages head-state archives for the shared cisync-repos volume (runners
+	// never hold GitHub tokens — THREAT_MODEL B5).
+	RepoBundlesDir       string
+	GitHubAppID          int64
+	GitHubAppKeyFile     string
+	GitHubInstallationID int64
+	// GitHubStaticToken is the documented fallback credential source; the
+	// GitHub App trio is preferred because installation tokens can be scoped
+	// per-repo with contents:read only.
+	GitHubStaticToken string
 }
 
 // parseList splits a comma-separated env list, trimming whitespace and
@@ -112,6 +130,7 @@ func Load() (*Config, error) {
 		WebhookSecret:   env("CISYNC_CTRL_WEBHOOK_SECRET", env("CISYNC_INGEST_WEBHOOK_SECRET", "")),
 		LedgerKeyFile:   env("CISYNC_CTRL_LEDGER_KEY_FILE", ""),
 		JobLeaseKeyFile: env("CISYNC_CTRL_JOBLEASE_KEY_FILE", ""),
+		SessionKeyFile:  env("CISYNC_SESSION_KEY_FILE", ""),
 		TenantID:        env("CISYNC_CTRL_TENANT_ID", DevTenant),
 	}
 	var err error
@@ -154,6 +173,36 @@ func Load() (*Config, error) {
 	cfg.TrackedBaseBranches = parseList(env("CISYNC_CTRL_TRACKED_BASE_BRANCHES", "main,master"))
 	if len(cfg.TrackedBaseBranches) == 0 {
 		return nil, fmt.Errorf("config CISYNC_CTRL_TRACKED_BASE_BRANCHES: must not be empty")
+	}
+	if cfg.RepoBundlesDir = env("CISYNC_CTRL_REPO_BUNDLES_DIR", ""); cfg.RepoBundlesDir != "" {
+		appIDStr := env("CISYNC_CTRL_GITHUB_APP_ID", "")
+		keyFile := env("CISYNC_CTRL_GITHUB_APP_KEY_FILE", "")
+		instIDStr := env("CISYNC_CTRL_GITHUB_INSTALLATION_ID", "")
+		cfg.GitHubStaticToken = env("CISYNC_CTRL_GITHUB_TOKEN", "")
+		if appIDStr != "" {
+			id, err := strconv.ParseInt(appIDStr, 10, 64)
+			if err != nil || id <= 0 {
+				return nil, fmt.Errorf("config CISYNC_CTRL_GITHUB_APP_ID %q: invalid", appIDStr)
+			}
+			cfg.GitHubAppID = id
+		}
+		if instIDStr != "" {
+			id, err := strconv.ParseInt(instIDStr, 10, 64)
+			if err != nil || id <= 0 {
+				return nil, fmt.Errorf("config CISYNC_CTRL_GITHUB_INSTALLATION_ID %q: invalid", instIDStr)
+			}
+			cfg.GitHubInstallationID = id
+		}
+		switch {
+		case cfg.GitHubAppID > 0 && keyFile != "" && cfg.GitHubInstallationID > 0 && cfg.GitHubStaticToken == "":
+			cfg.GitHubAppKeyFile = keyFile
+		case cfg.GitHubAppID == 0 && keyFile == "" && cfg.GitHubInstallationID == 0 && cfg.GitHubStaticToken != "":
+		default:
+			// All-or-nothing mirrors ghauth's G14 posture: half-configured
+			// credentials must refuse boot rather than mint unscoped tokens.
+			return nil, fmt.Errorf(
+				"config CISYNC_CTRL_REPO_BUNDLES_DIR: set EITHER GitHub App trio (APP_ID+APP_KEY_FILE+INSTALLATION_ID) OR CISYNC_CTRL_GITHUB_TOKEN")
+		}
 	}
 	if cfg.AdminToken == "" {
 		return nil, fmt.Errorf("config CISYNC_CTRL_ADMIN_TOKEN: required")

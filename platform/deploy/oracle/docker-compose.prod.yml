@@ -84,6 +84,11 @@ services:
       CISYNC_CTRL_LEDGER_KEY_FILE: /keys/ledger_ed25519.key
       # Dedicated job-lease signing key (B2/I-04): never the ledger key.
       CISYNC_CTRL_JOBLEASE_KEY_FILE: /keys/joblease_ed25519.key
+      # Dedicated web-session signing key (email+password auth, SPEC §3
+      # 2026-08-26): third trust domain after ledger + joblease. Provision a
+      # PKCS#8 Ed25519 PEM at ./keys/session_ed25519.key on the box:
+      #   openssl genpkey -algorithm ed25519 -out keys/session_ed25519.key
+      CISYNC_SESSION_KEY_FILE: /keys/session_ed25519.key
       CISYNC_CTRL_ADMIN_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN:?set in .env.prod}
       CISYNC_CTRL_WEBHOOK_SECRET: ${CISYNC_CTRL_WEBHOOK_SECRET:?must equal ingest secret}
       CISYNC_CTRL_CONNECTOR_URL: http://github-connector:8083
@@ -159,10 +164,11 @@ services:
       CISYNC_API_URL: http://control-plane:8081
       CISYNC_CONNECTOR_URL: http://github-connector:8083
       CISYNC_ADMIN_TOKEN: ${CISYNC_CTRL_ADMIN_TOKEN}
-      # Auth session secret + login allowlist (B1): code reads AUTH_SECRET
-      # (apps/web src/lib/auth-config.ts); values live in deploy/.env.prod.
-      AUTH_SECRET: ${AUTH_SECRET:?set in .env.prod}
-      CISYNC_AUTH_EMAIL_PATTERN: ${CISYNC_AUTH_EMAIL_PATTERN:?set in .env.prod}
+      # Signup posture for /login (invite = no self-service signup UI).
+      # Sessions are control-plane-signed JWTs in httpOnly cookies; the old
+      # AUTH_SECRET / CISYNC_AUTH_EMAIL_PATTERN web-local auth is REMOVED
+      # (SPEC §3 2026-08-26) — drop both from .env.prod on recreate.
+      CISYNC_SIGNUP_MODE: ${CISYNC_SIGNUP_MODE:-invite}
     networks: [cisync-net]
     mem_limit: 2g
     cpus: 0.5

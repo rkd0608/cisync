@@ -27,12 +27,20 @@ type CheckEmitter interface {
 	InstallationFor(ctx context.Context, repo string) (installationID int64, ok bool)
 }
 
+// StickyReporter is the sticky PR-comment surface (W6); satisfied
+// structurally by *report.Poster when CISYNC_CONN_REPORT_COMMENTS is on.
+// Nil ⇒ the surface is feature-OFF and emits no metrics.
+type StickyReporter interface {
+	Post(ctx context.Context, env *domain.DecisionEnvelope) error
+}
+
 // HandlerDeps bundles the collaborators of the §4 push endpoint.
 type HandlerDeps struct {
 	Tracker      tracking.Store
 	Router       CheckEmitter
 	Metrics      *obs.Metrics
 	DetailsURL   string
+	Reporter     StickyReporter
 	RerunPolicy  rerun.Policy
 	RerunBudget  *rerun.Budget
 	RerunControl *rerun.Control

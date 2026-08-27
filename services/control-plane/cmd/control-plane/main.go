@@ -20,6 +20,7 @@ import (
 	"cisync.dev/cisync/control-plane/internal/api"
 	"cisync.dev/cisync/control-plane/internal/config"
 	"cisync.dev/cisync/control-plane/internal/joblease"
+	"cisync.dev/cisync/control-plane/internal/materialize"
 	"cisync.dev/cisync/control-plane/internal/redact"
 	"cisync.dev/cisync/control-plane/internal/relay"
 	"cisync.dev/cisync/control-plane/internal/scheduler"
@@ -78,6 +79,10 @@ func runServer() {
 	srv := api.NewServer(cfg, st, nil)
 	fleet := relay.NewFleetClient(cfg.FleetURL)
 
+	// Session-signing key for the email+password auth surface. Fail-closed at
+	// boot: a corrupt key file must stop serving, not 503 every login.
+	must(srv.UseSessionKey(cfg.SessionKeyFile), "load session key")
+
 	// Metric parity: store-side same-tx audit inserts (teardown revocations)
 	// must surface on the SAME counter as streamed emissions.
 	securityAuditCounter := func(kind string) {
@@ -106,6 +111,19 @@ func runServer() {
 	// fleet dispatch + completion ingestion (evidence/failure/decisions).
 	engineScheduler := scheduler.NewEngine(st, fleet, "sim", cfg.SchedBatch, leaseSigner)
 	engineScheduler.SetAuditObserver(securityAuditCounter)
+
+	// Realexec evidence sourcing (opt-in): materialize head-state archives at
+	// dispatch so runner-fleet's realexec provider can execute REAL preset
+	// checks against shared-volume bytes. Runners never hold GitHub tokens
+	// (THREAT_MODEL B5); the control-plane is the only credential holder.
+	if cfg.RepoBundlesDir != "" {
+		source, err := materialize.NewTokenSource(cfg.GitHubAppID, cfg.GitHubAppKeyFile,
+			cfg.GitHubInstallationID, cfg.GitHubStaticToken)
+		must(err, "materializer credential source")
+		mat, err := materialize.New(cfg.RepoBundlesDir, source)
+		must(err, "build repo bundle materializer")
+		engineScheduler.SetMaterializer(mat)
+	}
 
 	outbox.Register("validation.requested", func(ctx context.Context, item store.OutboxItem) error {
 		return st.ExecTx(ctx, func(tx pgx.Tx) error {

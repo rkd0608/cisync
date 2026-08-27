@@ -37,6 +37,12 @@ func main() {
 	case "docker":
 		logger.Warn("docker provider is NOT-FOR-PRODUCTION (THREAT_MODEL B5); dev/demo only")
 		provider = providers.NewDocker(cfg.DockerBin, cfg.DockerImage)
+	case "realexec":
+		// Same B5 posture as docker, plus REAL preset execution on ctrl-
+		// materialized bundles (no tokens ever reach this process).
+		logger.Warn("realexec provider is NOT-FOR-PRODUCTION (THREAT_MODEL B5); real checks run in egress-denied sandboxes",
+			slog.String("tools_image", cfg.ToolsImage), slog.String("repos_dir", cfg.ReposDir))
+		provider = providers.NewRealExec(cfg.DockerBin, cfg.ToolsImage, cfg.GoImage, cfg.ReposDir)
 	default:
 		provider = providers.NewSim()
 	}

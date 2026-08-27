@@ -2,49 +2,25 @@
 // is read through exactly one typed function so misconfiguration is detectable
 // and fail-closed (charter §2: env config is an input boundary).
 //
-// CISYNC_AUTH_EMAIL_PATTERN: allowlist regex (string form) that a requester's
-// email must FULLY match (anchored by convention, e.g. ".*@yourdomain\\.com$").
-// Default below is intentionally restrictive so a forgotten env var can never
-// open registration to the world.
+// Email+password sessions replaced OTP email delivery (SPEC §3 2026-08-26):
+// there is NO AUTH_SECRET / RESEND / allowlist anymore — the session JWT is
+// minted and verified by control-plane (CISYNC_SESSION_KEY_FILE); the web
+// tier only carries the token inside an httpOnly cookie.
 
-const DEFAULT_EMAIL_PATTERN = '.*@yourdomain\\.com$';
+export type SignupMode = 'open' | 'invite' | 'closed';
 
-let cachedPattern: RegExp | null | undefined;
+const SIGNUP_MODES: SignupMode[] = ['open', 'invite', 'closed'];
 
-// WHY cached: RegExp compilation per request would hide a broken pattern until
-// traffic arrives; we compile once and remember failure as `null` (deny-all).
-export function emailAllowlist(): RegExp | null {
-  if (cachedPattern === undefined) {
-    const source = process.env.CISYNC_AUTH_EMAIL_PATTERN ?? DEFAULT_EMAIL_PATTERN;
-    try {
-      cachedPattern = new RegExp(source);
-    } catch {
-      // Fail closed: an unparseable operator pattern rejects every email.
-      cachedPattern = null;
-    }
-  }
-  return cachedPattern;
-}
+// WHY default 'invite': signup must not silently open to the world if an
+// operator forgets CISYNC_SIGNUP_MODE; open-ness is always explicit.
+const DEFAULT_SIGNUP_MODE: SignupMode = 'invite';
 
-export function resetEmailAllowlistCacheForTests(): void {
-  cachedPattern = undefined;
-}
-
-// WHY null instead of a default secret: sessions signed with a guessable key
-// are an authentication bypass, so absence must disable auth entirely.
-export function authSecret(): string | null {
-  const secret = process.env.AUTH_SECRET;
-  return secret !== undefined && secret.length >= 16 ? secret : null;
-}
-
-export function resendApiKey(): string | null {
-  const key = process.env.RESEND_API_KEY;
-  return key !== undefined && key.length > 0 ? key : null;
+export function signupMode(rawEnv?: string): SignupMode {
+  const raw = (rawEnv ?? process.env.CISYNC_SIGNUP_MODE ?? '').trim().toLowerCase();
+  return SIGNUP_MODES.includes(raw as SignupMode) ? (raw as SignupMode) : DEFAULT_SIGNUP_MODE;
 }
 
 export function githubAppInstallUrl(): string | null {
   const url = process.env.NEXT_PUBLIC_CISYNC_GITHUB_APP_INSTALL_URL;
   return url !== undefined && url.length > 0 ? url : null;
 }
-
-export const DEFAULT_EMAIL_PATTERN_SOURCE = DEFAULT_EMAIL_PATTERN;

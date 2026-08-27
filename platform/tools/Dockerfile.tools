@@ -1,0 +1,28 @@
+# CISync tools image for the runner-fleet REAL-EXEC provider (v0).
+# NOT-FOR-PRODUCTION (THREAT_MODEL B5): consumed only by the opt-in
+# `realexec` provider which executes agent-supplied code inside egress-denied
+# sandboxes. See packages/contracts/internal-protocols.md §3 and README banner.
+#
+# Scope (v0 brief): Node + Python presets in ONE small image.
+#   node:lts-alpine base (~180MB) carries node20 + npm globals:
+#     - eslint   : lint (`eslint .`)
+#     - typescript: typecheck (`tsc --noEmit`)
+#   python3 + pip via apk: bytecode sanity (`python3 -m compileall -q .`).
+# WHY pinned majors: eslint 9 ships its own config resolution (flat config);
+# the preset scripts handle both config generations, but pinning keeps tool-
+# chain drift out of evidence comparisons until I-02 toolchain hashing lands.
+FROM node:lts-alpine
+
+RUN apk add --no-cache python3 py3-pip \
+    && npm install --global --silent eslint@^9 typescript@^5
+# WHY no adduser: alpine ships uid 65534 (nobody) already, which is exactly the
+# non-root identity the B5 sandbox flags run with (--user 65534:65534).
+
+# Preset scripts are NOT baked here on purpose: the fleet generates them per
+# job (services/runner-fleet/internal/providers/presets_scripts.go) and mounts
+# them read-only at /cisync, so ANY image (this one or golang) can host checks
+# and every executed byte is reviewable Go source.
+WORKDIR /scratch
+USER 65534
+
+CMD ["/bin/sh"]

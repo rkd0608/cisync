@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cisync.dev/cisync/control-plane/internal/joblease"
+	"cisync.dev/cisync/control-plane/internal/materialize"
 	policypkg "cisync.dev/cisync/control-plane/internal/policy"
 	"cisync.dev/cisync/control-plane/internal/relay"
 	"cisync.dev/cisync/control-plane/internal/store"
@@ -28,13 +29,14 @@ type FleetGateway interface {
 // WIP caps and budgets come from the active policy pack; admission denies
 // overflow instead of overrunning it (I-10).
 type EngineScheduler struct {
-	store       *store.Store
-	fleet       FleetGateway
-	pool        string
-	batch       int
-	policy      PolicySource
-	maxRetry    int
-	leaseSigner *joblease.Signer
+	store        *store.Store
+	fleet        FleetGateway
+	pool         string
+	batch        int
+	policy       PolicySource
+	maxRetry     int
+	leaseSigner  *joblease.Signer
+	materializer *materialize.Materializer
 
 	// auditMu/auditNotify/deniedAudits back the B7 security-audit hooks
 	// (see audit.go): notify fans out metric bumps, deniedAudits dedupes
@@ -72,6 +74,13 @@ func NewEngine(st *store.Store, fleet FleetGateway, pool string, batch int, leas
 		leaseSigner:  leaseSigner,
 		deniedAudits: map[string]struct{}{},
 	}
+}
+
+// SetMaterializer attaches the repo-bundle materializer (realexec evidence
+// sourcing). nil keeps the v1 default: specs dispatch WITHOUT bundle refs and
+// sim/docker/realexec behave exactly as before. Never blocks dispatch.
+func (e *EngineScheduler) SetMaterializer(m *materialize.Materializer) {
+	e.materializer = m
 }
 
 // Tick implements domain.Scheduler.

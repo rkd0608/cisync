@@ -3,8 +3,8 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"cisync.dev/cisync/control-plane/internal/cluster"
+	"github.com/stretchr/testify/require"
 )
 
 func edge(from, rel, to string) RelationEdge {

@@ -30,9 +30,12 @@ func headlineForVerb(verb domain.DecisionVerb) (string, error) {
 // precision) so dry-run goldens never depend on wall-clock.
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
-// decisionSummary renders the completed-check markdown. With evidence counts
-// present it uses the §4.3 golden shape; without them it falls back to the
-// v1 flat format so pre-widening relays render unchanged.
+// decisionSummary renders the completed-check markdown. W6 THIN CHECK:
+// with evidence counts present it renders ONLY the verb+confidence+policy
+// header, the evidence counts line and the dossier deep link — full
+// intelligence moved to the sticky PR comment (internal/report). Without
+// counts it falls back to the v1 flat format so pre-widening relays render
+// unchanged.
 func decisionSummary(d *domain.DecisionEnvelope, detailsURL string, cached bool) (string, error) {
 	headline, err := headlineForVerb(d.Verb)
 	if err != nil {
@@ -48,11 +51,9 @@ func decisionSummary(d *domain.DecisionEnvelope, detailsURL string, cached bool)
 	fmt.Fprintf(&b, "**%s** · confidence %.2f · policy %s v%d\n", headline, d.Confidence, d.Policy.PolicyID, d.Policy.Version)
 	fmt.Fprintf(&b, "Evidence: %d/%d required accepted · %d deferred (reason-linked) · %d failed\n",
 		e.Accepted, e.Required, e.Deferred, e.Failed)
-	fmt.Fprintf(&b, "→ Full dossier: %s\n", detailsURL)
+	fmt.Fprintf(&b, "→ Full dossier: %s", detailsURL)
 	if cached {
-		fmt.Fprintf(&b, "_decision %s · candidate %s · cached replay (no recompute)_", d.DecisionID, d.CandidateID)
-	} else {
-		fmt.Fprintf(&b, "_decision %s · candidate %s · rendered %s_", d.DecisionID, d.CandidateID, rfc3339(d.RenderedAt))
+		fmt.Fprintf(&b, "\n_cached replay (no recompute)_")
 	}
 	return b.String(), nil
 }

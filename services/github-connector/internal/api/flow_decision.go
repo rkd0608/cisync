@@ -75,7 +75,42 @@ func (h *DecisionsHandler) serveDecision(w http.ResponseWriter, ctx context.Cont
 	}
 	h.deps.Metrics.CounterInc("conn_checks_rendered_total", "Agent Verification Gate checks rendered",
 		"conclusion", payload.Conclusion)
+	h.maybePostStickyReport(ctx, &env, result)
 	h.respond(w, http.StatusAccepted, pushResponse{Accepted: true, Queued: result.Queued, DryRun: result.DryRun})
+}
+
+// reportSkipMetric names the silent-skip counter (W6): a skipped comment is
+// an OBSERVED non-event, never dead air.
+const (
+	reportSkippedName = "cisync_report_skipped_total"
+	reportSkippedHelp = "Sticky verification-report pushes that did not reach a GitHub issue comment"
+)
+
+// maybePostStickyReport upserts THE sticky verification comment on the bound
+// PR. Contract: best-effort — any failure logs and counts but NEVER changes
+// the 202 already earned by the check publication.
+func (h *DecisionsHandler) maybePostStickyReport(ctx context.Context, env *domain.DecisionEnvelope, result emit.Result) {
+	if h.deps.Reporter == nil {
+		return
+	}
+	reason := ""
+	switch {
+	case result.DryRun:
+		reason = "dry_run"
+	case result.Queued:
+		reason = "write_queued"
+	case env.PRNumber <= 0:
+		reason = "no_pr_number"
+	}
+	if reason != "" {
+		h.deps.Metrics.CounterInc(reportSkippedName, reportSkippedHelp, "reason", reason)
+		return
+	}
+	if err := h.deps.Reporter.Post(ctx, env); err != nil {
+		h.logger.Warn("sticky verification report failed",
+			slog.String("repo", env.Repo), slog.Int("pr", env.PRNumber),
+			slog.String("decision_id", env.DecisionID), slog.String("err", err.Error()))
+	}
 }
 
 // publish performs the create-or-update against the tracked check run and

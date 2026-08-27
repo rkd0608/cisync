@@ -96,13 +96,35 @@ fail closed.
   "patch_ref": "bundle-url-or-digest",
   "inputs_hash": "sha256:…",
   "timeout_ms": 900000,
-  "sim_profile": {"duration_ms": 800, "outcome_bias": "pass"}
+  "sim_profile": {"duration_ms": 800, "outcome_bias": "pass"},
+  "pre_fetched_bundle_ref": "/repos/<inputs_hash-hex>.tar.gz"
 }
 ```
 
 `sim` provider executes nothing; it deterministically simulates duration/outcome from
 `sim_profile` (seeded by run_id hash) — the CI-default provider. `docker` provider runs
 real containers (`--network none --read-only`, resource-capped, NOT-FOR-PRODUCTION).
+`realexec` provider runs REAL stack-preset checks (node: eslint/tsc; python:
+compileall; go: go vet) inside docker sandboxes with the same B5 flags against the
+snapshot referenced by `pre_fetched_bundle_ref`. That ref is OPTIONAL: control-plane
+materializes repo head-state archives at dispatch into the shared `cisync-repos`
+volume keyed by full `inputs_hash` (I-02). Runners NEVER fetch anything themselves
+and never hold GitHub tokens — the materializer runs on the control-plane, which is
+the evidence-authority credential holder. A job dispatched WITHOUT a resolvable ref
+executes nothing honestly: realexec reports an all-skipped census
+(`skipped ≠ positive evidence`, I-01) with a per-check skip reason (missing bundle,
+no recognized stack, toolchain not provisioned); sim/docker behavior is unchanged.
+
+### Per-check envelope mapping (realexec)
+
+Executed checks surface through the SAME completion payload fields as sim/docker so
+the evidence engine stays untouched: the terminal `results` census counts each check
+exactly once (`passed+failed+skipped+quarantined == total`), `logs_digest` covers the
+sanitized combined output, and a `checks.json` artifact carries the array
+`[{tool, verdict: passed|failed|skipped, executed, duration_ms, detail ≤200 chars sanitized}]`.
+Only REAL executed failures flip job status to `failed`; skips never fabricate passes,
+and unexplained nonzero container exits append one synthetic `container` failed check
+so partial-failure jobs can never masquerade as clean evidence.
 
 ## 4. control-plane → github-connector (decision push, W2; WIDENED W5)
 
@@ -154,7 +176,40 @@ failure annotations: `path` optional (omitted ⇒ file-level message),
 `evidence`/`annotations` are OPTIONAL blocks; an envelope without them keeps
 the v1 flat-summary rendering. `Idempotency-Key` MUST equal `decision_id`.
 
+W6 deltas (sticky PR verification comment): `pr_number` (int ≥ 0; 0/absent
+= PR unknown) and the OPTIONAL `report` block are now accepted so the
+connector upserts ONE sticky issue comment per `(repo, pr_number)` — marker
+line `<!-- cisync:report -->`, PATCH-in-place when found, create otherwise.
+```json
+"pr_number": 17,
+"report": {
+  "evidence_rows": [{"kind":"selected_unit","tier":2,"verdict":
+      "accepted|deferred|failed","executed":44,"skipped":1842,
+      "duration_ms":61000}],
+  "skipped_non_evidence": {"total":2395,"rationale":"…REQUIRED string"},
+  "failures": [{"kind":"api_compat","classification":
+      "deterministic_regression","confidence":0.91,
+      "reproduction_command":"…optional","routed_action":"scoped_repair",
+      "repair_attempt":1,"repair_max":2}],
+  "timeline": [{"at":"RFC3339","event":"candidate.submitted"}]
+}
+```
+All sub-blocks optional and validated fail-closed (`confidence ∈ [0,1]`,
+counts ≥ 0, rationale required). Connectors that did NOT opt into comment
+posting skip silently; connectors that DID skip with metric
+`cisync_report_skipped_total{reason=dry_run|write_queued|no_pr_number}`.
+CAPABILITY NOTE: posting comments requires `issues:write` on the
+installation token AND the App granting "Issues: Read & write" (or Pull
+requests Read+write). Apps holding only the v0.2 permission set MUST NOT
+request issues-scoped tokens — exchange fails loudly at mint time by design;
+enable App settings first, then set `CISYNC_CONN_REPORT_COMMENTS=true`.
+
 ### 4.2 kind = "lifecycle" (queued / in_progress)
+
+Lifecycle note (realexec): dispatch-side materialization sits BETWEEN enqueue and
+worker claim and is invisible to this lifecycle — bundle staging failure still emits
+`validation.requested`→dispatch normally with `pre_fetched_bundle_ref` absent, so
+lifecycle envelopes remain identical for all providers.
 
 ```json
 {"kind":"lifecycle","phase":"queued|in_progress","candidate_id":"cand_01J…",

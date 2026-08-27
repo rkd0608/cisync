@@ -92,6 +92,15 @@ type DecisionEnvelope struct {
 	RenderedAt  time.Time           `json:"rendered_at"`
 	Evidence    *EvidenceCounts     `json:"evidence,omitempty"`
 	Annotations []FindingAnnotation `json:"annotations,omitempty"`
+
+	// W6: PR number this candidate is bound to, when the control-plane knows
+	// it (synthetic webhook intents store it on candidates/intents — see
+	// migrations 0012). 0/absent = unknown ⇒ the sticky comment surface skips
+	// silently with a cisync_report_skipped_total metric instead of guessing.
+	PRNumber int `json:"pr_number,omitempty"`
+	// W6 optional dossier enrichment for the sticky PR verification comment;
+	// nil keeps every pre-W6 relay rendering byte-identically.
+	Report *ReportDossier `json:"report,omitempty"`
 }
 
 // Validate enforces the boundary contract: fail early on anything that would
@@ -120,8 +129,16 @@ func (d *DecisionEnvelope) Validate() error {
 	if d.RenderedAt.IsZero() {
 		return fmt.Errorf("rendered_at required")
 	}
+	if d.PRNumber < 0 {
+		return fmt.Errorf("pr_number must be >= 0, got %d", d.PRNumber)
+	}
 	if d.Evidence != nil {
 		if err := d.Evidence.validate(); err != nil {
+			return err
+		}
+	}
+	if d.Report != nil {
+		if err := d.Report.validate(); err != nil {
 			return err
 		}
 	}

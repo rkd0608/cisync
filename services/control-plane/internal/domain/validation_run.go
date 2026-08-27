@@ -38,6 +38,11 @@ type JobSpec struct {
 	InputsHash string         `json:"inputs_hash"`
 	TimeoutMS  int64          `json:"timeout_ms"`
 	SimProfile map[string]any `json:"sim_profile,omitempty"`
+	// PreFetchedBundleRef is the control-plane-materialized repo snapshot
+	// path (shared cisync-repos volume) so real-exec providers run genuine
+	// checks WITHOUT ever holding GitHub tokens (THREAT_MODEL B5). Empty ⇒
+	// fleet realexec degrades to honest all-skipped outcomes.
+	PreFetchedBundleRef string `json:"pre_fetched_bundle_ref,omitempty"`
 }
 
 // ValidationRun is one admitted validation unit dispatched to the fleet.

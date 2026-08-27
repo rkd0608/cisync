@@ -29,6 +29,7 @@ type Registry struct {
 	key     *rsa.PrivateKey
 	keyErr  error
 
+	opts    []Option // caller options replayed into every lazy source build
 	sources map[int64]*InstallationTokenSource
 	clients map[int64]*github.Client
 }
@@ -49,6 +50,7 @@ func NewRegistry(appID, keyFile string, opts ...Option) *Registry {
 		now:        o.now,
 		keyFile:    keyFile,
 		injected:   o.key,
+		opts:       append([]Option(nil), opts...),
 		sources:    make(map[int64]*InstallationTokenSource),
 		clients:    make(map[int64]*github.Client),
 	}
@@ -74,13 +76,12 @@ func (r *Registry) Source(installationID int64) (*InstallationTokenSource, error
 	if err != nil {
 		return nil, err
 	}
-	opts := []Option{WithBaseURL(r.baseURL), WithKey(key)}
-	if r.httpClient != nil {
-		opts = append(opts, WithHTTPClient(r.httpClient))
-	}
-	if r.now != nil {
-		opts = append(opts, WithNow(r.now))
-	}
+	// Reapply the caller's options so scope flags (e.g. WithIssuesWriteScope)
+	// survive into lazily-built sources, then re-pin the shared overrides.
+	opts := append([]Option(nil), r.opts...)
+	opts = append(opts,
+		WithBaseURL(r.baseURL), WithKey(key),
+		WithHTTPClientOrDefault(r.httpClient), WithNowIfSet(r.now))
 	built, err := NewInstallationTokenSource(r.appID, installationID, opts...)
 	if err != nil {
 		return nil, err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"cisync.dev/cisync/github-connector/internal/rerun"
@@ -46,6 +47,11 @@ type Config struct {
 	// flag off) and re-runs surface as neutral "unavailable".
 	CtrlBaseURL string
 	CtrlToken   string
+
+	// ReportComments opts into the sticky PR verification comment (W6).
+	// Requires the GitHub App to grant Issues: Read & write BEFORE flipping;
+	// see internal-protocols §4.1 + RUNBOOK "Sticky PR comments".
+	ReportComments bool
 
 	DryRun bool
 }
@@ -120,7 +126,27 @@ func Load() (*Config, error) {
 	}
 	cfg.CtrlBaseURL = os.Getenv("CISYNC_CONN_CTRL_URL")
 	cfg.CtrlToken = os.Getenv("CISYNC_CONN_CTRL_TOKEN")
+	if cfg.ReportComments, err = envBool("CISYNC_CONN_REPORT_COMMENTS", false); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+// envBool parses strict booleans: only 1/true/yes/on (case-insensitive) and
+// their negations are valid; a typo'd value fails instead of defaulting.
+func envBool(key string, fallback bool) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("config: invalid %s %q (want true/false)", key, raw)
+	}
 }
 
 func (c *Config) loadInstallation() error {

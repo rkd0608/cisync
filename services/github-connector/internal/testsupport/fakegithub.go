@@ -4,7 +4,6 @@
 package testsupport
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,14 +54,16 @@ type FailureStep struct {
 
 // FakeGitHub is an in-process stand-in for api.github.com.
 type FakeGitHub struct {
-	mu       sync.Mutex
-	server   *httptest.Server
-	BaseURL  string
-	nextID   int64
-	tokens   []TokenMint
-	checks   []CheckCall
-	failures []FailureStep
-	requests int // every check-write hit, including injected failures
+	mu         sync.Mutex
+	server     *httptest.Server
+	BaseURL    string
+	nextID     int64
+	tokens     []TokenMint
+	checks     []CheckCall
+	failures   []FailureStep
+	comments   map[int64]StoredIssueComment
+	issueCalls []IssueCommentCall
+	requests   int // every check-write hit, including injected failures
 }
 
 // Requests reports total check-write HTTP hits (successes AND failures).
@@ -75,11 +76,12 @@ func (f *FakeGitHub) Requests() int {
 // NewFakeGitHub starts the fake server and registers cleanup.
 func NewFakeGitHub(t *testing.T) *FakeGitHub {
 	t.Helper()
-	f := &FakeGitHub{nextID: 1000}
+	f := &FakeGitHub{nextID: 1000, comments: make(map[int64]StoredIssueComment)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /app/installations/", f.handleToken)
 	mux.HandleFunc("POST /repos/", f.handleCreate)
 	mux.HandleFunc("PATCH /repos/", f.handleUpdate)
+	f.registerIssueRoutes(mux)
 	f.server = httptest.NewServer(mux)
 	f.BaseURL = f.server.URL
 	t.Cleanup(f.server.Close)
@@ -105,6 +107,36 @@ func (f *FakeGitHub) Calls() []CheckCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]CheckCall(nil), f.checks...)
+}
+
+// IssueComments returns the live fake-side comment store keyed by id.
+func (f *FakeGitHub) IssueComments() map[int64]StoredIssueComment {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[int64]StoredIssueComment, len(f.comments))
+	for k, v := range f.comments {
+		out[k] = v
+	}
+	return out
+}
+
+// IssueCalls returns captured Issues comment HTTP calls, oldest first.
+func (f *FakeGitHub) IssueCalls() []IssueCommentCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]IssueCommentCall(nil), f.issueCalls...)
+}
+
+// SeedForeignIssueComment adds a NON-CISync comment (marker mid-body only)
+// so tests can prove the poster never touches third-party comments.
+func (f *FakeGitHub) SeedForeignIssueComment(issue int, body string) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nextID++
+	id := f.nextID
+	f.comments[id] = StoredIssueComment{ID: id, Issue: issue, Body: body,
+		Author: "somehuman", Type: "User"}
+	return id
 }
 
 func (f *FakeGitHub) handleToken(w http.ResponseWriter, r *http.Request) {
@@ -193,45 +225,4 @@ func (f *FakeGitHub) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"id":` + strconv.FormatInt(id, 10) + `}`))
-}
-
-type wireBody struct {
-	Name        *string          `json:"name"`
-	HeadSHA     *string          `json:"head_sha"`
-	Status      *string          `json:"status"`
-	Conclusion  *string          `json:"conclusion"`
-	ExternalID  *string          `json:"external_id"`
-	Output      *wireOutput      `json:"output"`
-	Annotations []WireAnnotation `json:"-"`
-}
-
-type wireOutput struct {
-	Title       *string          `json:"title"`
-	Summary     *string          `json:"summary"`
-	Annotations []WireAnnotation `json:"annotations"`
-}
-
-func (f *FakeGitHub) decodeBody(r *http.Request, call *CheckCall) {
-	raw, _ := io.ReadAll(r.Body)
-	var body wireBody
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return
-	}
-	call.Name = derefString(body.Name)
-	call.HeadSHA = derefString(body.HeadSHA)
-	call.Status = derefString(body.Status)
-	call.Conclusion = derefString(body.Conclusion)
-	call.ExternalID = derefString(body.ExternalID)
-	if body.Output != nil {
-		call.Summary = derefString(body.Output.Summary)
-		call.Title = derefString(body.Output.Title)
-		call.Annotations = body.Output.Annotations
-	}
-}
-
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

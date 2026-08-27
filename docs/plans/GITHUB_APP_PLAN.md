@@ -58,13 +58,14 @@ install onto ≥1 repo → record App ID, Installation ID, key path in `.env.loc
 | Checks | Read & write | THE write surface: create/update "Agent Verification Gate"; also gates receiving `check_run` events (re-runs, §4.5) | connector |
 | Pull requests | Read | Map PR events→intents/candidates; head/base SHA, branch, author login, PR number correlation | control-plane normalizer |
 | Contents | Read | Fetch diffs/files for evidence provenance + discover `.integration/agent-control.yaml` adapter in v0.3 without forcing a second customer consent cycle (permission escalation triggers re-approval banners on all installs) | connector (v0.3 consumers) |
+| Issues | **Read & write (v0.3 opt-in only)** | Sticky "CISync Verification Report" comment per PR (W6; internal-protocols §4.1). DEFAULT OFF: grant in App settings + set `CISYNC_CONN_REPORT_COMMENTS=true`, never silently | connector |
 
 Deliberately NOT requested (the trust story — shown verbatim in the README/onboarding):
 
 | Denied permission | Trust rationale |
 |---|---|
 | Contents: Write | We never push branches/commits/files. A verification authority that can author code destroys the evidence chain it certifies. |
-| Pull requests: Write | We never merge, close, label, comment-as, or assign. Merge authority stays human/branch-protection until L4 autonomy (design doc levels), and even then via a separately consented grant. |
+| Pull requests: Write | We never merge, close, label, or assign. (v0.3: the Issues permission above supersedes the old blanket comment-write denial via an explicit, operator-gated opt-in; merge authority stays human/branch-protection.) |
 | Workflows (any) | Workflow YAML write ≈ arbitrary code execution in customer CI. Absolute deny in v0.x. |
 | Administration | Would let us mutate branch protection ourselves. Admins configure the required check manually (§3.4) — deliberate friction that keeps us out of their security posture. |
 | Commit statuses RW | Legacy surface; Checks API supersedes it for our gate. Avoids double-status noise. |

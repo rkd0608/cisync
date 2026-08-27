@@ -62,6 +62,7 @@ ECS at task start via execution role), **task-def** = hardcoded non-secret in
 | CISYNC_CONN_ADMIN_TOKEN | SM `conn_admin_token` |
 | CISYNC_CONN_CTRL_URL | task-def CloudMap URL |
 | CISYNC_CONN_CTRL_TOKEN | SM `admin_token` (shared ctrl bearer) |
+| CISYNC_CONN_REPORT_COMMENTS | literal `false` (default; v0.3 opt-in — RUNBOOK §3.0) |
 | CISYNC_CONN_DETAILS_URL | tfvars `connector_details_url` (defaults to https://<domain>) |
 | CISYNC_CONN_GITHUB_APP_ID | tfvars `github_app_id` (non-secret numeric ID), live mode only |
 | CISYNC_CONN_GITHUB_INSTALLATION_ID | tfvars `github_installation_id`, live mode only |

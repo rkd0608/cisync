@@ -53,6 +53,16 @@ func detailsURLFor(base, candidateID string) string {
 	return trimmed + "/candidates/" + candidateID
 }
 
+// CandidateDetailsURL is the exported deep-link builder for sibling packages
+// rendering candidate permalinks outside check runs (sticky PR comments).
+func CandidateDetailsURL(base, candidateID string) string {
+	return detailsURLFor(base, candidateID)
+}
+
+// HeadlineForVerb exposes the frozen verb phrase so comment surfaces mirror
+// the check summary byte-for-byte (plan §3.1).
+func HeadlineForVerb(verb domain.DecisionVerb) (string, error) { return headlineForVerb(verb) }
+
 // ConclusionForVerb translates a decision verb into a GitHub check
 // conclusion; unsupported verbs fail closed.
 func ConclusionForVerb(verb domain.DecisionVerb) (string, error) {

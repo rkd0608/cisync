@@ -100,6 +100,13 @@ func (e *EngineScheduler) dispatchOne(ctx context.Context, runID string, reserva
 	if e.leaseSigner == nil {
 		return 0, fmt.Errorf("dispatch %s: no job-lease signer configured", runID)
 	}
+	// Real-exec evidence sourcing: stage the repo snapshot BEFORE enqueue so
+	// the job spec can point at shared-volume bytes. Failure is NON-BLOCKING
+	// by design — an empty ref makes realexec degrade to honest skips while
+	// sim/docker continue untouched (realexec-honesty contract).
+	if ref := e.materializeFor(ctx, run); ref != "" {
+		run.JobSpec.PreFetchedBundleRef = ref
+	}
 	run.FenceToken = 1 // fleet bumps 0→1 on first worker claim
 	leaseToken, err := e.mintJobLease(run)
 	if err != nil {
@@ -132,6 +139,22 @@ func (e *EngineScheduler) dispatchOne(ctx context.Context, runID string, reserva
 		return 0, err
 	}
 	return 1, nil
+}
+
+// materializeFor returns the staged bundle ref for this run's inputs_hash or
+// "" when materialization is disabled/failed. It is the ONLY token-adjacent
+// step in dispatch and it lives exclusively on the control-plane: runners
+// never see GitHub credentials (THREAT_MODEL B5).
+func (e *EngineScheduler) materializeFor(ctx context.Context, run *domain.ValidationRun) string {
+	if e.materializer == nil {
+		return ""
+	}
+	ref, err := e.materializer.Materialize(ctx, run.JobSpec.Repo, run.JobSpec.HeadSHA, run.JobSpec.InputsHash)
+	if err != nil {
+		logf("materialize %s: %v (dispatching without bundle)", run.ID, err)
+		return ""
+	}
+	return ref
 }
 
 // mintJobLease signs the dispatch-time credential with the documented 60m

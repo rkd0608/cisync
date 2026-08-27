@@ -1,9 +1,7 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import type { ReactElement } from 'react';
-import { cookies } from 'next/headers';
-import { authSecret } from '@/lib/auth-config';
-import { verifySession } from '@/lib/auth-session';
-import { SESSION_COOKIE } from '@/lib/session-cookie';
+import { HEADER_AUTH_EMAIL } from '@/middleware';
 import { LogoutButton } from '@/components/logout-button';
 
 const NAV_LINKS: Array<{ href: string; label: string }> = [
@@ -12,17 +10,15 @@ const NAV_LINKS: Array<{ href: string; label: string }> = [
   { href: '/installations', label: 'installations' },
 ];
 
-// Console shell shared by every authenticated route in the group. The session
-// is re-verified here server-side (defense in depth alongside middleware) so
-// the header can render the real email without a client round-trip.
+// Console shell shared by every authenticated route in the group. WHY the
+// identity arrives via middleware-set request header: verification happened
+// ONCE at the oracle boundary (GET /v1/auth/me through the gateway, see
+// middleware.ts); this layout must not grow a second verification path —
+// every matched page implies a fresh oracle round-trip already ran.
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>): Promise<ReactElement> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  const secret = authSecret();
-  const claims =
-    token !== undefined && secret !== null ? await verifySession(token, secret) : null;
+  const verifiedEmail = (await headers()).get(HEADER_AUTH_EMAIL);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -47,10 +43,10 @@ export default async function AppLayout({
         ))}
       </nav>
           <div className="flex items-center gap-3 border-l border-white/10 pl-4 text-xs">
-            {claims !== null ? (
+            {verifiedEmail !== null ? (
               <>
-                <span className="hidden max-w-[16rem] truncate text-zinc-400 md:inline" title={claims.email}>
-                  {claims.email}
+                <span className="hidden max-w-[16rem] truncate text-zinc-400 md:inline" title={verifiedEmail}>
+                  {verifiedEmail}
                 </span>
                 <LogoutButton />
               </>

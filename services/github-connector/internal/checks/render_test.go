@@ -34,7 +34,9 @@ func TestConclusionForVerbMapping(t *testing.T) {
 	require.Error(t, err, "unsupported verbs must fail closed")
 }
 
-// TestGoldenDecisionSummaries freezes the §4.3 summary bytes per verb.
+// TestGoldenDecisionSummaries freezes the THIN §4.3 summary bytes per verb
+// (W6): verb+confidence+policy header, evidence counts and details_url ONLY.
+// The dossier intelligence lives in the sticky PR comment from now on.
 func TestGoldenDecisionSummaries(t *testing.T) {
 	cases := map[domain.DecisionVerb]string{
 		domain.VerbEligibleForMergeTrain: "**Eligible for merge train**",
@@ -55,9 +57,8 @@ func TestGoldenDecisionSummaries(t *testing.T) {
 		require.NoError(t, err, verb)
 		want := headline + " · confidence 0.94 · policy pol_cisync_default v1\n" +
 			"Evidence: 5/5 required accepted · 2 deferred (reason-linked) · 0 failed\n" +
-			"→ Full dossier: http://localhost:3000/candidates/cand_01JTESTCANDIDATE\n" +
-			"_decision dec_01JTESTDECISION · candidate cand_01JTESTCANDIDATE · rendered 2026-08-23T03:41:00Z_"
-		require.Equal(t, want, payload.Summary, "byte-frozen §4.3 summary for %s", verb)
+			"→ Full dossier: http://localhost:3000/candidates/cand_01JTESTCANDIDATE"
+		require.Equal(t, want, payload.Summary, "byte-frozen THIN summary for %s", verb)
 		require.Equal(t, "completed", payload.Status)
 		require.Equal(t, env.CandidateID, payload.ExternalID, "B1/G6: external_id is candidate_id")
 		require.Empty(t, payload.Annotations, "annotations only on failure")
@@ -91,8 +92,11 @@ func TestGoldenCachedSummary(t *testing.T) {
 	}
 	payload, err := RenderCached(env, detailsBase)
 	require.NoError(t, err)
-	require.Contains(t, payload.Summary,
-		"_decision dec_01J · candidate cand_01J · cached replay (no recompute)_")
+	want := "**Deferred** · confidence 0.50 · policy pol_cisync_default v1\n" +
+		"Evidence: 5/5 required accepted · 2 deferred (reason-linked) · 0 failed\n" +
+		"→ Full dossier: http://localhost:3000/candidates/cand_01J\n" +
+		"_cached replay (no recompute)_"
+	require.Equal(t, want, payload.Summary)
 	require.Equal(t, "neutral", payload.Conclusion)
 }
 

@@ -20,6 +20,7 @@ import (
 	"cisync.dev/cisync/github-connector/internal/queue"
 	"cisync.dev/cisync/github-connector/internal/ratelimit"
 	"cisync.dev/cisync/github-connector/internal/redact"
+	"cisync.dev/cisync/github-connector/internal/report"
 	"cisync.dev/cisync/github-connector/internal/rerun"
 	"cisync.dev/cisync/github-connector/internal/statusapi"
 	"cisync.dev/cisync/github-connector/internal/tracking"
@@ -62,9 +63,15 @@ func New(cfg *config.Config, deps Deps, logger *slog.Logger) (*Server, error) {
 	dry := checks.NewDryRunPublisher(&redact.Writer{Next: stdout})
 
 	var registry *ghauth.Registry
+	reportComments := cfg.ReportComments && deps.Resolve != nil
 	if !cfg.DryRun {
+		registryOpts := []ghauth.Option{}
+		if reportComments {
+			registryOpts = append(registryOpts, ghauth.WithIssuesWriteScope())
+		}
 		registry = ghauth.NewRegistry(cfg.GitHubAppID, cfg.GitHubAppPrivateKeyFile,
-			ghauth.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}))
+			append([]ghauth.Option{ghauth.WithHTTPClient(&http.Client{Timeout: 10 * time.Second})},
+				registryOpts...)...)
 		if err := registry.Seed(cfg.GitHubInstallationID); err != nil {
 			return nil, err
 		}
@@ -79,11 +86,21 @@ func New(cfg *config.Config, deps Deps, logger *slog.Logger) (*Server, error) {
 	rerunControl := rerun.NewControl(cfg.CtrlBaseURL, cfg.CtrlToken,
 		&http.Client{Timeout: 10 * time.Second}, time.Now)
 
+	// W6 sticky-comment surface: only when opted in AND live installation
+	// resolution exists; otherwise the handler's Reporter stays nil (silent
+	// feature-OFF, no metrics noise). Poster reuses the SAME registry client
+	// whose tokens now carry issues:write.
+	var reporter api.StickyReporter
+	if reportComments && !cfg.DryRun {
+		reporter = report.NewPoster(deps.Resolve, registry, cfg.DetailsURL, metrics, logger)
+	}
+
 	handler := api.NewDecisionsHandler(cfg.WebhookSecret, api.HandlerDeps{
 		Tracker:      deps.Tracker,
 		Router:       router,
 		Metrics:      metrics,
 		DetailsURL:   cfg.DetailsURL,
+		Reporter:     reporter,
 		RerunPolicy:  cfg.RerunPolicy,
 		RerunBudget:  rerunBudget,
 		RerunControl: rerunControl,
